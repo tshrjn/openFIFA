@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-047: Soccer ball 3D model with PBR material
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BallModelConfig.cs — PBR config: textures, smoothness, shader, collider
+- OpenFifa/Assets/Tests/Editor/US047_BallModelTests.cs — 8 EditMode tests
+
+**Known Issues**: None
+**Next**: US-048 — Real audio asset integration
+
 ## 2026-02-27 Session — US-046: Stadium environment with skybox and goal posts
 
 **Status**: Completed

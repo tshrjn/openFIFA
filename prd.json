@@ -1091,7 +1091,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 47,
-      "passes": false,
+      "passes": true,
       "notes": "Source a free soccer ball model (Sketchfab CC0 or create with Blender). Import FBX into Assets/Models/Ball/. Material: URP Lit shader, assign albedo (classic black/white pentagon pattern), normal map for panel seams, smoothness ~0.4 for slight sheen. Ensure mesh pivot is at center for correct rotation. SphereCollider: adjust radius to match mesh bounds.extents.x. Visual rotation handled by Rigidbody angular velocity automatically if mesh is on the Rigidbody GameObject. Verify: ball.GetComponent<MeshFilter>().sharedMesh.triangles.Length / 3 < 1000.",
       "dependsOn": ["US-003"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-047'"],
