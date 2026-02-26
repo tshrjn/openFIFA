@@ -215,7 +215,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 9,
-      "passes": false,
+      "passes": true,
       "notes": "Create FormationData : ScriptableObject with [System.Serializable] struct FormationSlot { PositionRole role; Vector3 offset; }. List<FormationSlot> slots. GetPositions(bool isHomeTeam, float pitchLength) mirrors offsets for away team by negating Z. Create FormationManager : MonoBehaviour to hold current formation reference and expose GetWorldPositions(). 2-1-2: GK(0,0,-12), LB(-6,0,-6), RB(6,0,-6), CM(0,0,0), LW(-6,0,8), RW(6,0,8) approximately.",
       "dependsOn": ["US-002"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-009'"],

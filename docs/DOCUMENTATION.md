@@ -26,6 +26,28 @@
 
 ## Log
 
+## 2026-02-27 Session — US-009: Team formation system with 2-1-2 layout
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PositionRole.cs — Position role enum
+- OpenFifa/Assets/Scripts/Core/FormationSlotData.cs — Slot data (role + offset)
+- OpenFifa/Assets/Scripts/Core/FormationLayoutData.cs — Formation layout with mirroring
+- OpenFifa/Assets/Scripts/Gameplay/FormationData.cs — ScriptableObject wrapper
+- OpenFifa/Assets/Scripts/Gameplay/FormationManager.cs — Runtime formation manager
+- OpenFifa/Assets/Tests/Editor/US009_FormationTests.cs — 12 EditMode tests
+
+**Decisions**:
+- Default 2-1-2: GK(0,0,-12), LB(-6,0,-6), RB(6,0,-6), CM(0,0,0), LW(-6,0,8), RW(6,0,8)
+- Home team defends negative X, away positive X
+- Mirroring negates both X and Z offsets for away team
+- FormationPosition struct in Core for lightweight position data
+- FormationManager supports runtime formation swapping
+
+**Known Issues**: None
+
+**Next**: US-010 — AI player finite state machine
+
 ## 2026-02-27 Session — US-008: Basic HUD displaying score and timer
 
 **Status**: Completed
