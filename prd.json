@@ -448,7 +448,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 19,
-      "passes": false,
+      "passes": true,
       "notes": "Create PlayerAnimator : MonoBehaviour with [RequireComponent(typeof(Animator))]. Map PlayerController.CurrentSpeed to Animator.SetFloat('Speed', speed). Map actions to triggers: Animator.SetTrigger('Kick'), etc. Create AnimatorController in Editor or via AnimatorController.CreateAnimatorControllerAtPath(). Blend Tree thresholds: 0 = Idle, 0.5 = Run, 1.0 = Sprint. Placeholder AnimationClips: use AnimationCurve to bob Y position. Has Exit Time on action states to return to locomotion.",
       "dependsOn": ["US-004", "US-010"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-019'"],

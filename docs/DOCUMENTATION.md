@@ -26,6 +26,27 @@
 
 ## Log
 
+## 2026-02-27 Session — US-019: Player animation state machine with placeholder animations
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/AnimationStateLogic.cs — Pure C# animation state machine logic with enums
+- OpenFifa/Assets/Scripts/Gameplay/PlayerAnimator.cs — Animator bridge MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US019_PlayerAnimationTests.cs — 12 EditMode tests
+
+**Decisions**:
+- AnimationStateId enum: Idle, Run, Sprint, Kick, Tackle, Celebrate
+- AnimationActionTrigger enum for action overrides
+- Speed parameter normalized 0-1 for Blend Tree (maxSpeed = 10.5)
+- Action states override locomotion until CompleteAction() called
+- Walk threshold 0.5 m/s, sprint requires speed > 5 m/s + isSprinting flag
+- PlayerAnimator uses Animator.StringToHash for performance
+- OnActionComplete() called by animation event or timer
+
+**Known Issues**: None
+
+**Next**: US-020 — Ball kick animation, US-022 — Ball trail
+
 ## 2026-02-27 Session — US-017: Tackle mechanic with cooldown and dispossession
 
 **Status**: Completed
