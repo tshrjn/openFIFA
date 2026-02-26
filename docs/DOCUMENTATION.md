@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-049: Visual regression baseline screenshots
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/VisualRegressionConfig.cs — CameraCheckpoint, PixelComparer, VisualRegressionConfig
+- OpenFifa/Assets/Tests/Editor/US049_VisualRegressionTests.cs — 12 EditMode tests
+
+**Known Issues**: None
+**Next**: US-050 — Local multiplayer
+
 ## 2026-02-27 Session — US-048: Real audio asset integration
 
 **Status**: Completed

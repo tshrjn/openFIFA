@@ -1136,7 +1136,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 49,
-      "passes": false,
+      "passes": true,
       "notes": "Create VisualRegressionTest in PlayMode test assembly. Use ScreenCapture.CaptureScreenshotAsTexture() at fixed resolution via Screen.SetResolution. Compare: read baseline from Resources or StreamingAssets, get pixel arrays via Texture2D.GetPixels32(), iterate and count differing pixels (threshold per-channel diff > 10). Diff percentage = diffPixels / totalPixels. Camera checkpoints: position camera at predefined transforms, wait one frame, capture. Store baselines in Assets/Tests/Baselines/. Use [Category('Visual')].",
       "dependsOn": ["US-044", "US-045", "US-046", "US-047", "US-048"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-049'"],
