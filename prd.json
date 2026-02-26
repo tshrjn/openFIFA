@@ -1000,7 +1000,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 43,
-      "passes": false,
+      "passes": true,
       "notes": "Create PerformanceBudgetTests PlayMode test class. Use ProfilerRecorder: new ProfilerRecorder(ProfilerCategory.Render, 'Total Batches Count'), new ProfilerRecorder(ProfilerCategory.Internal, 'CPU Main Thread Frame Time'). Run 5s of gameplay (yield for 150 frames at 30fps). Collect frame times in a List<double>. Assert: avg < 1/28s, max < 100ms, percentile(95) < 33ms. GC: ProfilerRecorder(ProfilerCategory.Memory, 'GC.Alloc'). Constants: const float MIN_AVG_FPS = 28f, const float MAX_FRAME_MS = 100f, etc.",
       "dependsOn": ["US-039", "US-040"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-043'"],

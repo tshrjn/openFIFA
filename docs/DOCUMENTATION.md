@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-043: Performance budget test suite
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PerformanceBudget.cs — PerformanceBudget config + FrameTimeAnalyzer (avg, percentile, max)
+- OpenFifa/Assets/Tests/Editor/US043_PerformanceTests.cs — 8 EditMode tests
+
+**Known Issues**: None
+**Next**: US-044 — Import Quaternius low-poly characters
+
 ## 2026-02-27 Session — US-042: Build hardening (macOS + iPad)
 
 **Status**: Completed
