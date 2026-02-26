@@ -26,6 +26,30 @@
 
 ## Log
 
+## 2026-02-27 Session — US-002: Soccer pitch with correct 5v5 proportions + boundary colliders
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PitchConfigData.cs — Pure C# pitch config data class
+- OpenFifa/Assets/Scripts/Gameplay/PitchConfig.cs — ScriptableObject wrapper
+- OpenFifa/Assets/Scripts/Gameplay/PitchBuilder.cs — Runtime pitch builder MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US002_PitchConfigTests.cs — 12 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US002_PitchSetupTests.cs — 9 PlayMode tests
+
+**Decisions**:
+- PitchConfigData is pure C# (no Unity deps) for EditMode testability
+- PitchConfig ScriptableObject has ToData() method to bridge to pure C#
+- Boundary walls split at goal ends to create goal openings
+- Goal nets represented by back wall + side walls behind each goal
+- Center circle uses LineRenderer, goal areas use LineRenderer markings
+- Pitch surface is a scaled Cube (not Plane) for consistent bounds calculation
+- Ball boundary tests use 30 m/s velocity to stress-test colliders
+- Custom layers: Pitch (8), Boundary (9) pre-configured in TagManager
+
+**Known Issues**: None
+
+**Next**: US-003 — Ball physics with realistic mass, bounce, friction, and rolling
+
 ## 2026-02-27 Session — US-001: Unity project scaffold + iOS build pipeline + test framework
 
 **Status**: Completed

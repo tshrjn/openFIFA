@@ -47,7 +47,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 2,
-      "passes": false,
+      "passes": true,
       "notes": "Create PitchConfig : ScriptableObject with fields: pitchLength (50f), pitchWidth (30f), goalWidth (5f), centerCircleRadius (3f), goalAreaDepth (4f). Use a scaled Quad or Plane for the pitch surface. Boundary colliders should be thin BoxColliders positioned at edges. Mark center circle with a LineRenderer or projector decal. Use layers: 'Pitch' for ground, 'Boundary' for walls.",
       "dependsOn": ["US-001"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-002'"],
