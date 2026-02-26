@@ -285,7 +285,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 12,
-      "passes": false,
+      "passes": true,
       "notes": "Create AIShootingSystem : MonoBehaviour. Shooting range configurable via [SerializeField] float shootRange = 15f. Line-of-sight check: Physics.Linecast(ballPos, goalCenter, out hit, defenderLayerMask). Shot target: goalCenter + Random.Range(-goalHalfWidth*0.8, goalHalfWidth*0.8) on X axis. Shot force: ForceMode.Impulse with magnitude ~15-20. Integrate with AIController FSM: add Shooting state. Priority: shoot > pass when in range with clear line.",
       "dependsOn": ["US-010", "US-005"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-012'"],

@@ -26,6 +26,24 @@
 
 ## Log
 
+## 2026-02-27 Session — US-012: AI shooting toward goal
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/ShotEvaluator.cs — Pure C# shot evaluation
+- OpenFifa/Assets/Scripts/AI/AIShootingSystem.cs — AI shooting MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US012_AIShootingTests.cs — 8 EditMode tests
+
+**Decisions**:
+- ShotEvaluator pure C#: range check, force calculation, randomized target
+- Shot target varies within 80% of goal width for unpredictability
+- Physics.Linecast checks for clear line to goal (defender layer mask)
+- Shooting priority over passing when in range with clear line
+
+**Known Issues**: None
+
+**Next**: US-013 — Goalkeeper AI
+
 ## 2026-02-27 Session — US-011: AI passing to detect open teammate and pass
 
 **Status**: Completed
