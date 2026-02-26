@@ -697,7 +697,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 30,
-      "passes": false,
+      "passes": true,
       "notes": "Extend HUDController from US-008. Minimap: use a second Camera (orthographic, top-down, culling mask 'Minimap') rendering to a RenderTexture displayed on a RawImage. Or use UI Image dots positioned by mapping world coordinates to minimap rect. Safe area: use Screen.safeArea to offset RectTransforms. Match state text: subscribe to MatchStateMachine.OnStateChanged, map enum to display strings. Minimap player dots: small Image components repositioned each frame.",
       "dependsOn": ["US-008", "US-014"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-030'"],

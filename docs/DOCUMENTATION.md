@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-030: Full match HUD with minimap and match state
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/MinimapLogic.cs — Pure C# minimap coordinate mapping + MatchStateDisplay
+- OpenFifa/Assets/Scripts/UI/FullMatchHUD.cs — Full HUD MonoBehaviour with minimap dots
+- OpenFifa/Assets/Tests/Editor/US030_FullHUDTests.cs — 10 EditMode tests
+
+**Decisions**:
+- MinimapLogic maps world coordinates to minimap UI coordinates with clamping
+- MatchStateDisplay maps MatchState enum to display strings
+- Minimap uses RectTransform anchored positions for player/ball dots
+- Safe area configuration via Screen.safeArea for iPad
+- Score and timer updated via event subscription and polling
+
+**Known Issues**: None
+
+**Next**: US-031 — Pause menu, US-032 — Post-match results
+
 ## 2026-02-27 Session — US-029: Team selection screen with team roster
 
 **Status**: Completed
