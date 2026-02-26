@@ -605,7 +605,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 26,
-      "passes": false,
+      "passes": true,
       "notes": "Create RunDustEffect : MonoBehaviour on each player as child GameObject at feet (localPosition Y ~0.05). ParticleSystem settings: shape = Hemisphere rotated down, startLifetime 0.4, startSize 0.15, startSpeed 0.5, maxParticles 20, startColor brownish-tan, simulation space World. In Update: var emission = _ps.emission; float speed = _rb.linearVelocity.magnitude; emission.enabled = speed > walkThreshold; emission.rateOverTime = Mathf.Lerp(2, 15, (speed - walkThreshold) / maxSpeed).",
       "dependsOn": ["US-004"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-026'"],

@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-026: Player run dust particle effects
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/RunDustLogic.cs — Pure C# dust emission logic
+- OpenFifa/Assets/Scripts/Gameplay/RunDustEffect.cs — Dust particle MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US026_RunDustTests.cs — 8 EditMode tests
+
+**Decisions**:
+- Walk threshold 2 m/s, max 20 particles per player
+- Emission rate: 2-15 particles/sec scaling with speed
+- Hemisphere shape rotated -90 for ground-aligned emission
+- Brownish-tan color with alpha fade-out over lifetime
+- Positioned at player feet (child GameObject, Y ~0.05)
+
+**Known Issues**: None
+
+**Next**: US-027 — Replay system, US-028 — Main menu
+
 ## 2026-02-27 Session — US-025: Dynamic crowd reaction audio
 
 **Status**: Completed
