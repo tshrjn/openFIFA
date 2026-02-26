@@ -26,6 +26,28 @@
 
 ## Log
 
+## 2026-02-27 Session — US-006: Broadcast camera with Cinemachine follow
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/CameraConfigData.cs — Pure C# camera config data
+- OpenFifa/Assets/Scripts/Gameplay/BroadcastCameraConfig.cs — ScriptableObject wrapper
+- OpenFifa/Assets/Scripts/Gameplay/BroadcastCameraController.cs — Camera follow controller
+- OpenFifa/Assets/Tests/Editor/US006_CameraConfigTests.cs — 7 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US006_BroadcastCameraTests.cs — 5 PlayMode tests
+
+**Decisions**:
+- BroadcastCameraController is standalone, works with or without Cinemachine
+- Weighted tracking: ball (1.0) + active player (0.5) for focus balance
+- SmoothDamp for smooth following, configurable damping time
+- MinHeight enforced to prevent camera clipping through pitch
+- Elevation angle calculated from distance and angle (35 degrees default)
+- Camera looks at weighted midpoint of tracked objects
+
+**Known Issues**: None
+
+**Next**: US-007 — Match timer + score tracking as pure C# logic
+
 ## 2026-02-27 Session — US-005: Goal detection system with event broadcasting
 
 **Status**: Completed
