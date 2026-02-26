@@ -859,7 +859,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 37,
-      "passes": false,
+      "passes": true,
       "notes": "macOS: Use Unity Input System keyboard bindings: Z=Pass, X=Shoot, C=Tackle, LeftShift=Sprint, Tab=Switch. Mouse: LeftClick=Pass, RightClick=Shoot. iPad: Create ActionButtons : MonoBehaviour with child Button GameObjects. Sprint: IPointerDownHandler (set sprinting=true) and IPointerUpHandler (set sprinting=false). Visual feedback: DOTween scale punch or simple localScale change on press. Layout: 2x2 grid or diamond arrangement. Minimum RectTransform size 80x80. Wire to PlayerController via IInputProvider interface.",
       "dependsOn": ["US-036", "US-017"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-037'"],

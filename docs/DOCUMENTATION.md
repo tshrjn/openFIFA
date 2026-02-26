@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-037: Keyboard shortcuts (macOS) + touch buttons (iPad)
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/ActionButtonLogic.cs — Pure C# action state tracking + KeyboardActionMapping
+- OpenFifa/Assets/Scripts/Gameplay/ActionButtons.cs — Touch action buttons + SprintButton hold
+- OpenFifa/Assets/Tests/Editor/US037_ActionButtonTests.cs — 11 EditMode tests
+
+**Decisions**:
+- ActionButtonLogic: single-press (Pass/Shoot/Tackle) + hold (Sprint)
+- ConsumeActions clears single-press but preserves Sprint
+- KeyboardActionMapping: Z=Pass, X=Shoot, C=Tackle, LeftShift=Sprint, Tab=Switch
+- SprintButton uses IPointerDown/Up for hold behavior
+- Visual feedback: scale punch on tap (0.9x, lerps back)
+- Minimum 80x80 button size for touch targets
+
+**Known Issues**: None
+
+**Next**: US-038 — Haptic feedback, US-042 — Build hardening
+
 ## 2026-02-27 Session — US-036: Keyboard/mouse controls (macOS) + virtual joystick (iPad)
 
 **Status**: Completed
