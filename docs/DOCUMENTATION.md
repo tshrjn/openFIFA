@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-038: Haptic feedback (iPad) + screen shake/audio feedback (macOS)
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/FeedbackEventMapper.cs — Pure C# feedback intensity mapping
+- OpenFifa/Assets/Scripts/Gameplay/GameFeedback.cs — Platform-aware feedback singleton
+- OpenFifa/Assets/Tests/Editor/US038_HapticTests.cs — 6 EditMode tests
+
+**Decisions**:
+- FeedbackIntensity: Light, Medium, Heavy
+- Goal=Heavy, Tackle=Medium, Whistle=Light
+- iPad: DllImport native plugin for UIImpactFeedbackGenerator
+- macOS: screen shake + audio impact
+- try/catch for graceful fallback on unsupported platforms
+
+**Known Issues**: None
+
+**Next**: US-039 — Draw call optimization, US-040 — GC-free gameplay
+
 ## 2026-02-27 Session — US-037: Keyboard shortcuts (macOS) + touch buttons (iPad)
 
 **Status**: Completed
