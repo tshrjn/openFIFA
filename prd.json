@@ -120,7 +120,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 5,
-      "passes": false,
+      "passes": true,
       "notes": "Create GoalDetector : MonoBehaviour with OnTriggerEnter(Collider). Place trigger BoxCollider behind each goal line (not on the line). Use a TeamIdentifier enum { TeamA, TeamB }. Fire event: public static event System.Action<TeamIdentifier> OnGoalScored. Use CompareTag('Ball') to filter triggers. For reset, start coroutine to wait then reposition. Consider using Physics.OverlapBox in tests to verify trigger placement.",
       "dependsOn": ["US-003"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-005'"],

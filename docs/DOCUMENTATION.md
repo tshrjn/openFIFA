@@ -26,6 +26,28 @@
 
 ## Log
 
+## 2026-02-27 Session — US-005: Goal detection system with event broadcasting
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/TeamIdentifier.cs — TeamA/TeamB enum
+- OpenFifa/Assets/Scripts/Core/GoalEventData.cs — Goal event payload data
+- OpenFifa/Assets/Scripts/Gameplay/GoalDetector.cs — Goal detection MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US005_GoalDetectionTests.cs — 6 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US005_GoalDetectionPlayModeTests.cs — 7 PlayMode tests
+
+**Decisions**:
+- GoalDetector uses static event Action<TeamIdentifier> for global subscription
+- Also has instance event for per-detector subscription
+- Trigger volumes placed behind goal line (not on it) to require full crossing
+- Ball reset after goal with configurable delay (default 2s)
+- _goalDetected flag prevents duplicate goal events from same ball entry
+- GoalEventData contains both ScoringTeam and DefendingTeam for convenience
+
+**Known Issues**: None
+
+**Next**: US-006 — Broadcast camera with Cinemachine follow
+
 ## 2026-02-27 Session — US-004: Single player controller with keyboard movement and sprint
 
 **Status**: Completed
