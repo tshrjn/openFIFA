@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-024: Camera shake on goal via Cinemachine Impulse
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/CameraShakeLogic.cs — Pure C# shake with decay and pseudo-random offsets
+- OpenFifa/Assets/Scripts/Gameplay/GoalCameraShake.cs — Camera shake MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US024_CameraShakeTests.cs — 10 EditMode tests
+
+**Decisions**:
+- CameraShakeLogic pure C# with linear decay, configurable duration (0.7s default)
+- Pseudo-random offset via LCG hash for deterministic shake pattern
+- GoalCameraShake subscribes to GoalDetector.OnGoalScored
+- Offsets applied in LateUpdate to camera localPosition
+- Intensity, duration, decay all configurable via serialized fields
+
+**Known Issues**: None
+
+**Next**: US-025 — Dynamic crowd reaction, US-026 — Player dust
+
 ## 2026-02-27 Session — US-023: Sound effects for whistle, kick, crowd, and goal
 
 **Status**: Completed

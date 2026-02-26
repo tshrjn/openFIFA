@@ -561,7 +561,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 24,
-      "passes": false,
+      "passes": true,
       "notes": "Create GoalCameraShake : MonoBehaviour. [SerializeField] CinemachineImpulseSource impulseSource. [SerializeField] float shakeIntensity = 1f. Subscribe to GoalDetector.OnGoalScored. On goal: impulseSource.GenerateImpulse(shakeIntensity). Configure ImpulseSource: Raw Signal = 6D Shake, Time = 0.7, Decay = 1. Add CinemachineImpulseListener to the CinemachineCamera. Test: after impulse, check camera position displacement, then verify it settles after duration.",
       "dependsOn": ["US-006", "US-005"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-024'"],
