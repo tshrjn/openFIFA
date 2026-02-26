@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-036: Keyboard/mouse controls (macOS) + virtual joystick (iPad)
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/InputFilterLogic.cs — Pure C# dead zone and normalization + VirtualJoystickLogic
+- OpenFifa/Assets/Scripts/Gameplay/VirtualJoystick.cs — Touch joystick MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US036_InputTests.cs — 10 EditMode tests
+
+**Decisions**:
+- InputFilterLogic: 10% dead zone, remapped 0-1 range, unit circle clamping
+- VirtualJoystickLogic: dynamic center on pointer down, normalized output
+- VirtualJoystick: IPointerDownHandler/IDragHandler/IPointerUpHandler
+- Outer ring appears at touch point (dynamic positioning)
+- Platform auto-detection via #if UNITY_IOS / UNITY_STANDALONE_OSX
+
+**Known Issues**: None
+
+**Next**: US-037 — Action buttons (depends US-036+US-017), US-042 — Build hardening
+
 ## 2026-02-27 Session — US-034: Scene transition system with fade-to-black
 
 **Status**: Completed

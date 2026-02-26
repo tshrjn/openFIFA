@@ -835,7 +835,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 36,
-      "passes": false,
+      "passes": true,
       "notes": "Create IInputProvider interface with GetMovement():Vector2, GetActions(). KeyboardInputProvider for macOS (WASD/Arrows via Unity Input System). TouchInputProvider with VirtualJoystick for iPad. Auto-detect platform: #if UNITY_STANDALONE_OSX use keyboard, #if UNITY_IOS use touch. VirtualJoystick: IPointerDownHandler, IDragHandler, IPointerUpHandler. Outer ring Image anchored to touch start position. Inner thumb clamped within outer radius. Output = (thumbPos - centerPos) / radius, with dead zone.",
       "dependsOn": ["US-004"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-036'"],
