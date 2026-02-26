@@ -7,9 +7,9 @@
 
 ## Game Concept
 
-**OpenFifa** is a **5v5 arcade-style soccer game** for iPhone and iPad. It prioritizes fast, fun gameplay over simulation realism. Matches are short (6 minutes total), controls are simple (virtual joystick + action buttons), and the visual style is clean and readable.
+**OpenFifa** is a **5v5 AAA arcade-style soccer game** for macOS and iPad. It targets premium-quality gameplay with fast, fun matches over simulation realism. Matches are short (6 minutes total), controls are platform-native (keyboard/mouse/trackpad on macOS, touch on iPad), and the visual style is clean and readable.
 
-The game is single-player vs AI for v1, with local multiplayer (same device) as the final feature.
+The game is single-player vs AI for v1, with local multiplayer (same device) as the final feature. **AAA Gameplay** is a core design goal — every interaction should feel polished, responsive, and premium.
 
 ---
 
@@ -17,20 +17,20 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 
 | Platform | Priority | Notes |
 |----------|----------|-------|
-| iOS (iPhone) | Primary | iPhone 14+ at 60fps, iPhone SE at 30fps |
-| iOS (iPad) | Primary | All iPads running iOS 16+ |
-| macOS | Dev/Testing | Editor + Simulator testing |
+| macOS | Primary | macOS 14+ Sonoma, native .app bundle, keyboard/mouse/trackpad at 60fps |
+| iPad | Secondary | iPadOS 17+, all iPads with M-series or A12+ chips, touch controls at 60fps |
 | Android | Future | Not in v1 scope |
 
 ---
 
 ## Goals
 
-1. **Fun arcade gameplay** — A complete match should be enjoyable for a casual player
-2. **Smooth performance** — 30-60fps on iPhone 14+, no frame hitches during gameplay
+1. **AAA Gameplay** — Premium-quality feel in every interaction; a complete match should be polished and enjoyable
+2. **Smooth performance** — 60fps on macOS and modern iPads, no frame hitches during gameplay
 3. **Full match loop** — Main Menu → Team Select → Match → Results → Main Menu
 4. **Test-driven quality** — Every feature has automated tests, zero human visual verification required
 5. **Agent-buildable** — Every component can be built by an AI coding agent in one session
+6. **Platform-native controls** — Keyboard/mouse/trackpad on macOS feels native; touch on iPad feels native
 
 ---
 
@@ -54,9 +54,10 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 | Engine | Unity 6 LTS (2022.3+) |
 | Render Pipeline | URP |
 | Language | C# |
-| Min iOS Version | 16.0 |
+| Min macOS Version | 14.0 (Sonoma) |
+| Min iPadOS Version | 17.0 |
 | Max Bundle Size | 200 MB |
-| Target Frame Rate | 30fps minimum, 60fps target |
+| Target Frame Rate | 60fps target, 30fps minimum |
 | Test Framework | NUnit 3 (Unity Test Framework) |
 | Max Draw Batches | 100 |
 | GC Allocations (gameplay) | 0 bytes/frame |
@@ -109,7 +110,20 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 
 ## Player Controls
 
-### Touch (iOS — Primary)
+### Keyboard / Mouse / Trackpad (macOS — Primary)
+
+| Input | Action |
+|-------|--------|
+| WASD / Arrow keys | Move active player |
+| Z / Left Click | Short pass to nearest teammate |
+| X / Right Click | Shoot toward goal |
+| C | Slide tackle / pressure |
+| Left Shift (hold) | Run faster (1.5x speed) |
+| Tab | Switch to nearest player to ball |
+| Escape | Open pause menu |
+| Mouse / Trackpad | Camera look (optional) |
+
+### Touch (iPad — Secondary)
 
 | Input | Action |
 |-------|--------|
@@ -120,18 +134,6 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 | Sprint button (hold) | Run faster (1.5x speed) |
 | Switch button (tap) | Switch to nearest player to ball |
 | Pause button | Open pause menu |
-
-### Keyboard (Development)
-
-| Input | Action |
-|-------|--------|
-| WASD / Arrows | Move |
-| Z | Pass |
-| X | Shoot |
-| C | Tackle |
-| Left Shift (hold) | Sprint |
-| Tab | Switch player |
-| Escape | Pause |
 
 ---
 
@@ -185,9 +187,10 @@ The game is v1-complete when:
 
 1. Full match loop plays from Main Menu through Results and back
 2. AI opponents make sensible decisions (pass, shoot, defend, goalkeeper dives)
-3. Touch controls work on iOS device
-4. Performance: 30fps sustained on iPhone 14 Simulator
+3. Keyboard/mouse/trackpad controls work natively on macOS; touch controls work on iPad
+4. Performance: 60fps sustained on macOS, 30fps minimum on iPad
 5. Bundle size < 200MB
 6. All automated tests pass (EditMode + PlayMode)
-7. iOS Simulator build compiles without errors
+7. macOS .app bundle builds and runs without errors; iPad Simulator build compiles without errors
 8. Zero crashes during a 10-match fast-forward simulation
+9. AAA gameplay feel — responsive controls, smooth animations, polished game feel on both platforms

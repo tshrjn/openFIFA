@@ -191,6 +191,10 @@ unity -runTests -batchmode -testPlatform PlayMode -testResults ./test-results/ga
 
 ### Gate 4: Build Verification
 ```bash
+# macOS build
+unity -batchmode -nographics -quit -buildTarget StandaloneOSX
+
+# iPad build
 unity -batchmode -nographics -quit -buildTarget iOS
 ```
 
@@ -261,12 +265,27 @@ git commit -m "feat(US-003): implement ball physics with PlayMode tests
 - `Assets/Tests/Runtime/` needs `OpenFifa.Tests.Runtime.asmdef` referencing PlayMode
 - Both must reference the main `OpenFifa.asmdef`
 
-### iOS Build Script
+### Build Scripts
 ```csharp
 // Assets/Editor/BuildScript.cs
 public static class BuildScript
 {
-    public static void BuildIOS()
+    public static void BuildMacOS()
+    {
+        var options = new BuildPlayerOptions
+        {
+            scenes = EditorBuildSettings.scenes
+                .Where(s => s.enabled)
+                .Select(s => s.path)
+                .ToArray(),
+            locationPathName = "build/macOS/OpenFifa.app",
+            target = BuildTarget.StandaloneOSX,
+            options = BuildOptions.None
+        };
+        BuildPipeline.BuildPlayer(options);
+    }
+
+    public static void BuildIPad()
     {
         var options = new BuildPlayerOptions
         {

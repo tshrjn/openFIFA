@@ -1,7 +1,8 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Unity-6%20LTS-000000?style=for-the-badge&logo=unity&logoColor=white" alt="Unity 6 LTS"/>
   <img src="https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=csharp&logoColor=white" alt="C#"/>
-  <img src="https://img.shields.io/badge/iOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iOS"/>
+  <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/>
+  <img src="https://img.shields.io/badge/iPad-000000?style=for-the-badge&logo=apple&logoColor=white" alt="iPad"/>
   <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"/>
   <img src="https://img.shields.io/github/stars/tshrjn/openfifa?style=for-the-badge&color=yellow" alt="Stars"/>
 </p>
@@ -9,8 +10,8 @@
 <h1 align="center">OpenFifa</h1>
 
 <p align="center">
-  <strong>The open-source arcade soccer game for iOS</strong><br/>
-  5v5 fast-paced matches. Built with Unity. Powered by AI agents.
+  <strong>The open-source AAA arcade soccer game for macOS & iPad</strong><br/>
+  5v5 fast-paced matches. Premium gameplay. Built with Unity. Powered by AI agents.
 </p>
 
 <p align="center">
@@ -25,7 +26,7 @@
 
 ## What is OpenFifa?
 
-OpenFifa is an **open-source, arcade-style 5v5 soccer game** for iPhone and iPad. Think FIFA meets Sensible Soccer — fast matches, intuitive controls, and pure fun.
+OpenFifa is an **open-source, AAA arcade-style 5v5 soccer game** for macOS and iPad. Think FIFA meets Sensible Soccer — fast matches, premium-quality gameplay, intuitive controls, and pure fun.
 
 Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebase is being developed through **AI-assisted long-horizon task automation** — every feature starts as a test, every component is independently verifiable, and the entire development process is documented in real-time.
 
@@ -54,13 +55,13 @@ Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebas
 |---------|--------|
 | 5v5 arcade matches | Planned |
 | AI opponents with FSM behavior | Planned |
-| Touch controls (virtual joystick + buttons) | Planned |
+| Keyboard/mouse/trackpad controls (macOS) + touch controls (iPad) | Planned |
 | Broadcast-style camera | Planned |
 | Match flow (kickoff, halftime, fulltime) | Planned |
 | Goal celebrations + replays | Planned |
 | Team selection + formations | Planned |
 | Sound effects + crowd audio | Planned |
-| iOS-optimized (60fps, <200MB) | Planned |
+| AAA gameplay optimized for macOS & iPad (60fps, <200MB) | Planned |
 | Local multiplayer (same device) | Planned |
 
 ---
@@ -69,9 +70,9 @@ Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebas
 
 ### Prerequisites
 
-- **Unity 6 LTS** (2022.3+) with iOS Build Support
-- **Xcode 15+** (for iOS builds)
-- **macOS** (required for iOS development)
+- **Unity 6 LTS** (2022.3+) with macOS Build Support + iOS Build Support (for iPad)
+- **Xcode 15+** (for macOS and iPad builds)
+- **macOS 14+ Sonoma** (primary development and target platform)
 - Git LFS (for large binary assets)
 
 ### Installation
@@ -98,16 +99,22 @@ unity -runTests -batchmode -nographics -projectPath . -testPlatform EditMode -te
 unity -runTests -batchmode -projectPath . -testPlatform PlayMode -testResults ./test-results/playmode.xml
 ```
 
-### Building for iOS
+### Building for macOS & iPad
 
 ```bash
-# Build Xcode project
-unity -batchmode -nographics -quit -projectPath . -buildTarget iOS -executeMethod BuildScript.BuildIOS
+# Build macOS app
+unity -batchmode -nographics -quit -projectPath . -buildTarget StandaloneOSX -executeMethod BuildScript.BuildMacOS
 
-# Compile and run on Simulator
+# Build iPad (via Xcode project)
+unity -batchmode -nographics -quit -projectPath . -buildTarget iOS -executeMethod BuildScript.BuildIPad
+
+# Run macOS app directly
+open build/macOS/OpenFifa.app
+
+# Compile iPad build for Simulator
 xcodebuild -project build/iOS/Unity-iPhone.xcodeproj \
   -scheme Unity-iPhone \
-  -destination 'platform=iOS Simulator,name=iPhone 15 Pro' \
+  -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4)' \
   build
 ```
 
@@ -120,20 +127,20 @@ OpenFifa is designed for quick, fun matches:
 - **5v5 format** — faster pace than 11v11, easier to follow
 - **3-minute halves** — complete matches in ~7 minutes
 - **Simplified rules** — no offsides, no VAR, just play
-- **Virtual joystick** — left side moves, right side has pass/shoot/tackle/sprint
+- **Keyboard/mouse (macOS)** + **virtual joystick (iPad)** — full control on both platforms
 - **AI opponents** — difficulty scales from casual to challenging
 
 ### Controls
 
-| Action | Touch | Keyboard (dev) |
-|--------|-------|-----------------|
-| Move | Left joystick | WASD / Arrow keys |
-| Pass | Pass button | Z |
-| Shoot | Shoot button | X |
-| Tackle | Tackle button | C |
-| Sprint | Hold Sprint | Left Shift |
-| Switch player | Tap switch | Tab |
-| Pause | Pause button | Escape |
+| Action | Keyboard/Mouse (macOS) | Touch (iPad) |
+|--------|------------------------|--------------|
+| Move | WASD / Arrow keys | Left joystick |
+| Pass | Z / Left Click | Pass button |
+| Shoot | X / Right Click | Shoot button |
+| Tackle | C | Tackle button |
+| Sprint | Left Shift | Hold Sprint button |
+| Switch player | Tab | Tap switch button |
+| Pause | Escape | Pause button |
 
 ---
 
@@ -214,7 +221,7 @@ Phase 1: Foundation        [US-001 — US-008]  ░░░░░░░░░░  
 Phase 2: Core Gameplay     [US-009 — US-018]  ░░░░░░░░░░  0%
 Phase 3: Game Feel         [US-019 — US-027]  ░░░░░░░░░░  0%
 Phase 4: UI & Menus        [US-028 — US-035]  ░░░░░░░░░░  0%
-Phase 5: Polish & iOS      [US-036 — US-043]  ░░░░░░░░░░  0%
+Phase 5: Polish & Platform  [US-036 — US-043]  ░░░░░░░░░░  0%
 Phase 6: Asset Integration [US-044 — US-050]  ░░░░░░░░░░  0%
 ```
 
@@ -262,7 +269,7 @@ Key principle: **Pure C# logic is separated from MonoBehaviour** so core game lo
 | Input | Unity Input System |
 | Physics | PhysX |
 | UI | Unity UI + TextMeshPro |
-| Target | iOS 16+ (iPhone + iPad) |
+| Target | macOS 14+ Sonoma (primary), iPadOS 17+ (secondary) |
 
 ---
 

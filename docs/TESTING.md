@@ -13,7 +13,7 @@
 | 3. Physics Simulation | PlayMode + PhysX | Seconds | When physics code changes |
 | 4. Visual Regression | Screenshot diff | Minutes | After visual changes |
 | 5. Performance Budgets | Profiler asserts | Minutes | Per phase checkpoint |
-| 6. iOS Build Verification | xcodebuild | 15-30 min | Per phase checkpoint |
+| 6. Platform Build Verification | macOS .app + xcodebuild (iPad) | 15-30 min | Per phase checkpoint |
 | 7. State Machine Verification | EditMode | Milliseconds | When FSM code changes |
 | 8. E2E Game Loop | PlayMode + scene loads | Minutes | Phase 4+ checkpoints |
 | 9. AI Behavior Validation | PlayMode + simulation | Minutes | When AI code changes |
@@ -173,13 +173,19 @@ public class PerformanceTests
 
 ---
 
-## 6. iOS Build Verification
+## 6. Platform Build Verification
 
-Script: `scripts/verify-ios-build.sh`
+Script: `scripts/verify-build.sh`
 
-Checks:
+### macOS Checks:
+1. macOS .app bundle exists and is valid
+2. App bundle < 200MB
+3. Required frameworks present (Metal, AppKit, AVFoundation)
+4. .app launches without crash (smoke test)
+
+### iPad Checks:
 1. Xcode project generated successfully
-2. `xcodebuild` compiles for iOS Simulator without errors
+2. `xcodebuild` compiles for iPad Simulator without errors
 3. App bundle < 200MB
 4. Required frameworks present (Metal, UIKit, AVFoundation)
 
@@ -270,7 +276,7 @@ See `.github/workflows/openfifa-ci.yml` for full configuration.
 Push to main/ralph/*
   → EditMode tests (< 2 min, ubuntu)
   → PlayMode tests (< 15 min, ubuntu, needs editmode)
-  → iOS build verification (< 30 min, macos, needs playmode)
+  → Platform builds: macOS + iPad (< 30 min, macos, needs playmode)
 
 Nightly schedule
   → Performance + Visual Regression (macos with GPU)

@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-OpenFifa is a 5v5 arcade-style soccer game for iOS (iPhone + iPad), built with Unity 6 LTS + C# + URP. Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
+OpenFifa is a 5v5 AAA arcade-style soccer game for macOS & iPad, built with Unity 6 LTS + C# + URP. This is a premium-quality game targeting macOS desktops (primary) and iPad (secondary). Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
 
 ## Tech Stack
 
 - **Engine**: Unity 6 LTS (2022.3+) with Universal Render Pipeline (URP)
 - **Language**: C#
-- **Target**: iOS 16+ (iPhone + iPad), macOS (dev/testing)
+- **Target**: macOS 14+ Sonoma (primary), iPadOS 17+ (secondary)
 - **Testing**: NUnit 3 (Unity Test Framework) — EditMode + PlayMode
 - **Camera**: Cinemachine
 - **Input**: Unity Input System
@@ -119,7 +119,10 @@ unity -runTests -batchmode -nographics -projectPath ./OpenFifa -testPlatform Edi
 unity -runTests -batchmode -projectPath ./OpenFifa -testPlatform EditMode -testResults ./test-results/editmode.xml && \
 unity -runTests -batchmode -projectPath ./OpenFifa -testPlatform PlayMode -testResults ./test-results/playmode.xml
 
-# Build verification
+# Build verification (macOS)
+unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget StandaloneOSX
+
+# Build verification (iPad)
 unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget iOS
 ```
 
@@ -127,7 +130,7 @@ unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget iOS
 
 Every completed story MUST pass ALL of these:
 
-1. **Build**: `unity -batchmode -nographics -quit -buildTarget iOS` exits with code 0
+1. **Build**: `unity -batchmode -nographics -quit -buildTarget StandaloneOSX` and `-buildTarget iOS` both exit with code 0
 2. **Story tests**: `unity -runTests -testCategory "US-XXX"` — all pass
 3. **Full EditMode suite**: zero failures
 4. **Full PlayMode suite**: zero failures (excluding `[Category("Quarantine")]`)

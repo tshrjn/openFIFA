@@ -8,22 +8,22 @@
 
 | Phase | Stories | Description | Checkpoint |
 |-------|---------|-------------|------------|
-| 1. Foundation | US-001 — US-008 | Project scaffold, pitch, ball, player, goals, camera, HUD | Ball bounces on pitch, iOS Simulator builds |
+| 1. Foundation | US-001 — US-008 | Project scaffold, pitch, ball, player, goals, camera, HUD | Ball bounces on pitch, macOS app builds |
 | 2. Core Gameplay | US-009 — US-018 | AI, goalkeeper, match FSM, scoring, switching, tackling | Full 5v5 match at 100x speed without crash |
 | 3. Game Feel | US-019 — US-027 | Animations, particles, SFX, celebrations, replays | All animations trigger correctly, audio plays |
 | 4. UI & Menus | US-028 — US-035 | Full menu flow, HUD, settings, transitions | E2E: menu → select → match → results → menu |
-| 5. Polish & iOS | US-036 — US-043 | Touch controls, haptics, performance, multi-res | 30fps on Simulator, <200MB, zero GC |
+| 5. Polish & Platform | US-036 — US-043 | Controls (keyboard/mouse + touch), haptics, performance, multi-res | 60fps on macOS, 30fps on iPad, <200MB, zero GC |
 | 6. Asset Integration | US-044 — US-050 | Real models, Mixamo anims, stadium, audio, local MP | Visual baselines set, all asset swaps verified |
 
 ---
 
 ## Phase 1: Foundation
 
-**Goal**: A green pitch with a bouncing ball, one controllable player, goal detection, camera, and a basic score/timer HUD. Builds on iOS Simulator.
+**Goal**: A green pitch with a bouncing ball, one controllable player, goal detection, camera, and a basic score/timer HUD. Builds as macOS .app and iPad Simulator target.
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-001 | Unity project scaffold + iOS build + test framework | Pending |
+| US-001 | Unity project scaffold + macOS/iPad build + test framework | Pending |
 | US-002 | Soccer pitch with boundaries | Pending |
 | US-003 | Ball physics | Pending |
 | US-004 | Single player controller | Pending |
@@ -34,15 +34,18 @@
 
 **Checkpoint validation**:
 ```bash
-# Build compiles
+# macOS build compiles
+unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget StandaloneOSX
+
+# iPad build compiles
 unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget iOS
 
 # All tests pass
 unity -runTests -batchmode -nographics -testPlatform EditMode -testResults ./test-results/p1-editmode.xml
 unity -runTests -batchmode -testPlatform PlayMode -testResults ./test-results/p1-playmode.xml
 
-# iOS Simulator build
-./scripts/verify-ios-build.sh
+# Platform build verification
+./scripts/verify-build.sh
 ```
 
 ---
@@ -126,19 +129,19 @@ unity -runTests -batchmode -testCategory "E2E" -testResults ./test-results/p4-e2
 
 ---
 
-## Phase 5: Polish & iOS
+## Phase 5: Polish & Platform
 
-**Goal**: Touch controls work, performance hits budgets, app builds for iOS without issues.
+**Goal**: Keyboard/mouse controls work on macOS, touch controls work on iPad, performance hits budgets, app builds for both platforms without issues.
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-036 | Virtual joystick touch control | Pending |
-| US-037 | Action buttons touch control | Pending |
-| US-038 | Haptic feedback | Pending |
+| US-036 | Keyboard/mouse controls (macOS) + virtual joystick (iPad) | Pending |
+| US-037 | Keyboard shortcuts (macOS) + touch buttons (iPad) | Pending |
+| US-038 | Haptic feedback (iPad) + screen shake/audio feedback (macOS) | Pending |
 | US-039 | Draw call optimization | Pending |
 | US-040 | GC-free gameplay loop | Pending |
-| US-041 | Multi-resolution UI | Pending |
-| US-042 | iOS build hardening | Pending |
+| US-041 | Multi-resolution UI (macOS windows + iPad sizes) | Pending |
+| US-042 | macOS + iPad build hardening | Pending |
 | US-043 | Performance budget test suite | Pending |
 
 **Checkpoint validation**:
@@ -146,8 +149,8 @@ unity -runTests -batchmode -testCategory "E2E" -testResults ./test-results/p4-e2
 # Performance tests
 unity -runTests -batchmode -testCategory "Performance" -testResults ./test-results/p5-perf.xml
 
-# iOS build verification
-./scripts/verify-ios-build.sh
+# Platform build verification
+./scripts/verify-build.sh
 ```
 
 ---

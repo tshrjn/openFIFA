@@ -69,9 +69,9 @@ jobs:
           name: playmode-results
           path: playmode-results
 
-  # ─── SLOW: iOS Build Verification (15-30 minutes) ──────────────
-  ios-build:
-    name: iOS Build
+  # ─── SLOW: Platform Builds (15-30 minutes) ────────────────────
+  platform-builds:
+    name: Platform Builds (macOS + iPad)
     runs-on: macos-latest
     needs: playmode-tests
     if: github.event_name != 'schedule'
@@ -80,21 +80,35 @@ jobs:
         with:
           lfs: true
 
-      - uses: game-ci/unity-builder@v4
+      - name: Build macOS
+        uses: game-ci/unity-builder@v4
+        with:
+          projectPath: ${{ env.PROJECT_PATH }}
+          targetPlatform: StandaloneOSX
+          buildMethod: BuildScript.BuildMacOS
+
+      - name: Build iPad
+        uses: game-ci/unity-builder@v4
         with:
           projectPath: ${{ env.PROJECT_PATH }}
           targetPlatform: iOS
-          buildMethod: BuildScript.BuildIOS
+          buildMethod: BuildScript.BuildIPad
 
-      - name: Verify iOS build
+      - name: Verify platform builds
         run: |
-          chmod +x ./scripts/verify-ios-build.sh
-          ./scripts/verify-ios-build.sh ./build/iOS
+          chmod +x ./scripts/verify-build.sh
+          ./scripts/verify-build.sh ./build/macOS ./build/iOS
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: ios-build
+          name: macos-build
+          path: build/macOS
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-build
           path: build/iOS
 
   # ─── NIGHTLY: Performance + Visual Regression ──────────────────

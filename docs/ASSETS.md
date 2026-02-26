@@ -56,7 +56,7 @@
 | **TextureCan Soccer Grass** | Free | SBSAR procedural | Specifically designed soccer pitch with mowed bands. Customizable. |
 | **ambientCG Grass004** | CC0 | Up to 8K PBR | 298K+ downloads. Full PBR maps. Good for pitch surface. |
 | **R-LAB Soccer Stadium** (Sketchfab) | CC-BY | FBX, Blender | Most detailed free stadium. Replaceable billboards. |
-| **Poly.pizza Football Stadium** | CC-BY 3.0 | glTF | Low-poly, mobile-optimized. |
+| **Poly.pizza Football Stadium** | CC-BY 3.0 | glTF | Low-poly, optimized for macOS & iPad. |
 
 ### Soccer Ball
 
