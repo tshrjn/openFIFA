@@ -977,7 +977,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 42,
-      "passes": false,
+      "passes": true,
       "notes": "Set PlayerSettings: macOS minimum version 14.0, iPadOS minimum version 17.0, architecture ARM64, scripting backend IL2CPP, API Compatibility .NET Standard 2.1. Create verify-build.sh: macOS section checks .app exists, bundle size, frameworks (Metal, AppKit, AVFoundation). iPad section checks Xcode project exists, runs xcodebuild for iPad Simulator, checks bundle size, frameworks (Metal, UIKit, AVFoundation). Use BuildPipeline.BuildPlayer with both StandaloneOSX and iOS targets. Strip engine code to reduce size.",
       "dependsOn": ["US-001"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-042'"],

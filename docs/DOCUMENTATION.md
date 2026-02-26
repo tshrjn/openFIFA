@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-042: Build hardening (macOS + iPad)
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BuildHardeningConfig.cs — Build config: min versions, architecture, frameworks
+- OpenFifa/Assets/Tests/Editor/US042_BuildTests.cs — 7 EditMode tests
+
+**Known Issues**: None
+**Next**: US-043 — Performance budget test suite
+
 ## 2026-02-27 Session — US-041: Multi-resolution UI (macOS + iPad)
 
 **Status**: Completed
