@@ -516,7 +516,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 22,
-      "passes": false,
+      "passes": true,
       "notes": "Create BallTrailEffect : MonoBehaviour on Ball. In Update: float speed = _rb.linearVelocity.magnitude; var emission = _ps.emission; emission.enabled = speed > velocityThreshold. Scale startColor alpha: Color.Lerp(minColor, maxColor, (speed - threshold) / maxSpeed). Set emission.rateOverTime = Mathf.Lerp(5, 30, speedRatio). ParticleSystem settings: startLifetime 0.3, startSize 0.1, maxParticles 50, renderMode Billboard, material additive.",
       "dependsOn": ["US-003"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-022'"],

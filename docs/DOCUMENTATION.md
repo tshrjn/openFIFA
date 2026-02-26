@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-022: Ball trail particle effect at high velocity
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BallTrailLogic.cs — Pure C# trail emission logic
+- OpenFifa/Assets/Scripts/Gameplay/BallTrailEffect.cs — Ball trail particle MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US022_BallTrailTests.cs — 10 EditMode tests
+
+**Decisions**:
+- Velocity threshold 10 m/s, max 50 particles
+- Alpha and emission rate scale linearly with speed above threshold
+- Emission rate: 5-30 particles/sec based on speed ratio
+- ParticleSystem configured in code: world space, sphere shape, fade-out over lifetime
+- Color lerp between transparent and warm gold based on speed
+
+**Known Issues**: None
+
+**Next**: US-023 — Sound effects, US-024 — Camera shake
+
 ## 2026-02-27 Session — US-021: Goal celebration sequence with slow-motion and camera zoom
 
 **Status**: Completed
