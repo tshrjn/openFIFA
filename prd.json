@@ -583,7 +583,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 25,
-      "passes": false,
+      "passes": true,
       "notes": "Create CrowdReactionSystem : MonoBehaviour. Use AudioMixer with 'Crowd' group and exposed 'CrowdVolume' parameter. In Update: calculate ball distance to nearest goal, map to 0-1 intensity (closer = higher). AudioMixer.SetFloat('CrowdVolume', Mathf.Lerp(-20f, 0f, intensity)) in dB. Near-miss detection: ball velocity toward goal + ball passes within 2m of goal post without scoring. Lerp intensity: Mathf.MoveTowards(current, target, Time.deltaTime * lerpSpeed).",
       "dependsOn": ["US-023"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-025'"],

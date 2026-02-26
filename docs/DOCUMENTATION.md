@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-025: Dynamic crowd reaction audio
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/CrowdReactionLogic.cs — Pure C# crowd intensity and near-miss detection
+- OpenFifa/Assets/Scripts/Audio/CrowdReactionSystem.cs — Dynamic crowd MonoBehaviour with AudioMixer
+- OpenFifa/Assets/Tests/Editor/US025_CrowdReactionTests.cs — 10 EditMode tests
+
+**Decisions**:
+- Intensity scales linearly from 0.3 (center) to 1.0 (goal line) based on ball X proximity
+- Volume maps from -20dB (base) to 0dB (max) via AudioMixer exposed parameter
+- Smooth transitions via MoveTowards at lerpSpeed 3
+- Near-miss detection: ball near goal line (>23m X), outside goal width, at speed >10 m/s
+- CrowdReactionSystem updates AudioMixer "CrowdVolume" parameter each frame
+
+**Known Issues**: None
+
+**Next**: US-026 — Player dust particles, US-027 — Replay system
+
 ## 2026-02-27 Session — US-024: Camera shake on goal via Cinemachine Impulse
 
 **Status**: Completed
