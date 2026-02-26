@@ -26,6 +26,29 @@
 
 ## Log
 
+## 2026-02-27 Session — US-003: Ball physics with realistic mass, bounce, friction, and rolling
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BallPhysicsData.cs — Pure C# ball physics config data
+- OpenFifa/Assets/Scripts/Core/BallState.cs — BallState enum (Free, Possessed, InFlight)
+- OpenFifa/Assets/Scripts/Gameplay/BallPhysicsConfig.cs — ScriptableObject wrapper
+- OpenFifa/Assets/Scripts/Gameplay/BallController.cs — Ball MonoBehaviour with state management
+- OpenFifa/Assets/Tests/Editor/US003_BallConfigTests.cs — 9 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US003_BallPhysicsTests.cs — 10 PlayMode tests
+
+**Decisions**:
+- BallController uses [RequireComponent] for Rigidbody and SphereCollider
+- PhysicMaterial created at runtime with bounceCombine=Average, frictionCombine=Average
+- Ball radius 0.11m (standard soccer ball)
+- BallState transitions: Free -> Possessed, Free -> InFlight, InFlight -> Free (on ground contact)
+- Events use C# event Action<BallState, BallState> pattern for state changes
+- Rigidbody interpolation=Interpolate, collisionDetection=ContinuousDynamic
+
+**Known Issues**: None
+
+**Next**: US-004 — Single player controller with keyboard movement and sprint
+
 ## 2026-02-27 Session — US-002: Soccer pitch with correct 5v5 proportions + boundary colliders
 
 **Status**: Completed

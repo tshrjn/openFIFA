@@ -71,7 +71,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "notes": "Create BallController : MonoBehaviour on the Ball GameObject. Use PhysicMaterial asset with bounceCombine = Average, frictionCombine = Average. Set Rigidbody.collisionDetectionMode = ContinuousDynamic. For tests, use Physics.simulationMode = Script and step with Physics.Simulate(Time.fixedDeltaTime) in PlayMode tests. Layer: 'Ball'. Tag: 'Ball'. Consider adding a BallState enum (Free, Possessed, InFlight).",
       "dependsOn": ["US-002"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-003'"],
