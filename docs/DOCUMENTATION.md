@@ -26,6 +26,17 @@
 
 ## Log
 
+## 2026-02-27 Session — US-040: GC-free gameplay loop with object pooling
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/ObjectPoolLogic.cs — Pure C# index-based pool + StringBuilderCache
+- OpenFifa/Assets/Scripts/Gameplay/ObjectPool.cs — Generic Unity object pool with pre-warm
+- OpenFifa/Assets/Tests/Editor/US040_ObjectPoolTests.cs — 8 EditMode tests
+
+**Known Issues**: None
+**Next**: US-041 — Multi-resolution UI
+
 ## 2026-02-27 Session — US-039: Draw call optimization with batching and instancing
 
 **Status**: Completed

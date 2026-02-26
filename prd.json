@@ -927,7 +927,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 40,
-      "passes": false,
+      "passes": true,
       "notes": "Create ObjectPool<T> : where T : Component. Pool uses Stack<T> internally. Get(): pop from stack or Instantiate. Return(T obj): deactivate and push. Pre-warm: for loop Instantiate in Awake. HUD: use StringBuilder with .Clear().Append() instead of string interpolation. Cache ToString() results for timer. Use ProfilerRecorder from Unity.Profiling: var recorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, 'GC.Alloc'); after 2s check recorder.CurrentValue == 0. Avoid foreach on non-struct enumerables, use for loops.",
       "dependsOn": ["US-018"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-040'"],
