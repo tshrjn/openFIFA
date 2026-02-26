@@ -331,7 +331,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 14,
-      "passes": false,
+      "passes": true,
       "notes": "Create MatchStateMachine as a plain C# class. Use a Dictionary<MatchState, HashSet<MatchState>> for valid transitions. Store _previousState for pause/resume. Event: event Action<MatchState, MatchState> OnStateChanged. Transition method: void TransitionTo(MatchState newState) validates and fires event. Paused is special: store state before pause, restore on resume. A MatchStateMachineBehaviour MonoBehaviour wraps this and integrates with MatchTimer and GoalDetector events.",
       "dependsOn": ["US-007", "US-015"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-014'"],

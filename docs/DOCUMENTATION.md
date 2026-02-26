@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-014: Match state machine with full flow and pause support
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/MatchState.cs — Match state enum (PreKickoff, FirstHalf, HalfTime, SecondHalf, FullTime, GoalCelebration, Paused)
+- OpenFifa/Assets/Scripts/Core/MatchStateMachine.cs — Pure C# match state machine with enforced valid transitions
+- OpenFifa/Assets/Tests/Editor/US014_MatchStateMachineTests.cs — 12 EditMode tests
+
+**Decisions**:
+- MatchStateMachine uses Dictionary<MatchState, HashSet<MatchState>> for valid transitions
+- Pause preserves _previousState, Resume restores it
+- GoalCelebration transitions back to PreKickoff for kickoff reset
+- TransitionTo(Paused) delegates to Pause() internally
+- InvalidOperationException thrown on invalid transitions
+- Event: OnStateChanged fires (oldState, newState) on every transition
+
+**Known Issues**: None
+
+**Next**: US-016 — Player switching, US-018 — Ball ownership
+
 ## 2026-02-27 Session — US-015: Kickoff sequence with ball placement and player reset
 
 **Status**: Completed
