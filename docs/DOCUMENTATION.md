@@ -26,6 +26,30 @@
 
 ## Log
 
+## 2026-02-27 Session — US-004: Single player controller with keyboard movement and sprint
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PlayerStatsData.cs — Pure C# player stats data
+- OpenFifa/Assets/Scripts/Gameplay/PlayerStatsConfig.cs — ScriptableObject wrapper
+- OpenFifa/Assets/Scripts/Gameplay/PlayerController.cs — Player MonoBehaviour with input handling
+- OpenFifa/Assets/Scripts/Gameplay/OpenFifa.Gameplay.asmdef — Added Unity.InputSystem reference
+- OpenFifa/Assets/Tests/Editor/US004_PlayerConfigTests.cs — 7 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US004_PlayerMovementTests.cs — 10 PlayMode tests
+
+**Decisions**:
+- PlayerController uses velocity-based movement (not MovePosition) for physics interaction
+- Movement input normalized to prevent diagonal speed boost
+- SetMoveInput/SetSprinting methods allow programmatic control (tests + AI)
+- Input System callbacks (OnMove/OnSprint) for PlayerInput component integration
+- Rigidbody constraints freeze all rotation axes to prevent tipping
+- Acceleration/deceleration model for smooth starts and stops
+- Base speed 7 m/s, sprint 10.5 m/s (1.5x multiplier), acceleration 5 m/s^2
+
+**Known Issues**: None
+
+**Next**: US-005 — Goal detection system with event broadcasting
+
 ## 2026-02-27 Session — US-003: Ball physics with realistic mass, bounce, friction, and rolling
 
 **Status**: Completed

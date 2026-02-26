@@ -96,7 +96,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 4,
-      "passes": false,
+      "passes": true,
       "notes": "Create PlayerController : MonoBehaviour. Use New Input System: create InputActionAsset with 'Player' action map containing Move (Vector2, WASD/Arrows composite) and Sprint (Button, LeftShift). Movement via Rigidbody.MovePosition or velocity-based. Base speed ~7 m/s, sprint ~10.5 m/s. Freeze rotation on X and Z axes via RigidbodyConstraints. Layer: 'Player'. Use [RequireComponent(typeof(Rigidbody))].",
       "dependsOn": ["US-002"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-004'"],

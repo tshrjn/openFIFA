@@ -2,7 +2,8 @@
     "name": "OpenFifa.Gameplay",
     "rootNamespace": "OpenFifa.Gameplay",
     "references": [
-        "OpenFifa.Core"
+        "OpenFifa.Core",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
