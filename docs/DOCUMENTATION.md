@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-032: Post-match results screen
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/MatchResultsLogic.cs — Pure C# results logic with MOTM calculation
+- OpenFifa/Assets/Scripts/UI/ResultsScreenController.cs — Results screen MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US032_ResultsTests.cs — 8 EditMode tests
+
+**Decisions**:
+- GoalRecord struct with scorer, time, team
+- Man of the Match: player with most goals via Dictionary counting
+- Winner determined by score comparison, "Draw" on tie
+- Duration formatted as MM:SS
+- Play Again navigates to TeamSelect, Main Menu to MainMenu
+
+**Known Issues**: None
+
+**Next**: US-033 — Settings, US-034 — Scene transitions
+
 ## 2026-02-27 Session — US-031: Pause menu with resume, restart, and quit
 
 **Status**: Completed

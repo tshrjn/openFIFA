@@ -743,7 +743,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 32,
-      "passes": false,
+      "passes": true,
       "notes": "Create MatchResultsData : ScriptableObject to persist across scenes (playerTeamScore, aiTeamScore, matchDuration, List<GoalRecord> goals). GoalRecord struct: PlayerIdentity scorer, float matchTime, TeamIdentifier team. ResultsScreenController reads MatchResultsData. Man of the match: LINQ GroupBy scorer, OrderByDescending count, First(). Play Again: SceneManager.LoadScene('TeamSelect'). Main Menu: SceneManager.LoadScene('MainMenu'). Populate data in MatchManager before scene transition.",
       "dependsOn": ["US-014", "US-028"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-032'"],
