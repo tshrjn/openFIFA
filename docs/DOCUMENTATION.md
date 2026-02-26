@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-028: Main menu scene with navigation buttons
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/MenuNavigationLogic.cs — Pure C# menu navigation mapping + UIScalerConfig
+- OpenFifa/Assets/Scripts/UI/MainMenuController.cs — Main menu MonoBehaviour with buttons
+- OpenFifa/Assets/Tests/Editor/US028_MainMenuTests.cs — 8 EditMode tests
+
+**Decisions**:
+- MenuButton enum: Play, Settings, Credits
+- MenuNavigationLogic maps buttons to scene names (TeamSelect, Settings, Credits)
+- UIScalerConfig: 1920x1080 reference, matchWidthOrHeight 0.5
+- MainMenuController uses Button.onClick.AddListener for navigation
+- Title displayed as TMP_Text with "OpenFifa"
+
+**Known Issues**: None
+
+**Next**: US-029 — Team selection, US-030 — Full match HUD, US-031 — Pause menu
+
 ## 2026-02-27 Session — US-027: Replay system for last 5 seconds on goal
 
 **Status**: Completed

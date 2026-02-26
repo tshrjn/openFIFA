@@ -651,7 +651,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 28,
-      "passes": false,
+      "passes": true,
       "notes": "Create MainMenuController : MonoBehaviour with public methods: OnPlayClicked(), OnSettingsClicked(), OnCreditsClicked(). Use SceneManager.LoadScene('TeamSelect') etc. Button.onClick.AddListener via Inspector or code. CanvasScaler: referenceResolution 1920x1080, matchWidthOrHeight 0.5. Title TMP at top-center, buttons stacked vertically at center. Test: find buttons via GameObject.Find or GetComponentInChildren<Button>, verify interactable, invoke onClick.",
       "dependsOn": ["US-001"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-028'"],
