@@ -789,7 +789,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 34,
-      "passes": false,
+      "passes": true,
       "notes": "Create SceneTransition : MonoBehaviour singleton (DontDestroyOnLoad). Child Canvas (sortingOrder 999) with black Image and CanvasGroup. Coroutine: fade alpha 0->1 over duration, yield LoadSceneAsync, wait until done, fade alpha 1->0. Use DOTween or manual Mathf.MoveTowards in Update. Prevent double-transition with _isTransitioning flag. Replace all SceneManager.LoadScene calls with SceneTransition.Instance.LoadScene(). Test: verify IsTransitioning flag and alpha values.",
       "dependsOn": ["US-028"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-034'"],

@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-034: Scene transition system with fade-to-black
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/SceneTransitionLogic.cs — Pure C# fade transition logic
+- OpenFifa/Assets/Scripts/UI/SceneTransition.cs — Singleton scene transition MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US034_SceneTransitionTests.cs — 9 EditMode tests
+
+**Decisions**:
+- SceneTransitionLogic with fade-in (to black) and fade-out (reveal) phases
+- Double transitions blocked (returns false)
+- Configurable fade duration (default 0.5s)
+- DontDestroyOnLoad singleton with Canvas sorting order 999
+- Uses LoadSceneAsync for async loading during black screen
+- CanvasGroup alpha controls fade effect
+
+**Known Issues**: None
+
+**Next**: US-036 — Platform controls, US-042 — Build hardening
+
 ## 2026-02-27 Session — US-033: Settings screen with volume and difficulty controls
 
 **Status**: Completed
