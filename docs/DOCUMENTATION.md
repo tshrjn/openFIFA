@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-017: Tackle mechanic with cooldown and dispossession
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/TackleLogic.cs — Pure C# tackle logic with range, cooldown, stun
+- OpenFifa/Assets/Scripts/Gameplay/TackleSystem.cs — Tackle MonoBehaviour with physics lunge
+- OpenFifa/Assets/Tests/Editor/US017_TackleTests.cs — 12 EditMode tests
+
+**Decisions**:
+- TackleLogic pure C# for EditMode testing: range check, cooldown tracking, stun duration
+- Default radius 1.5m, cooldown 1.0s, stun 0.5s
+- Lunge via Rigidbody.AddForce impulse toward ball carrier
+- Dispossession calls BallOwnership.Release() to make ball loose
+- Stunned player has PlayerController disabled for stun duration via coroutine
+- TackleResult struct captures lunge/dispossess/stun data
+
+**Known Issues**: None
+
+**Next**: US-019 — Player animations, US-022 — Ball trail
+
 ## 2026-02-27 Session — US-018: Ball ownership tracking system
 
 **Status**: Completed

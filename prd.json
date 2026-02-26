@@ -400,7 +400,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 17,
-      "passes": false,
+      "passes": true,
       "notes": "Create TackleSystem : MonoBehaviour on each player. Lunge: Rigidbody.AddForce(directionToTarget * lungeForce, ForceMode.Impulse). Range check: Vector3.Distance(transform.position, ballCarrier.position) < tackleRadius. Dispossess: BallOwnership.SetOwner(null). Stun: set a flag, disable input for stunDuration via coroutine. Cooldown: track lastTackleTime, check Time.time - lastTackleTime > cooldownDuration. Integrate with BallOwnership (US-018).",
       "dependsOn": ["US-004", "US-018"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-017'"],
