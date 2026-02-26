@@ -1,0 +1,16 @@
+{
+    "name": "OpenFifa.Gameplay",
+    "rootNamespace": "OpenFifa.Gameplay",
+    "references": [
+        "OpenFifa.Core"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

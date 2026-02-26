@@ -23,7 +23,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 1,
-      "passes": false,
+      "passes": true,
       "notes": "Use Unity 6000.0 LTS. Create project via 'unity -createProject' or Unity Hub with 3D (URP) template. Install packages: com.unity.render-pipelines.universal, com.unity.test-framework. Create UniversalRenderPipelineAsset via ScriptableObject. For iOS build: BuildPipeline.BuildPlayer with BuildTarget.iOS, then xcodebuild -project Unity-iPhone.xcodeproj -scheme Unity-iPhone -sdk iphonesimulator.",
       "dependsOn": [],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-001'"],

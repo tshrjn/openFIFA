@@ -1,0 +1,26 @@
+{
+    "name": "OpenFifa.Tests.Runtime",
+    "rootNamespace": "OpenFifa.Tests.Runtime",
+    "references": [
+        "OpenFifa.Core",
+        "OpenFifa.Gameplay",
+        "OpenFifa.AI",
+        "OpenFifa.UI",
+        "OpenFifa.Audio",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

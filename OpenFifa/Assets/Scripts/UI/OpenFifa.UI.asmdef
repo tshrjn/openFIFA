@@ -1,0 +1,18 @@
+{
+    "name": "OpenFifa.UI",
+    "rootNamespace": "OpenFifa.UI",
+    "references": [
+        "OpenFifa.Core",
+        "OpenFifa.Gameplay",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

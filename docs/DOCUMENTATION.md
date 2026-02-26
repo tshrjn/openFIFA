@@ -26,6 +26,39 @@
 
 ## Log
 
+## 2026-02-27 Session — US-001: Unity project scaffold + iOS build pipeline + test framework
+
+**Status**: Completed
+**Changes**:
+- Created full Unity project structure under OpenFifa/
+- OpenFifa/Assets/Scripts/Core/OpenFifa.Core.asmdef (noEngineReferences: true)
+- OpenFifa/Assets/Scripts/Gameplay/OpenFifa.Gameplay.asmdef
+- OpenFifa/Assets/Scripts/AI/OpenFifa.AI.asmdef
+- OpenFifa/Assets/Scripts/UI/OpenFifa.UI.asmdef
+- OpenFifa/Assets/Scripts/Audio/OpenFifa.Audio.asmdef
+- OpenFifa/Assets/Editor/OpenFifa.Editor.asmdef
+- OpenFifa/Assets/Editor/BuildScript.cs (iOS + macOS build methods)
+- OpenFifa/Assets/Tests/Editor/OpenFifa.Tests.Editor.asmdef (EditMode test runner)
+- OpenFifa/Assets/Tests/Runtime/OpenFifa.Tests.Runtime.asmdef (PlayMode test runner)
+- OpenFifa/Assets/Tests/Editor/US001_ProjectScaffoldTests.cs (15 EditMode tests)
+- OpenFifa/Assets/Tests/Runtime/US001_ProjectScaffoldPlayModeTests.cs (3 PlayMode tests)
+- OpenFifa/Packages/manifest.json (URP, Cinemachine, InputSystem, TMP, TestFramework)
+- OpenFifa/ProjectSettings/ (ProjectSettings, QualitySettings, GraphicsSettings, InputManager, TagManager, PhysicsManager, EditorBuildSettings, TimeManager, AudioManager)
+- OpenFifa/.vsconfig
+
+**Decisions**:
+- Core asmdef has noEngineReferences: true to enforce pure C# separation
+- Gameplay, AI, UI, Audio asmdefs reference Core for dependency chain
+- Test asmdefs use overrideReferences with nunit.framework.dll
+- TagManager pre-configured with Ball, TeamA, TeamB, GoalTrigger tags and custom layers
+- PhysicsManager uses default gravity -9.81, autoSyncTransforms disabled for determinism
+- New Input System set as active input handler (m_ActiveInputHandler: 2)
+- URP assigned in GraphicsSettings via customRenderPipeline reference
+
+**Known Issues**: None
+
+**Next**: US-002 — Soccer pitch with correct 5v5 proportions + boundary colliders
+
 ## 2026-02-27 Session — Project Initialization
 
 **Status**: Completed
