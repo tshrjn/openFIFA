@@ -539,7 +539,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 23,
-      "passes": false,
+      "passes": true,
       "notes": "Create SoundManager : MonoBehaviour singleton. Fields: AudioClip whistleClip, kickClip, crowdAmbientClip, goalCheerClip. Multiple AudioSource components for simultaneous playback: one for SFX (PlayOneShot), one for ambient (loop=true). Subscribe to events: MatchStateMachine.OnStateChanged for whistle timing, PlayerKicker.OnKickContact for kick sound, GoalDetector.OnGoalScored for cheer. Generate placeholder clips via AudioClip.Create() with simple sine wave data.",
       "dependsOn": ["US-005", "US-007"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-023'"],

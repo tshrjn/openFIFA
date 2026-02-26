@@ -26,6 +26,27 @@
 
 ## Log
 
+## 2026-02-27 Session — US-023: Sound effects for whistle, kick, crowd, and goal
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/SoundEventMapper.cs — Pure C# match state to sound event mapping
+- OpenFifa/Assets/Scripts/Audio/SoundManager.cs — Singleton sound manager MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US023_SoundTests.cs — 8 EditMode tests
+
+**Decisions**:
+- SoundEventMapper pure C# maps state transitions to SoundEventType enum
+- Whistle on: kickoff, halftime, fulltime, second half start
+- GoalCheer on: goal celebration state
+- SoundManager singleton with DontDestroyOnLoad
+- Separate AudioSources for SFX (PlayOneShot) and ambient (loop)
+- Placeholder clips generated via AudioClip.Create with sine waves and noise
+- Subscribes to PlayerKicker.OnKickContactEvent for kick sounds
+
+**Known Issues**: None
+
+**Next**: US-024 — Camera shake, US-025 — Dynamic crowd
+
 ## 2026-02-27 Session — US-022: Ball trail particle effect at high velocity
 
 **Status**: Completed
