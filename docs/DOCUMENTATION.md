@@ -26,6 +26,28 @@
 
 ## Log
 
+## 2026-02-27 Session — US-018: Ball ownership tracking system
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BallOwnershipLogic.cs — Pure C# ownership tracking logic
+- OpenFifa/Assets/Scripts/Gameplay/BallOwnership.cs — Ball ownership MonoBehaviour
+- OpenFifa/Assets/Scripts/Gameplay/PlayerIdentity.cs — Player identity component
+- OpenFifa/Assets/Tests/Editor/US018_BallOwnershipTests.cs — 12 EditMode tests
+
+**Decisions**:
+- BallOwnershipLogic uses int ID (-1 = no owner) for pure C# testability
+- CanClaim checks both ownership state and distance
+- SetOwner suppresses event if owner unchanged (prevents duplicate events)
+- Transfer method for direct ownership handoff without releasing first
+- BallOwnership MonoBehaviour follows owner in FixedUpdate with configurable offset
+- Auto-claim via Physics.OverlapSphere on player layer when ball is loose
+- PlayerIdentity component provides ID and team affiliation per player
+
+**Known Issues**: None
+
+**Next**: US-017 — Tackle mechanic (now unblocked), US-019 — Player animations
+
 ## 2026-02-27 Session — US-016: Player switching to nearest teammate
 
 **Status**: Completed

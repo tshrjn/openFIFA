@@ -424,7 +424,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 18,
-      "passes": false,
+      "passes": true,
       "notes": "Create BallOwnership : MonoBehaviour on the Ball. Fields: PlayerIdentity _currentOwner, float claimRadius = 1f, Vector3 possessionOffset = new Vector3(0, 0.1f, 0.5f). In FixedUpdate: if owned, set ball position to owner.transform.position + owner.transform.forward * offset. Claim logic: if _currentOwner == null, check all players within claimRadius using Physics.OverlapSphere. Event: event Action<PlayerIdentity, PlayerIdentity> OnOwnerChanged. Use layers to filter player colliders only.",
       "dependsOn": ["US-003", "US-004"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-018'"],
