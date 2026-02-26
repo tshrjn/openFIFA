@@ -13,19 +13,28 @@ namespace OpenFifa.Gameplay
         [System.Serializable]
         public struct FormationSlot
         {
-            public PositionRole role;
-            public Vector3 offset;
+            [SerializeField] private PositionRole _role;
+            [SerializeField] private Vector3 _offset;
+
+            public PositionRole Role => _role;
+            public Vector3 Offset => _offset;
+
+            public FormationSlot(PositionRole role, Vector3 offset)
+            {
+                _role = role;
+                _offset = offset;
+            }
         }
 
         [SerializeField] private string _formationName = "2-1-2";
         [SerializeField] private FormationSlot[] _slots = new FormationSlot[]
         {
-            new FormationSlot { role = PositionRole.Goalkeeper, offset = new Vector3(0f, 0f, -12f) },
-            new FormationSlot { role = PositionRole.Defender,   offset = new Vector3(-6f, 0f, -6f) },
-            new FormationSlot { role = PositionRole.Defender,   offset = new Vector3(6f, 0f, -6f) },
-            new FormationSlot { role = PositionRole.Midfielder, offset = new Vector3(0f, 0f, 0f) },
-            new FormationSlot { role = PositionRole.Forward,    offset = new Vector3(-6f, 0f, 8f) },
-            new FormationSlot { role = PositionRole.Forward,    offset = new Vector3(6f, 0f, 8f) }
+            new FormationSlot(PositionRole.Goalkeeper, new Vector3(0f, 0f, -12f)),
+            new FormationSlot(PositionRole.Defender,   new Vector3(-6f, 0f, -6f)),
+            new FormationSlot(PositionRole.Defender,   new Vector3(6f, 0f, -6f)),
+            new FormationSlot(PositionRole.Midfielder, new Vector3(0f, 0f, 0f)),
+            new FormationSlot(PositionRole.Forward,    new Vector3(-6f, 0f, 8f)),
+            new FormationSlot(PositionRole.Forward,    new Vector3(6f, 0f, 8f))
         };
 
         public string FormationName => _formationName;
@@ -40,10 +49,10 @@ namespace OpenFifa.Gameplay
             for (int i = 0; i < _slots.Length; i++)
             {
                 slotData[i] = new FormationSlotData(
-                    _slots[i].role,
-                    _slots[i].offset.x,
-                    _slots[i].offset.y,
-                    _slots[i].offset.z
+                    _slots[i].Role,
+                    _slots[i].Offset.x,
+                    _slots[i].Offset.y,
+                    _slots[i].Offset.z
                 );
             }
             return new FormationLayoutData(_formationName, slotData);

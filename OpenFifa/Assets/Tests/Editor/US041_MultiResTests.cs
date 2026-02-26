@@ -22,7 +22,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ResolutionConfig_MinUITarget44()
+        public void ResolutionConfig_UIDefaults_MinUITarget44()
         {
             var config = new ResolutionConfig();
             Assert.AreEqual(44, config.MinUITargetPoints);
