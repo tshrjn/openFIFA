@@ -952,7 +952,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 41,
-      "passes": false,
+      "passes": true,
       "notes": "PlayMode test approach: use Screen.SetResolution(w, h, false) or configure GameView via reflection to test each resolution. For each resolution: iterate all RectTransforms in HUD, call GetWorldCorners(corners), verify all corners are within (0,0)-(Screen.width,Screen.height). CanvasScaler: matchWidthOrHeight = 0.5 to balance landscape. Anchor UI elements to edges/corners. Use LayoutGroups for flexible arrangement. Test with [TestCase(1280, 720)] parameterized tests for macOS and [TestCase(1668, 2388)] for iPad. macOS: set minimum window size via PlayerSettings or native plugin.",
       "dependsOn": ["US-030"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-041'"],

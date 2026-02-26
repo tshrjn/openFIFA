@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-041: Multi-resolution UI (macOS + iPad)
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/ResolutionConfig.cs — Resolution config + SafeAreaLogic
+- OpenFifa/Assets/Tests/Editor/US041_MultiResTests.cs — 8 EditMode tests (parameterized)
+
+**Known Issues**: None
+**Next**: US-042 — Build hardening
+
 ## 2026-02-27 Session — US-040: GC-free gameplay loop with object pooling
 
 **Status**: Completed
