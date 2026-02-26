@@ -674,7 +674,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 29,
-      "passes": false,
+      "passes": true,
       "notes": "Create TeamData : ScriptableObject with fields: string teamName, Color primaryColor, Color secondaryColor. Create TeamSelectController : MonoBehaviour. Display teams in a horizontal or grid layout. Selection: set _selectedTeam and highlight via outline or scale. AI team: pick random from remaining. Pass data: use a MatchSettings ScriptableObject (playerTeam, aiTeam) that persists across scenes (asset reference, not destroyed). Confirm: Button.interactable = _selectedTeam != null, then SceneManager.LoadScene('Match').",
       "dependsOn": ["US-028", "US-009"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-029'"],

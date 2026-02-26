@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-029: Team selection screen with team roster
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/TeamSelectLogic.cs — Pure C# team selection logic + TeamDataEntry
+- OpenFifa/Assets/Scripts/UI/TeamSelectController.cs — Team select MonoBehaviour + TeamData SO
+- OpenFifa/Assets/Tests/Editor/US029_TeamSelectTests.cs — 9 EditMode tests
+
+**Decisions**:
+- TeamSelectLogic pure C# with team count, selection, AI assignment
+- TeamDataEntry stores name and RGB colors as floats for Core compatibility
+- TeamData ScriptableObject with ToEntry() bridge
+- AI team: first available team different from player selection
+- Confirm button interactable only after selection
+- Visual highlight: scale selected button 1.1x
+
+**Known Issues**: None
+
+**Next**: US-030 — Full match HUD, US-031 — Pause menu
+
 ## 2026-02-27 Session — US-028: Main menu scene with navigation buttons
 
 **Status**: Completed
