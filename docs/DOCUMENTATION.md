@@ -26,6 +26,17 @@
 
 ## Log
 
+## 2026-02-27 Session — US-039: Draw call optimization with batching and instancing
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/BatchingConfig.cs — Pure C# batching config
+- OpenFifa/Assets/Scripts/Gameplay/RenderingOptimizer.cs — Rendering optimization MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US039_DrawCallTests.cs — 6 EditMode tests
+
+**Known Issues**: None
+**Next**: US-040 — GC-free gameplay
+
 ## 2026-02-27 Session — US-038: Haptic feedback (iPad) + screen shake/audio feedback (macOS)
 
 **Status**: Completed

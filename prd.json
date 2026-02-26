@@ -905,7 +905,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 39,
-      "passes": false,
+      "passes": true,
       "notes": "Enable GPU Instancing: material.enableInstancing = true on all materials. Mark static objects: GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.BatchingStatic). Player Settings: enable Dynamic Batching and GPU Instancing. Verify in test: use ProfilerRecorder('Total Batches Count') from Unity.Profiling. Team materials: create 2 material instances (TeamA, TeamB), assign to all players on that team via MaterialPropertyBlock for per-instance color without breaking batching. Combine meshes where possible.",
       "dependsOn": ["US-019"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-039'"],
