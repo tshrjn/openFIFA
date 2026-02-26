@@ -26,6 +26,29 @@
 
 ## Log
 
+## 2026-02-27 Session — US-007: Match timer + score tracking as pure C# logic
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/MatchPeriod.cs — Match period enum
+- OpenFifa/Assets/Scripts/Core/MatchTimer.cs — Pure C# match timer
+- OpenFifa/Assets/Scripts/Core/MatchScore.cs — Pure C# score tracker
+- OpenFifa/Assets/Tests/Editor/US007_MatchTimerTests.cs — 17 EditMode tests
+- OpenFifa/Assets/Tests/Editor/US007_MatchScoreTests.cs — 8 EditMode tests
+
+**Decisions**:
+- All pure C# in Core — zero MonoBehaviour dependency
+- MatchPeriod enum: PreKickoff, FirstHalf, HalfTime, SecondHalf, FullTime
+- Timer only ticks during active play (FirstHalf, SecondHalf)
+- Events: OnPeriodChanged (period transitions), OnTimeUpdated (every tick), OnScoreChanged
+- MatchScore uses simple int fields, not Dictionary (lighter weight)
+- GetScoreDisplay() returns "X - Y" format string
+- Remaining time clamped to 0 (never negative)
+
+**Known Issues**: None
+
+**Next**: US-008 — Basic HUD displaying score and timer
+
 ## 2026-02-27 Session — US-006: Broadcast camera with Cinemachine follow
 
 **Status**: Completed
