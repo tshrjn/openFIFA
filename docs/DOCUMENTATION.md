@@ -26,6 +26,17 @@
 
 ## Log
 
+## 2026-02-27 Session — US-046: Stadium environment with skybox and goal posts
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/StadiumConfig.cs — Skybox, pitch bands, goal post/net, stands config
+- OpenFifa/Assets/Scripts/Gameplay/StadiumBuilder.cs — Runtime goal post/net/skybox setup
+- OpenFifa/Assets/Tests/Editor/US046_StadiumTests.cs — 9 EditMode tests
+
+**Known Issues**: None
+**Next**: US-047 — Soccer ball 3D model
+
 ## 2026-02-27 Session — US-045: Mixamo soccer animation integration
 
 **Status**: Completed

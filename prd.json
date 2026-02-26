@@ -1069,7 +1069,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 46,
-      "passes": false,
+      "passes": true,
       "notes": "Download HDRI from Poly Haven (e.g., kloppenheim stadium). Create skybox material: Shader = Skybox/Cubemap or Skybox/Panoramic, assign HDRI texture. Pitch texture: create tiled grass texture with alternating bands via UV offset or shader. Goal posts: create from primitives (cylinders for posts, crossbar) or import mesh. Net: use a plane mesh with alpha-cutout material. MeshCollider on posts (convex=true for dynamic collision). Stands: simple extruded shapes or low-poly bleacher meshes. Use ProBuilder for quick geometry.",
       "dependsOn": ["US-002"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-046'"],
