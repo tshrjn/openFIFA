@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-045: Mixamo soccer animation integration
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/AnimationClipConfig.cs — Clip name mapping, loop/root motion config, retarget source
+- OpenFifa/Assets/Tests/Editor/US045_AnimationIntegrationTests.cs — 11 EditMode tests
+
+**Known Issues**: None
+**Next**: US-046 — Stadium environment
+
 ## 2026-02-27 Session — US-044: Quaternius low-poly characters with team colors
 
 **Status**: Completed

@@ -1047,7 +1047,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 45,
-      "passes": false,
+      "passes": true,
       "notes": "Download from Mixamo: Soccer Idle, Running, Sprinting, Soccer Kick (or Kicking), Slide Tackle, Goalkeeper Dive. Export as FBX for Unity, without skin (use existing model). Import settings: Rig -> Humanoid, Animation -> Loop Time for locomotion clips, no Loop for actions. Retarget: use Avatar from Quaternius model as source. Update AnimatorController: replace placeholder clips in each state. Adjust transition conditions if clip lengths differ. Root motion: disable for locomotion (use script-driven movement), enable only if needed for tackle slide.",
       "dependsOn": ["US-044"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-045'"],
