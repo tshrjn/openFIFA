@@ -26,6 +26,17 @@
 
 ## Log
 
+## 2026-02-27 Session — US-044: Quaternius low-poly characters with team colors
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/CharacterModelConfig.cs — SimpleColor, CharacterModelConfig, TeamColorAssigner
+- OpenFifa/Assets/Scripts/Gameplay/HumanoidSetup.cs — MaterialPropertyBlock team color application
+- OpenFifa/Assets/Tests/Editor/US044_CharacterModelTests.cs — 10 EditMode tests
+
+**Known Issues**: None
+**Next**: US-045 — Mixamo animation integration
+
 ## 2026-02-27 Session — US-043: Performance budget test suite
 
 **Status**: Completed

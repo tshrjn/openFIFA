@@ -1023,7 +1023,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 44,
-      "passes": false,
+      "passes": true,
       "notes": "Download Quaternius free low-poly character pack. Import FBX files into Assets/Models/Characters/. Configure import settings: Rig tab -> Animation Type: Humanoid, Avatar Definition: Create From This Model. Create HumanoidSetup : MonoBehaviour to apply team materials. Use MaterialPropertyBlock: var mpb = new MaterialPropertyBlock(); renderer.GetPropertyBlock(mpb); mpb.SetColor('_BaseColor', teamColor); renderer.SetPropertyBlock(mpb). Verify avatar IsValid(). Replace capsule MeshFilter with model MeshFilter reference.",
       "dependsOn": ["US-019"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-044'"],
