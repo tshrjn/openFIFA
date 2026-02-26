@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-027: Replay system for last 5 seconds on goal
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/ReplayBuffer.cs — Pre-allocated ring buffer + ReplayLogic
+- OpenFifa/Assets/Scripts/Gameplay/ReplaySystem.cs — Replay MonoBehaviour with coroutine playback
+- OpenFifa/Assets/Tests/Editor/US027_ReplayTests.cs — 11 EditMode tests
+
+**Decisions**:
+- ReplayBuffer: pre-allocated ring buffer with flat float arrays (no GC during recording)
+- 150 frames capacity (5s at 30fps)
+- ReplayLogic: state machine for recording/playback with 0.5x speed
+- Position/rotation stored as flat float arrays (3 floats pos, 4 floats rot per object)
+- Original transforms saved before replay and restored after
+- Subscribes to GoalDetector.OnGoalScored for automatic replay trigger
+
+**Known Issues**: None
+
+**Next**: US-028 — Main menu, US-030 — Full match HUD
+
 ## 2026-02-27 Session — US-026: Player run dust particle effects
 
 **Status**: Completed

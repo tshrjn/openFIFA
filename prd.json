@@ -628,7 +628,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 27,
-      "passes": false,
+      "passes": true,
       "notes": "Create ReplaySystem : MonoBehaviour. Struct ReplayFrame { Vector3[] positions; Quaternion[] rotations; float timestamp; }. Ring buffer: ReplayFrame[] buffer = new ReplayFrame[150]; int writeIndex. Record in FixedUpdate at 30fps interval. On goal: pause live game, switch to replay CinemachineCamera, iterate buffer from 5s ago at 0.5x speed using Time.unscaledDeltaTime. Apply recorded transforms to objects. Pre-allocate all arrays to avoid GC. Use a dedicated 'Replay' CinemachineCamera with different angle.",
       "dependsOn": ["US-005", "US-006"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-027'"],
