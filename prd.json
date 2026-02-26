@@ -192,7 +192,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 8,
-      "passes": false,
+      "passes": true,
       "notes": "Create HUDController : MonoBehaviour referencing TMP_Text fields for score and timer. Subscribe to MatchScore and MatchTimer events or poll in Update. Use CanvasScaler with matchWidthOrHeight = 0.5. Format timer: TimeSpan.FromSeconds(remaining).ToString('mm\\:ss'). Anchor score to top-center, timer below it. Use TextMeshPro - Text (UI) components. Test by checking TMP_Text.text values after triggering score/timer changes.",
       "dependsOn": ["US-007"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-008'"],

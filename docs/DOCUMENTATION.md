@@ -26,6 +26,27 @@
 
 ## Log
 
+## 2026-02-27 Session — US-008: Basic HUD displaying score and timer
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/HUDFormatter.cs — Pure C# score/timer formatting
+- OpenFifa/Assets/Scripts/UI/HUDController.cs — HUD MonoBehaviour with TMP_Text
+- OpenFifa/Assets/Tests/Editor/US008_HUDFormatTests.cs — 9 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US008_HUDDisplayTests.cs — 6 PlayMode tests
+- Updated OpenFifa.Tests.Runtime.asmdef to reference Unity.TextMeshPro and Unity.InputSystem
+
+**Decisions**:
+- HUDFormatter is pure C# for EditMode testing of format logic
+- HUDController subscribes to events AND polls in Update for smooth display
+- CanvasScaler: 1920x1080 reference, matchWidthOrHeight=0.5
+- Timer format: MM:SS using TimeSpan
+- Score format: "TeamA X - Y TeamB" with configurable team names
+
+**Known Issues**: None
+
+**Next**: US-009 — Match flow controller
+
 ## 2026-02-27 Session — US-007: Match timer + score tracking as pure C# logic
 
 **Status**: Completed
@@ -164,7 +185,7 @@
 
 **Next**: US-003 — Ball physics with realistic mass, bounce, friction, and rolling
 
-## 2026-02-27 Session — US-001: Unity project scaffold + iOS build pipeline + test framework
+## 2026-02-27 Session — US-001: Unity project scaffold + macOS/iPad build pipeline + test framework
 
 **Status**: Completed
 **Changes**:
@@ -175,7 +196,7 @@
 - OpenFifa/Assets/Scripts/UI/OpenFifa.UI.asmdef
 - OpenFifa/Assets/Scripts/Audio/OpenFifa.Audio.asmdef
 - OpenFifa/Assets/Editor/OpenFifa.Editor.asmdef
-- OpenFifa/Assets/Editor/BuildScript.cs (iOS + macOS build methods)
+- OpenFifa/Assets/Editor/BuildScript.cs (macOS + iPad build methods)
 - OpenFifa/Assets/Tests/Editor/OpenFifa.Tests.Editor.asmdef (EditMode test runner)
 - OpenFifa/Assets/Tests/Runtime/OpenFifa.Tests.Runtime.asmdef (PlayMode test runner)
 - OpenFifa/Assets/Tests/Editor/US001_ProjectScaffoldTests.cs (15 EditMode tests)
@@ -204,11 +225,11 @@
 - Created project scaffolding: CLAUDE.md, README.md, .gitignore
 - Created docs/: PROMPT.md, PLAN.md, IMPLEMENT.md, TESTING.md, ASSETS.md, DOCUMENTATION.md
 - Created prd.json with 50 user stories across 6 phases
-- Created scripts/verify-ios-build.sh
+- Created scripts/verify-build.sh
 - Created .github/workflows/openfifa-ci.yml
 
 **Decisions**:
-- Engine: Unity 6 LTS + C# + URP (proven iOS pipeline, large ecosystem)
+- Engine: Unity 6 LTS + C# + URP (proven macOS/iPad pipeline, large ecosystem)
 - Orchestration: Claude Code direct with Codex long-horizon task pattern (not ralph-tui)
 - Art style: Stylized low-poly placeholders first, real assets via Phase 6 stories
 - Testing: 10-layer automated strategy, TDD workflow, NUnit + GameCI
@@ -217,4 +238,4 @@
 
 **Known Issues**: None (empty project)
 
-**Next**: US-001 — Unity project scaffold with iOS build pipeline and test framework
+**Next**: US-001 — Unity project scaffold with macOS/iPad build pipeline and test framework
