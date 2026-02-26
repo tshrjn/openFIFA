@@ -720,7 +720,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 31,
-      "passes": false,
+      "passes": true,
       "notes": "Create PauseMenu : MonoBehaviour. On pause input: Time.timeScale = 0, enable overlay Canvas/Panel (SetActive(true)). Store _previousTimeScale before setting to 0. Resume: Time.timeScale = _previousTimeScale, disable overlay. Restart: Time.timeScale = 1, SceneManager.LoadScene(SceneManager.GetActiveScene().name). Quit: Time.timeScale = 1, SceneManager.LoadScene('MainMenu'). Integrate with MatchStateMachine.TransitionTo(Paused) and resume to previous state. Use EventSystem to handle button clicks while paused (UI ignores timeScale).",
       "dependsOn": ["US-014", "US-028"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-031'"],

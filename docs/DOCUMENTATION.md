@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-031: Pause menu with resume, restart, and quit
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PauseLogic.cs — Pure C# pause state and time scale management
+- OpenFifa/Assets/Scripts/UI/PauseMenu.cs — Pause menu MonoBehaviour with overlay
+- OpenFifa/Assets/Tests/Editor/US031_PauseMenuTests.cs — 9 EditMode tests
+
+**Decisions**:
+- PauseLogic stores previousTimeScale before setting to 0
+- Resume restores original timeScale (handles slow-motion correctly)
+- Double-pause ignored (stores only the original timeScale)
+- Integrates with MatchStateMachine.Pause()/Resume()
+- Overlay panel toggled via SetActive
+
+**Known Issues**: None
+
+**Next**: US-032 — Post-match results, US-033 — Settings
+
 ## 2026-02-27 Session — US-030: Full match HUD with minimap and match state
 
 **Status**: Completed
