@@ -26,6 +26,28 @@
 
 ## Log
 
+## 2026-02-27 Session — US-010: AI player finite state machine
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/AIState.cs — AI state enum
+- OpenFifa/Assets/Scripts/Core/AIConfigData.cs — AI config data class
+- OpenFifa/Assets/Scripts/Core/AIDecisionEngine.cs — Pure C# decision logic
+- OpenFifa/Assets/Scripts/AI/AIController.cs — AI MonoBehaviour with FSM
+- OpenFifa/Assets/Tests/Editor/US010_AIStateTests.cs — 11 EditMode tests
+- OpenFifa/Assets/Tests/Runtime/US010_AIControllerTests.cs — 5 PlayMode tests
+
+**Decisions**:
+- AIDecisionEngine is pure C# for EditMode testing
+- Decision logic: nearest+inRange->Chase, atFormation+ballFar->Idle, else->ReturnToPosition
+- Movement via direct Rigidbody velocity setting
+- State transitions logged in editor via Debug.Log
+- AI uses SetAsNearestToBall() externally set by team coordinator
+
+**Known Issues**: None
+
+**Next**: US-011 — AI passing
+
 ## 2026-02-27 Session — US-009: Team formation system with 2-1-2 layout
 
 **Status**: Completed

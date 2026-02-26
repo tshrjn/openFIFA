@@ -239,7 +239,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 10,
-      "passes": false,
+      "passes": true,
       "notes": "Create AIController : MonoBehaviour with an AIState enum { Idle, ChaseBall, ReturnToPosition }. Use a simple switch-based FSM in Update. Transition logic: if nearest to ball and within chaseRange -> ChaseBall; if not nearest or ball far -> ReturnToPosition; if at formation pos within threshold -> Idle. Movement via Rigidbody.MovePosition or NavMeshAgent. Reference FormationManager for home position. Configurable: chaseRange (10f), moveSpeed (6f), positionThreshold (1f).",
       "dependsOn": ["US-004", "US-009"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-010'"],
