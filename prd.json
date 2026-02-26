@@ -1114,7 +1114,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 48,
-      "passes": false,
+      "passes": true,
       "notes": "Source from Freesound.org (CC0 license): search 'referee whistle', 'soccer kick', 'crowd cheer', 'stadium ambience'. Import as AudioClip. Import settings: Force To Mono for SFX, Compression Format Vorbis, Quality 70, Load Type 'Decompress On Load' for short SFX, 'Streaming' for ambient loop. SoundManager: AudioClip[] kickClips; PlayKick() { PlayOneShot(kickClips[Random.Range(0, kickClips.Length)]); }. Verify: Assert.IsNotNull(soundManager.whistleClip) etc. in test.",
       "dependsOn": ["US-023"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-048'"],

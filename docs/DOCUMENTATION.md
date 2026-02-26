@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-048: Real audio asset integration
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/AudioAssetConfig.cs — Audio clip config + KickVariationSelector with anti-repeat
+- OpenFifa/Assets/Tests/Editor/US048_AudioAssetTests.cs — 11 EditMode tests
+
+**Known Issues**: None
+**Next**: US-049 — Visual regression baseline screenshots
+
 ## 2026-02-27 Session — US-047: Soccer ball 3D model with PBR material
 
 **Status**: Completed
