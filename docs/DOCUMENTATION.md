@@ -26,6 +26,16 @@
 
 ## Log
 
+## 2026-02-27 Session — US-035: End-to-end user journey automated test
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/E2EJourneyLogic.cs — E2EJourneyStateMachine, SceneObjectValidator, E2EErrorLog, E2EJourneyConfig
+- OpenFifa/Assets/Tests/Editor/US035_E2ETests.cs — 13 EditMode tests
+
+**Known Issues**: None
+**Next**: All 50 user stories complete
+
 ## 2026-02-27 Session — US-050: Local multiplayer on same device
 
 **Status**: Completed

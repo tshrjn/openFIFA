@@ -812,7 +812,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 35,
-      "passes": false,
+      "passes": true,
       "notes": "Create E2EUserJourneyTest : MonoBehaviour in PlayMode test assembly with [UnityTest][Timeout(300000)]. Use SceneManager.LoadScene in sequence. Simulate button clicks: button.onClick.Invoke(). Set Time.timeScale = 100 during match. Wait for MatchStateMachine to reach FullTime using WaitUntil(() => matchState == FullTime). Verify GameObjects: Assert.IsNotNull(GameObject.Find('ExpectedObject')). Check Debug.logHandler for errors. Reset timeScale at end. Use [Category('US-035')] and [Category('E2E')].",
       "dependsOn": ["US-028", "US-029", "US-030", "US-031", "US-032", "US-033", "US-034"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-035'"],
