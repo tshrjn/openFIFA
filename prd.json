@@ -494,7 +494,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 21,
-      "passes": false,
+      "passes": true,
       "notes": "Create CelebrationSequence : MonoBehaviour using coroutine with WaitForSecondsRealtime(2f) (unscaled time). Steps: 1) Time.timeScale = 0.3f, 2) Boost celebration CinemachineCamera priority, 3) scorer.Animator.SetTrigger('Celebrate'), 4) yield WaitForSecondsRealtime(2f), 5) Time.timeScale = 1.0f, 6) Restore camera priorities, 7) Trigger KickoffSequence. Use a flag _isPlaying to prevent stacking. Subscribe to GoalDetector.OnGoalScored.",
       "dependsOn": ["US-005", "US-006", "US-019"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-021'"],

@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-021: Goal celebration sequence with slow-motion and camera zoom
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/CelebrationLogic.cs — Pure C# celebration state management
+- OpenFifa/Assets/Scripts/Gameplay/CelebrationSequence.cs — Celebration MonoBehaviour with coroutine
+- OpenFifa/Assets/Tests/Editor/US021_CelebrationTests.cs — 10 EditMode tests
+
+**Decisions**:
+- CelebrationLogic pure C# with IsPlaying, TargetTimeScale, and kickoff trigger
+- TryStartCelebration prevents stacking (returns false if already playing)
+- ShouldTriggerKickoff is consumed on read (one-shot flag)
+- Slow motion at 0.3x for 2 real-time seconds using WaitForSecondsRealtime
+- CelebrationSequence subscribes to GoalDetector.OnGoalScored static event
+- Time.timeScale restored to 1.0 after celebration completes
+
+**Known Issues**: None
+
+**Next**: US-022 — Ball trail, US-023 — Sound effects
+
 ## 2026-02-27 Session — US-020: Ball kick animation synchronized with force application
 
 **Status**: Completed
