@@ -131,7 +131,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallOwnershipLogic_TwoPlayersCannotOwnSimultaneously()
+        public void BallOwnershipLogic_SequentialSetOwner_TwoPlayersCannotOwnSimultaneously()
         {
             var logic = new BallOwnershipLogic();
             logic.SetOwner(1);

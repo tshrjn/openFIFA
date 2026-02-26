@@ -167,7 +167,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator CenterCircle_ExistsAtPitchMidpoint()
+        public IEnumerator CenterCircle_AfterBuild_ExistsAtPitchMidpoint()
         {
             yield return null;
 
@@ -181,7 +181,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator GoalAreaMarkings_ExistOnBothEnds()
+        public IEnumerator GoalAreaMarkings_AfterBuild_ExistOnBothEnds()
         {
             yield return null;
 
@@ -199,7 +199,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator GoalOpenings_ExistInBoundaryColliders()
+        public IEnumerator GoalOpenings_BallShotAtGoal_PassesThroughBoundary()
         {
             // A ball shot directly at the center of the goal opening should pass through
             yield return null;
@@ -229,7 +229,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator FourBoundaryColliders_Exist()
+        public IEnumerator FourBoundaryColliders_AfterBuild_Exist()
         {
             yield return null;
 

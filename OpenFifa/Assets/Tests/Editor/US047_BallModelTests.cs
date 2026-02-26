@@ -16,7 +16,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallModelConfig_HasAlbedoTexture()
+        public void BallModelConfig_TextureSettings_HasAlbedoTexture()
         {
             var config = new BallModelConfig();
             Assert.IsNotNull(config.AlbedoTextureName);
@@ -24,7 +24,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallModelConfig_HasNormalMap()
+        public void BallModelConfig_TextureSettings_HasNormalMap()
         {
             var config = new BallModelConfig();
             Assert.IsNotNull(config.NormalMapName);
@@ -50,7 +50,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallModelConfig_PivotAtCenter()
+        public void BallModelConfig_MeshOrigin_PivotAtCenter()
         {
             var config = new BallModelConfig();
             Assert.IsTrue(config.PivotAtCenter);

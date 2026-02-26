@@ -104,14 +104,14 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void SampleEditModeTest_AssertsTrue()
+        public void SampleEditModeTest_WhenRun_ReturnsTrue()
         {
             // This IS the sample EditMode test that asserts true
             Assert.IsTrue(true, "Sample EditMode test should pass");
         }
 
         [Test]
-        public void ManifestJson_ContainsTestFramework()
+        public void ManifestJson_PackageList_ContainsTestFramework()
         {
             string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
             Assert.IsTrue(File.Exists(manifestPath),
@@ -123,7 +123,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ManifestJson_ContainsURPPackage()
+        public void ManifestJson_PackageList_ContainsURPPackage()
         {
             string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
             string content = File.ReadAllText(manifestPath);
@@ -132,7 +132,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ManifestJson_ContainsCinemachine()
+        public void ManifestJson_PackageList_ContainsCinemachine()
         {
             string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
             string content = File.ReadAllText(manifestPath);
@@ -141,7 +141,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ManifestJson_ContainsInputSystem()
+        public void ManifestJson_PackageList_ContainsInputSystem()
         {
             string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
             string content = File.ReadAllText(manifestPath);
@@ -150,7 +150,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ManifestJson_ContainsTextMeshPro()
+        public void ManifestJson_PackageList_ContainsTextMeshPro()
         {
             string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
             string content = File.ReadAllText(manifestPath);
@@ -159,7 +159,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BuildScript_Exists()
+        public void BuildScript_EditorDirectory_Exists()
         {
             string buildScriptPath = Path.Combine(Application.dataPath, "Editor", "BuildScript.cs");
             Assert.IsTrue(File.Exists(buildScriptPath),
@@ -167,7 +167,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GitIgnore_CoversUnityDirectories()
+        public void GitIgnore_ProjectSetup_CoversUnityDirectories()
         {
             // This test verifies the project-level .gitignore has the right entries
             // The .gitignore is at the repo root, which is correct

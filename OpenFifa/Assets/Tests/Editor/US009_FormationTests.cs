@@ -8,7 +8,7 @@ namespace OpenFifa.Tests.Editor
     public class US009_FormationTests
     {
         [Test]
-        public void PositionRole_HasAllExpectedValues()
+        public void PositionRole_EnumValues_HasAllExpectedValues()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(PositionRole), PositionRole.Goalkeeper));
             Assert.IsTrue(System.Enum.IsDefined(typeof(PositionRole), PositionRole.Defender));
@@ -17,7 +17,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void FormationSlotData_StoresRoleAndOffset()
+        public void FormationSlotData_WhenConstructed_StoresRoleAndOffset()
         {
             var slot = new FormationSlotData(PositionRole.Goalkeeper, 0f, 0f, -12f);
             Assert.AreEqual(PositionRole.Goalkeeper, slot.Role,

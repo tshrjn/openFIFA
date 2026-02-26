@@ -87,7 +87,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator ScoreText_DisplaysCorrectFormat()
+        public IEnumerator ScoreText_DefaultState_DisplaysCorrectFormat()
         {
             yield return null;
 
@@ -97,7 +97,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator ScoreText_UpdatesOnGoal()
+        public IEnumerator ScoreText_AfterGoalScored_UpdatesOnGoal()
         {
             yield return null;
 
@@ -112,7 +112,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator TimerText_DisplaysMMSSFormat()
+        public IEnumerator TimerText_MatchStarted_DisplaysMMSSFormat()
         {
             _timer.StartMatch();
             yield return null;
@@ -127,7 +127,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator TimerText_UpdatesOnTick()
+        public IEnumerator TimerText_AfterTick_UpdatesOnTick()
         {
             _timer.StartMatch();
             yield return null;

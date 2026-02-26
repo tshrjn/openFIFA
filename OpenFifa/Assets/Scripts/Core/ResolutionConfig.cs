@@ -12,8 +12,8 @@ namespace OpenFifa.Core
         /// <summary>Minimum macOS window height.</summary>
         public int MinWindowHeight = 720;
 
-        /// <summary>Minimum touch target size in points (iPad HIG).</summary>
-        public int MinTouchTargetPoints = 44;
+        /// <summary>Minimum interactive UI element size in points.</summary>
+        public int MinUITargetPoints = 44;
 
         /// <summary>CanvasScaler matchWidthOrHeight for balanced scaling.</summary>
         public float MatchWidthOrHeight = 0.5f;

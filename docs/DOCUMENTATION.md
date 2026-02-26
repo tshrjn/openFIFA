@@ -36,13 +36,13 @@
 **Known Issues**: None
 **Next**: All 50 user stories complete
 
-## 2026-02-27 Session — US-050: Local multiplayer on same device
+## 2026-02-27 Session — US-050: Local multiplayer via keyboard + gamepad
 
 **Status**: Completed
 **Changes**:
-- OpenFifa/Assets/Scripts/Core/LocalMultiplayerLogic.cs — SplitTouchZoneLogic, InputRouter, ActionButtonLayout, LocalMultiplayerConfig
-- OpenFifa/Assets/Scripts/Gameplay/LocalMultiplayerManager.cs — EnhancedTouch multitouch routing
-- OpenFifa/Assets/Tests/Editor/US050_LocalMultiplayerTests.cs — 14 EditMode tests
+- OpenFifa/Assets/Scripts/Core/LocalMultiplayerLogic.cs — ControlSchemeAssigner, DeviceInputRouter, LocalMultiplayerConfig
+- OpenFifa/Assets/Scripts/Gameplay/LocalMultiplayerManager.cs — Controller-based local multiplayer with PlayerInput
+- OpenFifa/Assets/Tests/Editor/US050_LocalMultiplayerTests.cs — 15 EditMode tests
 
 **Known Issues**: None
 **Next**: US-035 — E2E user journey test
@@ -161,59 +161,58 @@
 **Known Issues**: None
 **Next**: US-040 — GC-free gameplay
 
-## 2026-02-27 Session — US-038: Haptic feedback (iPad) + screen shake/audio feedback (macOS)
+## 2026-02-27 Session — US-038: Controller rumble + screen shake + audio feedback
 
 **Status**: Completed
 **Changes**:
-- OpenFifa/Assets/Scripts/Core/FeedbackEventMapper.cs — Pure C# feedback intensity mapping
-- OpenFifa/Assets/Scripts/Gameplay/GameFeedback.cs — Platform-aware feedback singleton
-- OpenFifa/Assets/Tests/Editor/US038_HapticTests.cs — 6 EditMode tests
+- OpenFifa/Assets/Scripts/Core/FeedbackEventMapper.cs — Pure C# feedback intensity mapping + RumbleConfig
+- OpenFifa/Assets/Scripts/Gameplay/GameFeedback.cs — Feedback singleton with controller rumble + screen shake + audio
+- OpenFifa/Assets/Tests/Editor/US038_HapticTests.cs — 11 EditMode tests
 
 **Decisions**:
 - FeedbackIntensity: Light, Medium, Heavy
 - Goal=Heavy, Tackle=Medium, Whistle=Light
-- iPad: DllImport native plugin for UIImpactFeedbackGenerator
-- macOS: screen shake + audio impact
-- try/catch for graceful fallback on unsupported platforms
+- Xbox controller rumble: low-frequency (left motor) + high-frequency (right motor)
+- RumbleConfig: Heavy=(1.0, 0.8, 0.5s), Medium=(0.5, 0.4, 0.3s), Light=(0.2, 0.1, 0.15s)
+- Screen shake + audio impact for all events
+- try/catch for graceful fallback on devices without rumble support
 
 **Known Issues**: None
 
 **Next**: US-039 — Draw call optimization, US-040 — GC-free gameplay
 
-## 2026-02-27 Session — US-037: Keyboard shortcuts (macOS) + touch buttons (iPad)
+## 2026-02-27 Session — US-037: FIFA-style action button mapping (keyboard + gamepad)
 
 **Status**: Completed
 **Changes**:
-- OpenFifa/Assets/Scripts/Core/ActionButtonLogic.cs — Pure C# action state tracking + KeyboardActionMapping
-- OpenFifa/Assets/Scripts/Gameplay/ActionButtons.cs — Touch action buttons + SprintButton hold
-- OpenFifa/Assets/Tests/Editor/US037_ActionButtonTests.cs — 11 EditMode tests
+- OpenFifa/Assets/Scripts/Core/ActionButtonLogic.cs — Pure C# action state tracking + KeyboardActionMapping + GamepadActionMapping
+- OpenFifa/Assets/Scripts/Gameplay/ActionButtons.cs — Input System action callbacks for keyboard/gamepad
+- OpenFifa/Assets/Tests/Editor/US037_ActionButtonTests.cs — 25 EditMode tests
 
 **Decisions**:
-- ActionButtonLogic: single-press (Pass/Shoot/Tackle) + hold (Sprint)
+- ActionButtonLogic: single-press (Pass/Shoot/Tackle/ThroughBall/LobPass/Switch) + hold (Sprint)
 - ConsumeActions clears single-press but preserves Sprint
-- KeyboardActionMapping: Z=Pass, X=Shoot, C=Tackle, LeftShift=Sprint, Tab=Switch
-- SprintButton uses IPointerDown/Up for hold behavior
-- Visual feedback: scale punch on tap (0.9x, lerps back)
-- Minimum 80x80 button size for touch targets
+- KeyboardActionMapping: Space=Pass, D=Shoot, S=Tackle, W=ThroughBall, LeftShift=Sprint, Q=Switch, E=LobPass, Mouse0=Shoot
+- GamepadActionMapping: A=Pass, B=Shoot, X=Tackle, Y=ThroughBall, RT=Sprint, LB=Switch, RB=LobPass
+- ActionButtons reads Input System callbacks (OnPass, OnShoot, OnTackle, etc.)
 
 **Known Issues**: None
 
-**Next**: US-038 — Haptic feedback, US-042 — Build hardening
+**Next**: US-038 — Controller rumble + feedback, US-042 — Build hardening
 
-## 2026-02-27 Session — US-036: Keyboard/mouse controls (macOS) + virtual joystick (iPad)
+## 2026-02-27 Session — US-036: FIFA-style keyboard/mouse + gamepad input mapping
 
 **Status**: Completed
 **Changes**:
-- OpenFifa/Assets/Scripts/Core/InputFilterLogic.cs — Pure C# dead zone and normalization + VirtualJoystickLogic
-- OpenFifa/Assets/Scripts/Gameplay/VirtualJoystick.cs — Touch joystick MonoBehaviour
-- OpenFifa/Assets/Tests/Editor/US036_InputTests.cs — 10 EditMode tests
+- OpenFifa/Assets/Scripts/Core/InputFilterLogic.cs — Pure C# dead zone, normalization, InputMappingLogic, ControlScheme
+- OpenFifa/Assets/Scripts/Gameplay/VirtualJoystick.cs — InputProvider MonoBehaviour (reads from Unity Input System)
+- OpenFifa/Assets/Tests/Editor/US036_InputTests.cs — 12 EditMode tests
 
 **Decisions**:
 - InputFilterLogic: 10% dead zone, remapped 0-1 range, unit circle clamping
-- VirtualJoystickLogic: dynamic center on pointer down, normalized output
-- VirtualJoystick: IPointerDownHandler/IDragHandler/IPointerUpHandler
-- Outer ring appears at touch point (dynamic positioning)
-- Platform auto-detection via #if UNITY_IOS / UNITY_STANDALONE_OSX
+- InputMappingLogic: FIFA-style keyboard (Space=Pass, W=ThroughBall, D=Shoot, S=Tackle) + gamepad (A=Pass, Y=ThroughBall, B=Shoot, X=Tackle)
+- InputProvider: MonoBehaviour using Unity Input System callbacks with dead zone filtering
+- Two control schemes: KeyboardMouse and Gamepad
 
 **Known Issues**: None
 

@@ -51,7 +51,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void FrameTimeAnalyzer_CalculatesAverage()
+        public void FrameTimeAnalyzer_MultipleSamples_CalculatesAverage()
         {
             var analyzer = new FrameTimeAnalyzer();
             analyzer.AddSample(16.6f);
@@ -62,7 +62,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void FrameTimeAnalyzer_CalculatesPercentile()
+        public void FrameTimeAnalyzer_MultipleSamples_CalculatesPercentile()
         {
             var analyzer = new FrameTimeAnalyzer();
             for (int i = 0; i < 100; i++)

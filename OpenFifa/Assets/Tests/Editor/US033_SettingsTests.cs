@@ -62,7 +62,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GameDifficulty_HasThreeValues()
+        public void GameDifficulty_EnumValues_HasThreeValues()
         {
             var values = System.Enum.GetValues(typeof(GameDifficulty));
             Assert.AreEqual(3, values.Length);

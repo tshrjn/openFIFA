@@ -10,7 +10,7 @@ namespace OpenFifa.Tests.Runtime
     public class US001_ProjectScaffoldPlayModeTests
     {
         [UnityTest]
-        public IEnumerator SamplePlayModeTest_YieldsAndPasses()
+        public IEnumerator SamplePlayModeTest_WhenRun_YieldsAndPasses()
         {
             // This is the sample PlayMode test that yields and passes
             // Verifies the PlayMode test runner is operational
@@ -20,7 +20,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator PlayModeTestRunner_CanCreateGameObject()
+        public IEnumerator PlayModeTestRunner_WhenCreatingGameObject_Succeeds()
         {
             var go = new GameObject("TestObject");
             yield return null;
@@ -33,7 +33,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator PlayModeTestRunner_PhysicsSimulationWorks()
+        public IEnumerator PlayModeTestRunner_GravityEnabled_PhysicsSimulationWorks()
         {
             var go = new GameObject("PhysicsTestObject");
             var rb = go.AddComponent<Rigidbody>();

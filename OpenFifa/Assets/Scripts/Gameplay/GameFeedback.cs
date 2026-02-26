@@ -1,13 +1,13 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 using OpenFifa.Core;
 
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Platform-aware game feedback singleton.
-    /// iPad: haptic feedback via native plugin.
-    /// macOS: screen shake + audio impact.
-    /// Graceful fallback on unsupported platforms.
+    /// Game feedback system with controller rumble, screen shake, and audio impact.
+    /// Supports Xbox-like gamepad rumble motors + camera shake + audio feedback.
+    /// Graceful fallback on platforms/devices without rumble support.
     /// </summary>
     public class GameFeedback : MonoBehaviour
     {
@@ -65,46 +65,53 @@ namespace OpenFifa.Gameplay
         }
 
         /// <summary>
-        /// Trigger platform-aware feedback at the specified intensity.
+        /// Trigger feedback at the specified intensity.
+        /// Dispatches to: controller rumble + screen shake + audio impact.
         /// </summary>
         public void Trigger(FeedbackIntensity intensity)
         {
-#if UNITY_IOS && !UNITY_EDITOR
-            TriggerHaptic(intensity);
-#elif UNITY_STANDALONE_OSX || UNITY_EDITOR
+            TriggerControllerRumble(intensity);
             TriggerScreenShake(intensity);
             TriggerAudioImpact(intensity);
-#else
-            // Fallback: audio only
-            TriggerAudioImpact(intensity);
-#endif
         }
 
-        private void TriggerHaptic(FeedbackIntensity intensity)
+        private void TriggerControllerRumble(FeedbackIntensity intensity)
         {
-            // Native iOS haptic via plugin
-            // Calls into a .mm native plugin with UIImpactFeedbackGenerator
-            // Gracefully does nothing if plugin not available
+            var rumbleConfig = _mapper.GetRumbleConfig(intensity);
+
+            // Find all connected gamepads and apply rumble
             try
             {
-#if UNITY_IOS && !UNITY_EDITOR
-                switch (intensity)
+                if (Gamepad.current != null)
                 {
-                    case FeedbackIntensity.Light:
-                        _TriggerHapticLight();
-                        break;
-                    case FeedbackIntensity.Medium:
-                        _TriggerHapticMedium();
-                        break;
-                    case FeedbackIntensity.Heavy:
-                        _TriggerHapticHeavy();
-                        break;
+                    Gamepad.current.SetMotorSpeeds(rumbleConfig.LowFrequency, rumbleConfig.HighFrequency);
+
+                    // Schedule rumble stop after duration
+                    if (rumbleConfig.Duration > 0f)
+                    {
+                        CancelInvoke(nameof(StopRumble));
+                        Invoke(nameof(StopRumble), rumbleConfig.Duration);
+                    }
                 }
-#endif
             }
             catch (System.Exception)
             {
-                // Graceful fallback — no haptics on this device
+                // Graceful fallback — no rumble on this device/platform
+            }
+        }
+
+        private void StopRumble()
+        {
+            try
+            {
+                if (Gamepad.current != null)
+                {
+                    Gamepad.current.SetMotorSpeeds(0f, 0f);
+                }
+            }
+            catch (System.Exception)
+            {
+                // Graceful fallback
             }
         }
 
@@ -124,14 +131,5 @@ namespace OpenFifa.Gameplay
             _impactAudioSource.volume = volume;
             _impactAudioSource.Play();
         }
-
-#if UNITY_IOS && !UNITY_EDITOR
-        [System.Runtime.InteropServices.DllImport("__Internal")]
-        private static extern void _TriggerHapticLight();
-        [System.Runtime.InteropServices.DllImport("__Internal")]
-        private static extern void _TriggerHapticMedium();
-        [System.Runtime.InteropServices.DllImport("__Internal")]
-        private static extern void _TriggerHapticHeavy();
-#endif
     }
 }

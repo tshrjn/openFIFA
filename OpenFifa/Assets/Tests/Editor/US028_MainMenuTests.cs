@@ -32,7 +32,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void MenuNavigationLogic_AllButtonsHaveTargets()
+        public void MenuNavigationLogic_AllButtons_HaveTargets()
         {
             var logic = new MenuNavigationLogic();
             foreach (MenuButton button in System.Enum.GetValues(typeof(MenuButton)))

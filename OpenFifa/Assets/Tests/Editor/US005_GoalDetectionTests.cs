@@ -8,14 +8,14 @@ namespace OpenFifa.Tests.Editor
     public class US005_GoalDetectionTests
     {
         [Test]
-        public void TeamIdentifier_HasTeamA()
+        public void TeamIdentifier_EnumValues_IncludesTeamA()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(TeamIdentifier), TeamIdentifier.TeamA),
                 "TeamIdentifier should have TeamA value");
         }
 
         [Test]
-        public void TeamIdentifier_HasTeamB()
+        public void TeamIdentifier_EnumValues_IncludesTeamB()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(TeamIdentifier), TeamIdentifier.TeamB),
                 "TeamIdentifier should have TeamB value");
@@ -29,7 +29,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GoalEventData_ContainsScoringTeam()
+        public void GoalEventData_WhenCreated_ContainsScoringTeam()
         {
             var data = new GoalEventData(TeamIdentifier.TeamA);
             Assert.AreEqual(TeamIdentifier.TeamA, data.ScoringTeam,
@@ -37,7 +37,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GoalEventData_ContainsDefendingTeam()
+        public void GoalEventData_TeamAScores_ContainsDefendingTeam()
         {
             var data = new GoalEventData(TeamIdentifier.TeamA);
             Assert.AreEqual(TeamIdentifier.TeamB, data.DefendingTeam,

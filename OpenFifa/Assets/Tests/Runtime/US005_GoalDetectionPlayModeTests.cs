@@ -85,7 +85,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator GoalTrigger_SpansFullGoalWidthAndHeight()
+        public IEnumerator GoalTrigger_ColliderSize_SpansFullGoalWidthAndHeight()
         {
             yield return null;
 
@@ -183,7 +183,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator GoalDetector_ExposesPublicEvent()
+        public IEnumerator GoalDetector_OnGoalScored_ExposesPublicEvent()
         {
             yield return null;
 

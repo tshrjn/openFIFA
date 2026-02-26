@@ -43,7 +43,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void MaterialPropertyConfig_SupportsInstancing()
+        public void MaterialPropertyConfig_PropertyBlock_SupportsInstancing()
         {
             var config = new MaterialPropertyConfig();
             Assert.IsTrue(config.UsePropertyBlock,

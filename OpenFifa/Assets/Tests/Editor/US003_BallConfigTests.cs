@@ -63,7 +63,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallState_HasAllExpectedValues()
+        public void BallState_EnumValues_HasAllExpectedValues()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(BallState), BallState.Free));
             Assert.IsTrue(System.Enum.IsDefined(typeof(BallState), BallState.Possessed));

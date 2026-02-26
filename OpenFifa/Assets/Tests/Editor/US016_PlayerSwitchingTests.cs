@@ -8,7 +8,7 @@ namespace OpenFifa.Tests.Editor
     public class US016_PlayerSwitchingTests
     {
         [Test]
-        public void PlayerSwitchLogic_FindsNearestToBall()
+        public void PlayerSwitchLogic_MultiplePlayers_FindsNearestToBall()
         {
             var logic = new PlayerSwitchLogic();
             var players = new[]
@@ -57,7 +57,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void PlayerSwitchLogic_ExcludesCurrentPlayer()
+        public void PlayerSwitchLogic_WhenCurrentExcluded_ExcludesCurrentPlayer()
         {
             var logic = new PlayerSwitchLogic();
             var players = new[]
@@ -99,7 +99,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void PlayerSwitchLogic_SwitchIsInstantaneous()
+        public void PlayerSwitchLogic_PerformSwitch_SwitchIsInstantaneous()
         {
             var logic = new PlayerSwitchLogic();
             // Verify that the switch method returns the new active index immediately

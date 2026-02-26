@@ -35,7 +35,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void SceneValidator_HasExpectedObjects()
+        public void SceneValidator_MainMenuScene_HasExpectedObjects()
         {
             var validator = new SceneObjectValidator();
             // MainMenu expected objects
@@ -80,7 +80,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void JourneyStateMachine_ProgressesThroughAllStates()
+        public void JourneyStateMachine_SequentialAdvance_ProgressesThroughAllStates()
         {
             var journey = new E2EJourneyStateMachine();
             Assert.AreEqual(E2EJourneyState.MainMenu, journey.CurrentState);
@@ -102,7 +102,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void JourneyStateMachine_CannotAdvancePastComplete()
+        public void JourneyStateMachine_AtCompleteState_CannotAdvancePastComplete()
         {
             var journey = new E2EJourneyStateMachine();
             // Advance through all states
@@ -125,7 +125,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ErrorLog_InitiallyEmpty()
+        public void ErrorLog_WhenCreated_InitiallyEmpty()
         {
             var errorLog = new E2EErrorLog();
             Assert.AreEqual(0, errorLog.ErrorCount);
@@ -133,7 +133,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ErrorLog_RecordsErrors()
+        public void ErrorLog_AfterLogError_RecordsErrors()
         {
             var errorLog = new E2EErrorLog();
             errorLog.LogError("NullReferenceException in Scene X");

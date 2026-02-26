@@ -7,9 +7,9 @@
 
 ## Game Concept
 
-**OpenFifa** is a **5v5 AAA arcade-style soccer game** for macOS and iPad. It targets premium-quality gameplay with fast, fun matches over simulation realism. Matches are short (6 minutes total), controls are platform-native (keyboard/mouse/trackpad on macOS, touch on iPad), and the visual style is clean and readable.
+**OpenFifa** is a **5v5 AAA arcade-style soccer game** for macOS (desktop). It targets premium-quality gameplay with fast, fun matches over simulation realism. Matches are short (6 minutes total), controls follow standard FIFA-style mappings (keyboard/mouse + Xbox-like gamepad), and the visual style is clean and readable.
 
-The game is single-player vs AI for v1, with local multiplayer (same device) as the final feature. **AAA Gameplay** is a core design goal — every interaction should feel polished, responsive, and premium.
+The game is single-player vs AI for v1, with local multiplayer (keyboard + gamepad) as the final feature. **AAA Gameplay** is a core design goal — every interaction should feel polished, responsive, and premium.
 
 ---
 
@@ -17,8 +17,8 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 
 | Platform | Priority | Notes |
 |----------|----------|-------|
-| macOS | Primary | macOS 14+ Sonoma, native .app bundle, keyboard/mouse/trackpad at 60fps |
-| iPad | Secondary | iPadOS 17+, all iPads with M-series or A12+ chips, touch controls at 60fps |
+| macOS | Primary | macOS 14+ Sonoma, native .app bundle, keyboard/mouse + gamepad at 60fps |
+| iPad | Deferred | Touch controls deferred to future release |
 | Android | Future | Not in v1 scope |
 
 ---
@@ -30,7 +30,7 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 3. **Full match loop** — Main Menu → Team Select → Match → Results → Main Menu
 4. **Test-driven quality** — Every feature has automated tests, zero human visual verification required
 5. **Agent-buildable** — Every component can be built by an AI coding agent in one session
-6. **Platform-native controls** — Keyboard/mouse/trackpad on macOS feels native; touch on iPad feels native
+6. **Standard FIFA controls** — Keyboard/mouse and Xbox-like gamepad with FIFA-style button mapping
 
 ---
 
@@ -40,7 +40,6 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 - Commentary / play-by-play audio
 - Real team/player licensing
 - 11v11 full-size matches
-- MFi game controller support
 - Career mode / season mode
 - In-app purchases
 - Leaderboards (Game Center stretch goal)
@@ -110,30 +109,42 @@ The game is single-player vs AI for v1, with local multiplayer (same device) as 
 
 ## Player Controls
 
-### Keyboard / Mouse / Trackpad (macOS — Primary)
+Standard FIFA-style controls supporting both keyboard/mouse and Xbox-like gamepad.
+
+### Keyboard / Mouse
 
 | Input | Action |
 |-------|--------|
 | WASD / Arrow keys | Move active player |
-| Z / Left Click | Short pass to nearest teammate |
-| X / Right Click | Shoot toward goal |
-| C | Slide tackle / pressure |
-| Left Shift (hold) | Run faster (1.5x speed) |
-| Tab | Switch to nearest player to ball |
+| Space | Pass (short pass to nearest teammate) |
+| W (action) | Through ball |
+| D / Left Click | Shoot toward goal |
+| S | Slide tackle / pressure |
+| Left Shift (hold) | Sprint (1.5x speed) |
+| Q | Switch to nearest player to ball |
+| E | Lob pass |
 | Escape | Open pause menu |
-| Mouse / Trackpad | Camera look (optional) |
 
-### Touch (iPad — Secondary)
+### Xbox-like Gamepad
 
 | Input | Action |
 |-------|--------|
-| Left joystick (dynamic) | Move active player |
-| Pass button | Short pass to nearest teammate |
-| Shoot button | Shoot toward goal |
-| Tackle button | Slide tackle / pressure |
-| Sprint button (hold) | Run faster (1.5x speed) |
-| Switch button (tap) | Switch to nearest player to ball |
-| Pause button | Open pause menu |
+| Left Stick | Move active player |
+| A button | Pass (short pass to nearest teammate) |
+| Y button | Through ball |
+| B button | Shoot toward goal |
+| X button | Slide tackle / pressure |
+| RT (hold) | Sprint (1.5x speed) |
+| LB | Switch to nearest player to ball |
+| RB | Lob pass |
+| Start / Menu | Open pause menu |
+
+### Local Multiplayer
+
+| Player | Default Control Scheme |
+|--------|----------------------|
+| Player 1 | Keyboard / Mouse |
+| Player 2 | Gamepad |
 
 ---
 
@@ -187,10 +198,10 @@ The game is v1-complete when:
 
 1. Full match loop plays from Main Menu through Results and back
 2. AI opponents make sensible decisions (pass, shoot, defend, goalkeeper dives)
-3. Keyboard/mouse/trackpad controls work natively on macOS; touch controls work on iPad
-4. Performance: 60fps sustained on macOS, 30fps minimum on iPad
+3. Keyboard/mouse and gamepad controls work with FIFA-style button mapping on macOS
+4. Performance: 60fps sustained on macOS
 5. Bundle size < 200MB
 6. All automated tests pass (EditMode + PlayMode)
-7. macOS .app bundle builds and runs without errors; iPad Simulator build compiles without errors
+7. macOS .app bundle builds and runs without errors
 8. Zero crashes during a 10-match fast-forward simulation
-9. AAA gameplay feel — responsive controls, smooth animations, polished game feel on both platforms
+9. AAA gameplay feel — responsive controls, smooth animations, polished game feel with controller rumble feedback

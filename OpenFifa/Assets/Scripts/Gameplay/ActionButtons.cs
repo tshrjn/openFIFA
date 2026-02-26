@@ -1,125 +1,89 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using OpenFifa.Core;
 
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// On-screen action buttons for iPad touch input.
-    /// Pass, Shoot, Tackle are single-tap. Sprint is hold (continuous press).
-    /// Buttons sized at minimum 80x80 for touch targets.
+    /// FIFA-style action input handler.
+    /// Reads action inputs (Pass, Shoot, Tackle, ThroughBall, LobPass, Switch, Sprint)
+    /// from Unity Input System for both keyboard/mouse and gamepad control schemes.
     /// </summary>
     public class ActionButtons : MonoBehaviour
     {
-        [SerializeField] private Button _passButton;
-        [SerializeField] private Button _shootButton;
-        [SerializeField] private Button _tackleButton;
-        [SerializeField] private SprintButton _sprintButton;
-
         private ActionButtonLogic _logic;
 
         /// <summary>The underlying action logic.</summary>
         public ActionButtonLogic Logic => _logic;
 
-        /// <summary>Which buttons are currently pressed (for test verification).</summary>
+        /// <summary>Which actions are currently pressed (for test verification).</summary>
         public bool IsPassPressed => _logic != null && _logic.IsPassPressed;
         public bool IsShootPressed => _logic != null && _logic.IsShootPressed;
         public bool IsTacklePressed => _logic != null && _logic.IsTacklePressed;
         public bool IsSprintPressed => _logic != null && _logic.IsSprintPressed;
+        public bool IsSwitchPressed => _logic != null && _logic.IsSwitchPressed;
+        public bool IsThroughBallPressed => _logic != null && _logic.IsThroughBallPressed;
+        public bool IsLobPassPressed => _logic != null && _logic.IsLobPassPressed;
 
         private void Awake()
         {
             _logic = new ActionButtonLogic();
         }
 
-        private void Start()
+        // Input System callback methods (called by PlayerInput component)
+
+        /// <summary>Input System callback: Pass (Space / A button).</summary>
+        public void OnPass(InputAction.CallbackContext context)
         {
-            if (_passButton != null)
-                _passButton.onClick.AddListener(OnPassTapped);
-
-            if (_shootButton != null)
-                _shootButton.onClick.AddListener(OnShootTapped);
-
-            if (_tackleButton != null)
-                _tackleButton.onClick.AddListener(OnTackleTapped);
+            if (context.performed)
+                _logic.PressPass();
         }
 
-        private void OnPassTapped()
+        /// <summary>Input System callback: Shoot (D / Left Click / B button).</summary>
+        public void OnShoot(InputAction.CallbackContext context)
         {
-            _logic.PressPass();
-            AnimateButton(_passButton);
+            if (context.performed)
+                _logic.PressShoot();
         }
 
-        private void OnShootTapped()
+        /// <summary>Input System callback: Tackle (S / X button).</summary>
+        public void OnTackle(InputAction.CallbackContext context)
         {
-            _logic.PressShoot();
-            AnimateButton(_shootButton);
+            if (context.performed)
+                _logic.PressTackle();
         }
 
-        private void OnTackleTapped()
+        /// <summary>Input System callback: Through Ball (W / Y button).</summary>
+        public void OnThroughBall(InputAction.CallbackContext context)
         {
-            _logic.PressTackle();
-            AnimateButton(_tackleButton);
+            if (context.performed)
+                _logic.PressThroughBall();
         }
 
-        /// <summary>Set sprint state from SprintButton hold behavior.</summary>
-        public void SetSprinting(bool pressed)
+        /// <summary>Input System callback: Lob Pass (E / RB).</summary>
+        public void OnLobPass(InputAction.CallbackContext context)
         {
-            _logic.SetSprint(pressed);
+            if (context.performed)
+                _logic.PressLobPass();
+        }
+
+        /// <summary>Input System callback: Switch Player (Q / LB).</summary>
+        public void OnSwitch(InputAction.CallbackContext context)
+        {
+            if (context.performed)
+                _logic.PressSwitch();
+        }
+
+        /// <summary>Input System callback: Sprint (Left Shift / RT). Hold behavior.</summary>
+        public void OnSprint(InputAction.CallbackContext context)
+        {
+            _logic.SetSprint(context.ReadValueAsButton());
         }
 
         /// <summary>Consume actions after processing in PlayerController.</summary>
         public void ConsumeActions()
         {
             _logic.ConsumeActions();
-        }
-
-        private void AnimateButton(Button button)
-        {
-            if (button == null) return;
-            // Visual feedback: scale punch
-            button.transform.localScale = Vector3.one * 0.9f;
-            // Will revert in next frame via LateUpdate or animation
-        }
-
-        private void LateUpdate()
-        {
-            // Reset button scales
-            if (_passButton != null)
-                _passButton.transform.localScale = Vector3.Lerp(_passButton.transform.localScale, Vector3.one, 10f * Time.deltaTime);
-            if (_shootButton != null)
-                _shootButton.transform.localScale = Vector3.Lerp(_shootButton.transform.localScale, Vector3.one, 10f * Time.deltaTime);
-            if (_tackleButton != null)
-                _tackleButton.transform.localScale = Vector3.Lerp(_tackleButton.transform.localScale, Vector3.one, 10f * Time.deltaTime);
-        }
-
-        private void OnDestroy()
-        {
-            if (_passButton != null) _passButton.onClick.RemoveListener(OnPassTapped);
-            if (_shootButton != null) _shootButton.onClick.RemoveListener(OnShootTapped);
-            if (_tackleButton != null) _tackleButton.onClick.RemoveListener(OnTackleTapped);
-        }
-    }
-
-    /// <summary>
-    /// Sprint button with hold behavior (continuous press).
-    /// Responds to pointer down (start sprint) and pointer up (stop sprint).
-    /// </summary>
-    public class SprintButton : MonoBehaviour, IPointerDownHandler, IPointerUpHandler
-    {
-        [SerializeField] private ActionButtons _actionButtons;
-
-        public void OnPointerDown(PointerEventData eventData)
-        {
-            if (_actionButtons != null)
-                _actionButtons.SetSprinting(true);
-        }
-
-        public void OnPointerUp(PointerEventData eventData)
-        {
-            if (_actionButtons != null)
-                _actionButtons.SetSprinting(false);
         }
     }
 }

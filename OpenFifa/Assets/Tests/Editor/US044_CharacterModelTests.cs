@@ -16,7 +16,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void CharacterModelConfig_HasTeamAColor()
+        public void CharacterModelConfig_TeamColors_HasTeamAColor()
         {
             var config = new CharacterModelConfig();
             Assert.IsNotNull(config.TeamAColor);
@@ -26,7 +26,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void CharacterModelConfig_HasTeamBColor()
+        public void CharacterModelConfig_TeamColors_HasTeamBColor()
         {
             var config = new CharacterModelConfig();
             Assert.IsNotNull(config.TeamBColor);
@@ -55,7 +55,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void CharacterModelConfig_UsesMaterialPropertyBlock()
+        public void CharacterModelConfig_RenderSettings_UsesMaterialPropertyBlock()
         {
             var config = new CharacterModelConfig();
             Assert.IsTrue(config.UseMaterialPropertyBlock);
@@ -69,7 +69,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void TeamColorAssigner_AssignsTeamA()
+        public void TeamColorAssigner_TeamIndexZero_AssignsTeamA()
         {
             var assigner = new TeamColorAssigner();
             var config = new CharacterModelConfig();
@@ -80,7 +80,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void TeamColorAssigner_AssignsTeamB()
+        public void TeamColorAssigner_TeamIndexOne_AssignsTeamB()
         {
             var assigner = new TeamColorAssigner();
             var config = new CharacterModelConfig();

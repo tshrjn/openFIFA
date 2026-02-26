@@ -15,6 +15,9 @@ namespace OpenFifa.Tests.Editor
             Assert.IsFalse(logic.IsShootPressed);
             Assert.IsFalse(logic.IsTacklePressed);
             Assert.IsFalse(logic.IsSprintPressed);
+            Assert.IsFalse(logic.IsSwitchPressed);
+            Assert.IsFalse(logic.IsThroughBallPressed);
+            Assert.IsFalse(logic.IsLobPassPressed);
         }
 
         [Test]
@@ -39,6 +42,30 @@ namespace OpenFifa.Tests.Editor
             var logic = new ActionButtonLogic();
             logic.PressTackle();
             Assert.IsTrue(logic.IsTacklePressed);
+        }
+
+        [Test]
+        public void ActionButtonLogic_PressThroughBall_SetsFlag()
+        {
+            var logic = new ActionButtonLogic();
+            logic.PressThroughBall();
+            Assert.IsTrue(logic.IsThroughBallPressed);
+        }
+
+        [Test]
+        public void ActionButtonLogic_PressLobPass_SetsFlag()
+        {
+            var logic = new ActionButtonLogic();
+            logic.PressLobPass();
+            Assert.IsTrue(logic.IsLobPassPressed);
+        }
+
+        [Test]
+        public void ActionButtonLogic_PressSwitch_SetsFlag()
+        {
+            var logic = new ActionButtonLogic();
+            logic.PressSwitch();
+            Assert.IsTrue(logic.IsSwitchPressed);
         }
 
         [Test]
@@ -71,34 +98,127 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ActionButtonLogic_MultipleActions_OnlyOneActive()
+        public void ActionButtonLogic_ConsumeActions_ClearsAllSinglePress()
         {
             var logic = new ActionButtonLogic();
             logic.PressPass();
             logic.PressShoot();
-            // Last action should take priority
-            Assert.IsTrue(logic.IsShootPressed);
+            logic.PressTackle();
+            logic.PressThroughBall();
+            logic.PressLobPass();
+            logic.PressSwitch();
+            logic.ConsumeActions();
+            Assert.IsFalse(logic.IsPassPressed);
+            Assert.IsFalse(logic.IsShootPressed);
+            Assert.IsFalse(logic.IsTacklePressed);
+            Assert.IsFalse(logic.IsThroughBallPressed);
+            Assert.IsFalse(logic.IsLobPassPressed);
+            Assert.IsFalse(logic.IsSwitchPressed);
         }
 
         [Test]
-        public void KeyboardMapping_ZKey_MapsToPass()
+        public void KeyboardMapping_SpaceKey_MapsToPass()
         {
             var mapping = new KeyboardActionMapping();
-            Assert.AreEqual(ActionType.Pass, mapping.GetAction("z"));
+            Assert.AreEqual(ActionType.Pass, mapping.GetAction("space"));
         }
 
         [Test]
-        public void KeyboardMapping_XKey_MapsToShoot()
+        public void KeyboardMapping_DKey_MapsToShoot()
         {
             var mapping = new KeyboardActionMapping();
-            Assert.AreEqual(ActionType.Shoot, mapping.GetAction("x"));
+            Assert.AreEqual(ActionType.Shoot, mapping.GetAction("d"));
         }
 
         [Test]
-        public void KeyboardMapping_CKey_MapsToTackle()
+        public void KeyboardMapping_SKey_MapsToTackle()
         {
             var mapping = new KeyboardActionMapping();
-            Assert.AreEqual(ActionType.Tackle, mapping.GetAction("c"));
+            Assert.AreEqual(ActionType.Tackle, mapping.GetAction("s"));
+        }
+
+        [Test]
+        public void KeyboardMapping_WKey_MapsToThroughBall()
+        {
+            var mapping = new KeyboardActionMapping();
+            Assert.AreEqual(ActionType.ThroughBall, mapping.GetAction("w"));
+        }
+
+        [Test]
+        public void KeyboardMapping_EKey_MapsToLobPass()
+        {
+            var mapping = new KeyboardActionMapping();
+            Assert.AreEqual(ActionType.LobPass, mapping.GetAction("e"));
+        }
+
+        [Test]
+        public void KeyboardMapping_QKey_MapsToSwitch()
+        {
+            var mapping = new KeyboardActionMapping();
+            Assert.AreEqual(ActionType.Switch, mapping.GetAction("q"));
+        }
+
+        [Test]
+        public void KeyboardMapping_LeftShift_MapsToSprint()
+        {
+            var mapping = new KeyboardActionMapping();
+            Assert.AreEqual(ActionType.Sprint, mapping.GetAction("leftshift"));
+        }
+
+        [Test]
+        public void KeyboardMapping_Mouse0_MapsToShoot()
+        {
+            var mapping = new KeyboardActionMapping();
+            Assert.AreEqual(ActionType.Shoot, mapping.GetAction("mouse0"));
+        }
+
+        [Test]
+        public void GamepadMapping_AButton_MapsToPass()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.Pass, mapping.GetAction("buttonsouth"));
+        }
+
+        [Test]
+        public void GamepadMapping_BButton_MapsToShoot()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.Shoot, mapping.GetAction("buttoneast"));
+        }
+
+        [Test]
+        public void GamepadMapping_XButton_MapsToTackle()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.Tackle, mapping.GetAction("buttonwest"));
+        }
+
+        [Test]
+        public void GamepadMapping_YButton_MapsToThroughBall()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.ThroughBall, mapping.GetAction("buttonnorth"));
+        }
+
+        [Test]
+        public void GamepadMapping_RB_MapsToLobPass()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.LobPass, mapping.GetAction("rightshoulder"));
+        }
+
+        [Test]
+        public void GamepadMapping_LB_MapsToSwitch()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.Switch, mapping.GetAction("leftshoulder"));
+        }
+
+        [Test]
+        public void GamepadMapping_RT_MapsToSprint()
+        {
+            var mapping = new GamepadActionMapping();
+            Assert.AreEqual(ActionType.Sprint, mapping.GetAction("righttrigger"));
         }
     }
 }

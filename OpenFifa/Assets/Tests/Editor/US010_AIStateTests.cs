@@ -8,19 +8,19 @@ namespace OpenFifa.Tests.Editor
     public class US010_AIStateTests
     {
         [Test]
-        public void AIState_HasIdle()
+        public void AIState_EnumValues_IncludesIdle()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(AIState), AIState.Idle));
         }
 
         [Test]
-        public void AIState_HasChaseBall()
+        public void AIState_EnumValues_IncludesChaseBall()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(AIState), AIState.ChaseBall));
         }
 
         [Test]
-        public void AIState_HasReturnToPosition()
+        public void AIState_EnumValues_IncludesReturnToPosition()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(AIState), AIState.ReturnToPosition));
         }

@@ -8,7 +8,7 @@ namespace OpenFifa.Tests.Editor
     public class US011_AIPassingTests
     {
         [Test]
-        public void PassEvaluator_SelectsMostOpenTeammate()
+        public void PassEvaluator_MultipleTeammates_SelectsMostOpenTeammate()
         {
             var evaluator = new PassEvaluator();
 

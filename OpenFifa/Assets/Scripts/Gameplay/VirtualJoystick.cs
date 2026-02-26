@@ -1,75 +1,77 @@
 using UnityEngine;
-using UnityEngine.EventSystems;
-using UnityEngine.UI;
+using UnityEngine.InputSystem;
 using OpenFifa.Core;
 
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Virtual joystick for touch input (iPad).
-    /// Dynamic: appears at touch point rather than a fixed position.
-    /// Implements IInputProvider interface pattern.
+    /// Standard input provider for FIFA-style controls.
+    /// Reads movement and actions from Unity Input System.
+    /// Supports both Keyboard/Mouse and Gamepad control schemes.
     /// </summary>
-    public class VirtualJoystick : MonoBehaviour, IPointerDownHandler, IDragHandler, IPointerUpHandler
+    public class InputProvider : MonoBehaviour
     {
-        [SerializeField] private RectTransform _outerRing;
-        [SerializeField] private RectTransform _innerThumb;
-        [SerializeField] private float _outerRadius = 100f;
-        [SerializeField] private float _deadZone = 0.1f;
+        [SerializeField] private PlayerInput _playerInput;
 
-        private VirtualJoystickLogic _logic;
+        private InputFilterLogic _filter;
+        private Vector2 _moveInput;
+        private bool _sprintInput;
 
-        /// <summary>Current movement vector (-1 to 1 on each axis).</summary>
-        public Vector2 Movement => new Vector2(
-            _logic != null ? _logic.OutputX : 0f,
-            _logic != null ? _logic.OutputY : 0f
-        );
+        /// <summary>Current movement vector (-1 to 1 on each axis), with dead zone applied.</summary>
+        public Vector2 Movement
+        {
+            get
+            {
+                if (_filter == null) return _moveInput;
+                _filter.ApplyDeadZone(_moveInput.x, _moveInput.y, out float x, out float y);
+                return new Vector2(x, y);
+            }
+        }
 
-        /// <summary>Whether the joystick is being touched.</summary>
-        public bool IsActive => _logic != null && _logic.IsActive;
+        /// <summary>Whether any movement input is active.</summary>
+        public bool IsActive => _moveInput.sqrMagnitude > 0.01f;
+
+        /// <summary>Whether sprint is held.</summary>
+        public bool IsSprinting => _sprintInput;
+
+        /// <summary>Current control scheme name.</summary>
+        public string ActiveControlScheme =>
+            _playerInput != null ? _playerInput.currentControlScheme : "Keyboard&Mouse";
 
         private void Awake()
         {
-            _logic = new VirtualJoystickLogic(_outerRadius, _deadZone);
+            _filter = new InputFilterLogic();
 
-            if (_outerRing != null)
-                _outerRing.gameObject.SetActive(false);
+            if (_playerInput == null)
+                _playerInput = GetComponent<PlayerInput>();
         }
 
-        public void OnPointerDown(PointerEventData eventData)
+        /// <summary>Input System callback: Movement (WASD / Left Stick).</summary>
+        public void OnMove(InputAction.CallbackContext context)
         {
-            _logic.OnPointerDown(eventData.position.x, eventData.position.y);
-
-            if (_outerRing != null)
-            {
-                _outerRing.position = eventData.position;
-                _outerRing.gameObject.SetActive(true);
-            }
-
-            if (_innerThumb != null)
-                _innerThumb.position = eventData.position;
+            _moveInput = context.ReadValue<Vector2>();
         }
 
-        public void OnDrag(PointerEventData eventData)
+        /// <summary>Input System callback: Sprint (Left Shift / RT).</summary>
+        public void OnSprint(InputAction.CallbackContext context)
         {
-            _logic.OnDrag(eventData.position.x, eventData.position.y);
-
-            if (_innerThumb != null && _outerRing != null)
-            {
-                Vector2 direction = new Vector2(_logic.OutputX, _logic.OutputY);
-                _innerThumb.position = (Vector2)_outerRing.position + direction * _outerRadius;
-            }
+            _sprintInput = context.ReadValueAsButton();
         }
 
-        public void OnPointerUp(PointerEventData eventData)
+        /// <summary>
+        /// Set movement input programmatically (for tests).
+        /// </summary>
+        public void SetMoveInput(Vector2 input)
         {
-            _logic.OnPointerUp();
+            _moveInput = input;
+        }
 
-            if (_outerRing != null)
-                _outerRing.gameObject.SetActive(false);
-
-            if (_innerThumb != null && _outerRing != null)
-                _innerThumb.position = _outerRing.position;
+        /// <summary>
+        /// Set sprint input programmatically (for tests).
+        /// </summary>
+        public void SetSprintInput(bool sprinting)
+        {
+            _sprintInput = sprinting;
         }
     }
 }

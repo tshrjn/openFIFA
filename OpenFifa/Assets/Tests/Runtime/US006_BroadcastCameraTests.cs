@@ -141,7 +141,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Camera_ShowsReasonablePortionOfPitch()
+        public IEnumerator Camera_FieldOfView_ShowsReasonablePortionOfPitch()
         {
             yield return null;
 

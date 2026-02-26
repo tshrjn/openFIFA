@@ -9,7 +9,7 @@ namespace OpenFifa.Tests.Editor
     public class US046_StadiumTests
     {
         [Test]
-        public void StadiumConfig_HasSkyboxHDRI()
+        public void StadiumConfig_SkyboxSettings_HasSkyboxHDRI()
         {
             var config = new StadiumConfig();
             Assert.IsNotNull(config.SkyboxHDRIName);
@@ -51,7 +51,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GoalNetConfig_HasSemiTransparentMaterial()
+        public void GoalNetConfig_NetAlpha_HasSemiTransparentMaterial()
         {
             var config = new StadiumConfig();
             Assert.Greater(config.NetAlpha, 0f);
@@ -59,7 +59,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void GoalPostConfig_HasMeshCollider()
+        public void GoalPostConfig_ColliderSettings_HasMeshCollider()
         {
             var config = new StadiumConfig();
             Assert.IsTrue(config.PostsHaveMeshCollider);
@@ -67,7 +67,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void StadiumConfig_HasStandsGeometry()
+        public void StadiumConfig_Geometry_HasStandsGeometry()
         {
             var config = new StadiumConfig();
             Assert.IsTrue(config.HasStandsGeometry);

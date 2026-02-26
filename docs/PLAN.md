@@ -12,7 +12,7 @@
 | 2. Core Gameplay | US-009 — US-018 | AI, goalkeeper, match FSM, scoring, switching, tackling | Full 5v5 match at 100x speed without crash |
 | 3. Game Feel | US-019 — US-027 | Animations, particles, SFX, celebrations, replays | All animations trigger correctly, audio plays |
 | 4. UI & Menus | US-028 — US-035 | Full menu flow, HUD, settings, transitions | E2E: menu → select → match → results → menu |
-| 5. Polish & Platform | US-036 — US-043 | Controls (keyboard/mouse + touch), haptics, performance, multi-res | 60fps on macOS, 30fps on iPad, <200MB, zero GC |
+| 5. Polish & Platform | US-036 — US-043 | Controls (keyboard/mouse + gamepad), controller rumble, performance, multi-res | 60fps on macOS, <200MB, zero GC |
 | 6. Asset Integration | US-044 — US-050 | Real models, Mixamo anims, stadium, audio, local MP | Visual baselines set, all asset swaps verified |
 
 ---
@@ -131,17 +131,17 @@ unity -runTests -batchmode -testCategory "E2E" -testResults ./test-results/p4-e2
 
 ## Phase 5: Polish & Platform
 
-**Goal**: Keyboard/mouse controls work on macOS, touch controls work on iPad, performance hits budgets, app builds for both platforms without issues.
+**Goal**: FIFA-style keyboard/mouse + gamepad controls work on macOS, performance hits budgets, app builds without issues.
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-036 | Keyboard/mouse controls (macOS) + virtual joystick (iPad) | Pending |
-| US-037 | Keyboard shortcuts (macOS) + touch buttons (iPad) | Pending |
-| US-038 | Haptic feedback (iPad) + screen shake/audio feedback (macOS) | Pending |
+| US-036 | FIFA-style keyboard/mouse + gamepad input mapping | Pending |
+| US-037 | FIFA-style action button mapping (keyboard + gamepad) | Pending |
+| US-038 | Controller rumble + screen shake + audio feedback | Pending |
 | US-039 | Draw call optimization | Pending |
 | US-040 | GC-free gameplay loop | Pending |
-| US-041 | Multi-resolution UI (macOS windows + iPad sizes) | Pending |
-| US-042 | macOS + iPad build hardening | Pending |
+| US-041 | Multi-resolution UI (macOS windows) | Pending |
+| US-042 | macOS build hardening | Pending |
 | US-043 | Performance budget test suite | Pending |
 
 **Checkpoint validation**:

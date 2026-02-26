@@ -183,11 +183,8 @@ Script: `scripts/verify-build.sh`
 3. Required frameworks present (Metal, AppKit, AVFoundation)
 4. .app launches without crash (smoke test)
 
-### iPad Checks:
-1. Xcode project generated successfully
-2. `xcodebuild` compiles for iPad Simulator without errors
-3. App bundle < 200MB
-4. Required frameworks present (Metal, UIKit, AVFoundation)
+### iPad Checks (deferred):
+iPad build verification is deferred. Touch controls are not in v1 scope.
 
 ---
 

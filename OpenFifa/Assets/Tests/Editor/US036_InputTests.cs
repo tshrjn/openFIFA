@@ -65,45 +65,65 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void VirtualJoystickLogic_InitialOutput_IsZero()
+        public void InputMapping_KeyboardScheme_WASD_Movement()
         {
-            var logic = new VirtualJoystickLogic(100f, 0.1f);
-            Assert.AreEqual(0f, logic.OutputX);
-            Assert.AreEqual(0f, logic.OutputY);
+            var mapping = new InputMappingLogic();
+            string source = mapping.GetMovementSource(ControlScheme.KeyboardMouse);
+            Assert.AreEqual("wasd", source);
         }
 
         [Test]
-        public void VirtualJoystickLogic_Drag_ProducesOutput()
+        public void InputMapping_GamepadScheme_LeftStick_Movement()
         {
-            var logic = new VirtualJoystickLogic(100f, 0.1f);
-            logic.OnPointerDown(200f, 200f);
-            logic.OnDrag(250f, 250f);
-
-            float magnitude = logic.OutputX * logic.OutputX + logic.OutputY * logic.OutputY;
-            Assert.Greater(magnitude, 0f, "Dragging should produce non-zero output");
+            var mapping = new InputMappingLogic();
+            string source = mapping.GetMovementSource(ControlScheme.Gamepad);
+            Assert.AreEqual("leftstick", source);
         }
 
         [Test]
-        public void VirtualJoystickLogic_Release_ReturnsToZero()
+        public void InputMapping_KeyboardBindings_AllFIFAActionsPresent()
         {
-            var logic = new VirtualJoystickLogic(100f, 0.1f);
-            logic.OnPointerDown(200f, 200f);
-            logic.OnDrag(250f, 250f);
-            logic.OnPointerUp();
-
-            Assert.AreEqual(0f, logic.OutputX);
-            Assert.AreEqual(0f, logic.OutputY);
+            var mapping = new InputMappingLogic();
+            // FIFA-style: Space=Pass, W=ThroughBall, D=Shoot, S=Tackle, LeftShift=Sprint, Q=Switch, E=LobPass, Mouse0=Shoot
+            Assert.AreEqual(ActionType.Pass, mapping.GetKeyboardAction("space"));
+            Assert.AreEqual(ActionType.ThroughBall, mapping.GetKeyboardAction("w"));
+            Assert.AreEqual(ActionType.Shoot, mapping.GetKeyboardAction("d"));
+            Assert.AreEqual(ActionType.Tackle, mapping.GetKeyboardAction("s"));
+            Assert.AreEqual(ActionType.Sprint, mapping.GetKeyboardAction("leftshift"));
+            Assert.AreEqual(ActionType.Switch, mapping.GetKeyboardAction("q"));
+            Assert.AreEqual(ActionType.LobPass, mapping.GetKeyboardAction("e"));
+            Assert.AreEqual(ActionType.Shoot, mapping.GetKeyboardAction("mouse0"));
         }
 
         [Test]
-        public void VirtualJoystickLogic_Output_ClampedToOne()
+        public void InputMapping_GamepadBindings_AllFIFAActionsPresent()
         {
-            var logic = new VirtualJoystickLogic(100f, 0.1f);
-            logic.OnPointerDown(200f, 200f);
-            logic.OnDrag(500f, 500f); // Far drag
+            var mapping = new InputMappingLogic();
+            // FIFA-style: A=Pass, Y=ThroughBall, B=Shoot, X=Tackle, RT=Sprint, LB=Switch, RB=LobPass
+            Assert.AreEqual(ActionType.Pass, mapping.GetGamepadAction("buttonsouth"));
+            Assert.AreEqual(ActionType.ThroughBall, mapping.GetGamepadAction("buttonnorth"));
+            Assert.AreEqual(ActionType.Shoot, mapping.GetGamepadAction("buttoneast"));
+            Assert.AreEqual(ActionType.Tackle, mapping.GetGamepadAction("buttonwest"));
+            Assert.AreEqual(ActionType.Sprint, mapping.GetGamepadAction("righttrigger"));
+            Assert.AreEqual(ActionType.Switch, mapping.GetGamepadAction("leftshoulder"));
+            Assert.AreEqual(ActionType.LobPass, mapping.GetGamepadAction("rightshoulder"));
+        }
 
-            float magnitude = logic.OutputX * logic.OutputX + logic.OutputY * logic.OutputY;
-            Assert.LessOrEqual(magnitude, 1.01f, "Output should be clamped to unit circle");
+        [Test]
+        public void InputMapping_UnknownKey_ReturnsNone()
+        {
+            var mapping = new InputMappingLogic();
+            Assert.AreEqual(ActionType.None, mapping.GetKeyboardAction("f12"));
+            Assert.AreEqual(ActionType.None, mapping.GetGamepadAction("unknown"));
+        }
+
+        [Test]
+        public void InputMapping_CaseInsensitive_ReturnsAction()
+        {
+            var mapping = new InputMappingLogic();
+            Assert.AreEqual(ActionType.Pass, mapping.GetKeyboardAction("Space"));
+            Assert.AreEqual(ActionType.Pass, mapping.GetKeyboardAction("SPACE"));
+            Assert.AreEqual(ActionType.Pass, mapping.GetGamepadAction("ButtonSouth"));
         }
     }
 }

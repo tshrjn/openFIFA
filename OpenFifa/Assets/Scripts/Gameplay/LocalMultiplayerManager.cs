@@ -1,21 +1,22 @@
 using UnityEngine;
-using UnityEngine.InputSystem.EnhancedTouch;
+using UnityEngine.InputSystem;
 using OpenFifa.Core;
 
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Manages local multiplayer on a single device via split touch zones.
-    /// Player 1 controls left half, Player 2 controls right half.
-    /// Each player gets independent joystick and action button input.
+    /// Manages local multiplayer via controller-based input assignment.
+    /// Player 1 = keyboard/mouse (default), Player 2 = gamepad.
+    /// Both players can also use separate gamepads.
+    /// Each player gets independent movement and action input.
     /// </summary>
     public class LocalMultiplayerManager : MonoBehaviour
     {
-        [SerializeField] private VirtualJoystick player1Joystick;
-        [SerializeField] private VirtualJoystick player2Joystick;
+        [SerializeField] private PlayerInput player1Input;
+        [SerializeField] private PlayerInput player2Input;
 
-        private SplitTouchZoneLogic _zoneLogic;
-        private InputRouter _inputRouter;
+        private ControlSchemeAssigner _schemeAssigner;
+        private DeviceInputRouter _deviceRouter;
         private LocalMultiplayerConfig _config;
 
         /// <summary>Current movement input for Player 1.</summary>
@@ -24,59 +25,47 @@ namespace OpenFifa.Gameplay
         /// <summary>Current movement input for Player 2.</summary>
         public Vector2 Player2Input { get; private set; }
 
+        /// <summary>Control scheme assigner for test access.</summary>
+        public ControlSchemeAssigner SchemeAssigner => _schemeAssigner;
+
+        /// <summary>Device router for test access.</summary>
+        public DeviceInputRouter DeviceRouter => _deviceRouter;
+
         private void Awake()
         {
             _config = new LocalMultiplayerConfig();
-            _zoneLogic = new SplitTouchZoneLogic(Screen.width, Screen.height);
-            _inputRouter = new InputRouter(_zoneLogic);
-        }
+            _schemeAssigner = new ControlSchemeAssigner();
+            _deviceRouter = new DeviceInputRouter();
 
-        private void OnEnable()
-        {
-            EnhancedTouchSupport.Enable();
-        }
-
-        private void OnDisable()
-        {
-            EnhancedTouchSupport.Disable();
+            // Default assignment: keyboard = player 0, first gamepad = player 1
+            _deviceRouter.AssignDevice(0, 0); // Keyboard device
+            if (Gamepad.all.Count > 0)
+            {
+                _deviceRouter.AssignDevice(Gamepad.all[0].deviceId, 1);
+            }
         }
 
         private void Update()
         {
-            ProcessTouches();
+            ReadPlayerInputs();
         }
 
-        private void ProcessTouches()
+        private void ReadPlayerInputs()
         {
-            var touches = UnityEngine.InputSystem.EnhancedTouch.Touch.activeTouches;
-
-            // Clear router for fresh frame
-            _inputRouter.ClearAll();
-
-            foreach (var touch in touches)
+            // Player 1: read from assigned PlayerInput component
+            if (player1Input != null)
             {
-                int fingerId = touch.finger.index;
-                float x = touch.screenPosition.x;
-                float y = touch.screenPosition.y;
-
-                _inputRouter.ProcessTouch(fingerId, x, y);
-
-                int player = _inputRouter.GetOwningPlayer(fingerId);
-                if (player == 0 && player1Joystick != null)
-                {
-                    Player1Input = player1Joystick.OutputVector;
-                }
-                else if (player == 1 && player2Joystick != null)
-                {
-                    Player2Input = player2Joystick.OutputVector;
-                }
+                var moveAction = player1Input.actions.FindAction("Move");
+                if (moveAction != null)
+                    Player1Input = moveAction.ReadValue<Vector2>();
             }
 
-            // Reset inputs for released touches
-            if (touches.Count == 0)
+            // Player 2: read from assigned PlayerInput component
+            if (player2Input != null)
             {
-                Player1Input = Vector2.zero;
-                Player2Input = Vector2.zero;
+                var moveAction = player2Input.actions.FindAction("Move");
+                if (moveAction != null)
+                    Player2Input = moveAction.ReadValue<Vector2>();
             }
         }
     }

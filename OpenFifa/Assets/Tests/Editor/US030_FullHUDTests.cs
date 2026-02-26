@@ -86,7 +86,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void MinimapLogic_ClampsToBounds()
+        public void MinimapLogic_OutOfBoundsInput_ClampsToBounds()
         {
             var logic = new MinimapLogic(50f, 30f, 200f, 120f);
             float mx, my;

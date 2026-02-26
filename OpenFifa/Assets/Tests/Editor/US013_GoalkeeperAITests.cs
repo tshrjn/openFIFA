@@ -8,19 +8,19 @@ namespace OpenFifa.Tests.Editor
     public class US013_GoalkeeperAITests
     {
         [Test]
-        public void GoalkeeperState_HasPositioning()
+        public void GoalkeeperState_EnumValues_IncludesPositioning()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(GoalkeeperState), GoalkeeperState.Positioning));
         }
 
         [Test]
-        public void GoalkeeperState_HasDiving()
+        public void GoalkeeperState_EnumValues_IncludesDiving()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(GoalkeeperState), GoalkeeperState.Diving));
         }
 
         [Test]
-        public void GoalkeeperState_HasRecovering()
+        public void GoalkeeperState_EnumValues_IncludesRecovering()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(GoalkeeperState), GoalkeeperState.Recovering));
         }

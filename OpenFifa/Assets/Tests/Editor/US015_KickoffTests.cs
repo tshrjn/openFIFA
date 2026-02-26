@@ -8,19 +8,19 @@ namespace OpenFifa.Tests.Editor
     public class US015_KickoffTests
     {
         [Test]
-        public void KickoffState_HasSettingUp()
+        public void KickoffState_EnumValues_IncludesSettingUp()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(KickoffState), KickoffState.SettingUp));
         }
 
         [Test]
-        public void KickoffState_HasWaitingForKick()
+        public void KickoffState_EnumValues_IncludesWaitingForKick()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(KickoffState), KickoffState.WaitingForKick));
         }
 
         [Test]
-        public void KickoffState_HasComplete()
+        public void KickoffState_EnumValues_IncludesComplete()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(KickoffState), KickoffState.Complete));
         }

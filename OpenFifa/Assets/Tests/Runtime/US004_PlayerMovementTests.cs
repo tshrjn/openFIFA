@@ -241,7 +241,7 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Player_CannotExceedBoundaries()
+        public IEnumerator Player_MovingTowardBoundary_CannotExceedBoundaries()
         {
             yield return new WaitForFixedUpdate();
 

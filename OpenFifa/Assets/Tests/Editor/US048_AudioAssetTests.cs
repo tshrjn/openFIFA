@@ -89,7 +89,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void KickVariationSelector_NoConsecutiveRepeats()
+        public void KickVariationSelector_MultipleGets_NoConsecutiveRepeats()
         {
             var selector = new KickVariationSelector(3);
             // After enough iterations, at least some should differ from previous

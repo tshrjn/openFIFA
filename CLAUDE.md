@@ -2,13 +2,13 @@
 
 ## Project Overview
 
-OpenFifa is a 5v5 AAA arcade-style soccer game for macOS & iPad, built with Unity 6 LTS + C# + URP. This is a premium-quality game targeting macOS desktops (primary) and iPad (secondary). Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
+OpenFifa is a 5v5 AAA arcade-style soccer game for macOS, built with Unity 6 LTS + C# + URP. This is a premium-quality game targeting macOS desktops with FIFA-style keyboard/mouse and Xbox-like gamepad controls. Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
 
 ## Tech Stack
 
 - **Engine**: Unity 6 LTS (2022.3+) with Universal Render Pipeline (URP)
 - **Language**: C#
-- **Target**: macOS 14+ Sonoma (primary), iPadOS 17+ (secondary)
+- **Target**: macOS 14+ Sonoma
 - **Testing**: NUnit 3 (Unity Test Framework) — EditMode + PlayMode
 - **Camera**: Cinemachine
 - **Input**: Unity Input System
@@ -122,8 +122,8 @@ unity -runTests -batchmode -projectPath ./OpenFifa -testPlatform PlayMode -testR
 # Build verification (macOS)
 unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget StandaloneOSX
 
-# Build verification (iPad)
-unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget iOS
+# Build verification (macOS only — iPad deferred)
+# unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget iOS
 ```
 
 ## Quality Gates

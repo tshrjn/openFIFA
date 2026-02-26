@@ -56,7 +56,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void SoundEventType_HasAllExpectedValues()
+        public void SoundEventType_EnumValues_HasAllExpectedValues()
         {
             Assert.IsTrue(System.Enum.IsDefined(typeof(SoundEventType), SoundEventType.None));
             Assert.IsTrue(System.Enum.IsDefined(typeof(SoundEventType), SoundEventType.Whistle));

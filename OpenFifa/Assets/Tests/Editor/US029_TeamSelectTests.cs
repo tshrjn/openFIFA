@@ -54,7 +54,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void TeamDataDefaults_HasNameAndColors()
+        public void TeamDataDefaults_WhenCreated_HasNameAndColors()
         {
             var data = new TeamDataEntry("Lions", 0f, 0f, 1f, 1f, 1f, 0f);
             Assert.AreEqual("Lions", data.Name);

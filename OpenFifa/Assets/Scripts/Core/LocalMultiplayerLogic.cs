@@ -3,8 +3,9 @@ using System.Collections.Generic;
 namespace OpenFifa.Core
 {
     /// <summary>
-    /// Configuration for local multiplayer on a single device.
+    /// Configuration for local multiplayer.
     /// Two human players, each controlling one team, with AI filling remaining slots.
+    /// Player 1 uses keyboard/mouse, Player 2 uses gamepad (or both on gamepads).
     /// </summary>
     public class LocalMultiplayerConfig
     {
@@ -21,126 +22,101 @@ namespace OpenFifa.Core
     }
 
     /// <summary>
-    /// Determines which player zone a touch position belongs to.
-    /// Left half = Player 1, Right half = Player 2.
+    /// Assigns control schemes to players for local multiplayer.
+    /// Player 1 = keyboard/mouse (or gamepad index 0).
+    /// Player 2 = gamepad (index 0 or 1 depending on Player 1's choice).
     /// </summary>
-    public class SplitTouchZoneLogic
+    public class ControlSchemeAssigner
     {
-        private readonly int _screenWidth;
-        private readonly int _screenHeight;
-        private readonly int _midX;
+        private readonly Dictionary<int, ControlScheme> _playerSchemes;
 
-        public SplitTouchZoneLogic(int screenWidth, int screenHeight)
+        public ControlSchemeAssigner()
         {
-            _screenWidth = screenWidth;
-            _screenHeight = screenHeight;
-            _midX = screenWidth / 2;
+            _playerSchemes = new Dictionary<int, ControlScheme>
+            {
+                { 0, ControlScheme.KeyboardMouse },
+                { 1, ControlScheme.Gamepad }
+            };
         }
 
-        /// <summary>Returns true if the touch position is in Player 1's zone (left half).</summary>
-        public bool IsPlayer1Zone(float x, float y)
+        /// <summary>
+        /// Override control scheme for a player.
+        /// Allows both players on gamepads if desired.
+        /// </summary>
+        public void SetScheme(int playerIndex, ControlScheme scheme)
         {
-            return x < _midX;
+            _playerSchemes[playerIndex] = scheme;
         }
 
-        /// <summary>Returns true if the touch position is in Player 2's zone (right half).</summary>
-        public bool IsPlayer2Zone(float x, float y)
+        /// <summary>Returns the control scheme for the given player index.</summary>
+        public ControlScheme GetScheme(int playerIndex)
         {
-            return x >= _midX;
+            if (_playerSchemes.TryGetValue(playerIndex, out ControlScheme scheme))
+                return scheme;
+            return ControlScheme.Gamepad;
         }
 
-        /// <summary>Returns player index (0 or 1) for the given touch position.</summary>
-        public int GetPlayerForPosition(float x, float y)
+        /// <summary>Returns true if the two players have different control schemes (no conflict).</summary>
+        public bool AreSchemesSeparate()
         {
-            return x < _midX ? 0 : 1;
+            return _playerSchemes.ContainsKey(0) && _playerSchemes.ContainsKey(1)
+                && _playerSchemes[0] != _playerSchemes[1];
         }
     }
 
     /// <summary>
-    /// Routes touch inputs to the correct player based on finger ID and zone.
-    /// Tracks active touches to prevent cross-talk between players.
+    /// Routes controller inputs to the correct player based on device assignment.
+    /// Tracks which input device is assigned to which player.
     /// </summary>
-    public class InputRouter
+    public class DeviceInputRouter
     {
-        private readonly SplitTouchZoneLogic _zoneLogic;
-        private readonly Dictionary<int, int> _fingerToPlayer;
+        private readonly Dictionary<int, int> _deviceToPlayer;
 
-        public InputRouter(SplitTouchZoneLogic zoneLogic)
+        public DeviceInputRouter()
         {
-            _zoneLogic = zoneLogic;
-            _fingerToPlayer = new Dictionary<int, int>();
+            _deviceToPlayer = new Dictionary<int, int>();
         }
 
         /// <summary>
-        /// Registers a touch with the given finger ID at the given position.
-        /// Assigns it to the correct player based on zone.
+        /// Assigns an input device to a player.
+        /// deviceId: unique device identifier.
+        /// playerIndex: 0 or 1.
         /// </summary>
-        public void ProcessTouch(int fingerId, float x, float y)
+        public void AssignDevice(int deviceId, int playerIndex)
         {
-            int player = _zoneLogic.GetPlayerForPosition(x, y);
-            _fingerToPlayer[fingerId] = player;
+            _deviceToPlayer[deviceId] = playerIndex;
         }
 
         /// <summary>
-        /// Releases a touch by finger ID.
+        /// Removes a device assignment.
         /// </summary>
-        public void ReleaseTouch(int fingerId)
+        public void UnassignDevice(int deviceId)
         {
-            _fingerToPlayer.Remove(fingerId);
+            _deviceToPlayer.Remove(deviceId);
         }
 
         /// <summary>
-        /// Returns the owning player index for a finger ID.
-        /// Returns -1 if the finger is not tracked.
+        /// Returns the owning player index for a device ID.
+        /// Returns -1 if the device is not assigned.
         /// </summary>
-        public int GetOwningPlayer(int fingerId)
+        public int GetOwningPlayer(int deviceId)
         {
-            if (_fingerToPlayer.TryGetValue(fingerId, out int player))
+            if (_deviceToPlayer.TryGetValue(deviceId, out int player))
                 return player;
             return -1;
         }
 
         /// <summary>
-        /// Clears all tracked touches.
+        /// Clears all device assignments.
         /// </summary>
         public void ClearAll()
         {
-            _fingerToPlayer.Clear();
-        }
-    }
-
-    /// <summary>
-    /// Layout logic for action button placement in local multiplayer mode.
-    /// P1 buttons center-left, P2 buttons center-right.
-    /// </summary>
-    public class ActionButtonLayout
-    {
-        private readonly int _screenWidth;
-        private readonly int _screenHeight;
-
-        public ActionButtonLayout(int screenWidth, int screenHeight)
-        {
-            _screenWidth = screenWidth;
-            _screenHeight = screenHeight;
+            _deviceToPlayer.Clear();
         }
 
         /// <summary>
-        /// Returns the horizontal center X position for action buttons of the given player.
-        /// Player 0 = center-left (25% of width), Player 1 = center-right (75% of width).
+        /// Returns the number of assigned devices.
         /// </summary>
-        public float GetActionButtonCenterX(int playerIndex)
-        {
-            float quarter = _screenWidth / 4f;
-            return playerIndex == 0 ? quarter : quarter * 3f;
-        }
-
-        /// <summary>
-        /// Returns the vertical center Y position for action buttons (same for both players).
-        /// Positioned in the lower third of the screen.
-        /// </summary>
-        public float GetActionButtonCenterY()
-        {
-            return _screenHeight * 0.25f;
-        }
+        public int AssignedDeviceCount => _deviceToPlayer.Count;
     }
 }

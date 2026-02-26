@@ -110,7 +110,7 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void AnimationStateLogic_ActionOverridesLocomotion()
+        public void AnimationStateLogic_DuringAction_ActionOverridesLocomotion()
         {
             var logic = new AnimationStateLogic();
             logic.UpdateLocomotion(5f, false);

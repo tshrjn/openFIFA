@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace OpenFifa.Core
 {
@@ -65,86 +66,97 @@ namespace OpenFifa.Core
     }
 
     /// <summary>
-    /// Pure C# virtual joystick logic.
-    /// Tracks pointer down position and calculates normalized output.
+    /// Control scheme identifier for input routing.
     /// </summary>
-    public class VirtualJoystickLogic
+    public enum ControlScheme
     {
-        private readonly float _outerRadius;
-        private readonly float _deadZone;
+        KeyboardMouse = 0,
+        Gamepad = 1
+    }
 
-        private float _centerX;
-        private float _centerY;
-        private float _outputX;
-        private float _outputY;
-        private bool _isActive;
+    /// <summary>
+    /// Pure C# FIFA-style input mapping configuration.
+    /// Maps physical inputs to game actions for both Keyboard/Mouse and Gamepad control schemes.
+    /// No Unity dependency — fully testable in EditMode.
+    /// </summary>
+    public class InputMappingLogic
+    {
+        private readonly Dictionary<string, ActionType> _keyboardMapping;
+        private readonly Dictionary<string, ActionType> _gamepadMapping;
+        private readonly Dictionary<string, string> _movementMapping;
 
-        /// <summary>Current X output (-1 to 1).</summary>
-        public float OutputX => _outputX;
-
-        /// <summary>Current Y output (-1 to 1).</summary>
-        public float OutputY => _outputY;
-
-        /// <summary>Whether the joystick is currently being touched.</summary>
-        public bool IsActive => _isActive;
-
-        public VirtualJoystickLogic(float outerRadius, float deadZone)
+        public InputMappingLogic()
         {
-            _outerRadius = outerRadius;
-            _deadZone = deadZone;
-        }
-
-        /// <summary>Handle pointer down at screen position.</summary>
-        public void OnPointerDown(float screenX, float screenY)
-        {
-            _centerX = screenX;
-            _centerY = screenY;
-            _isActive = true;
-            _outputX = 0f;
-            _outputY = 0f;
-        }
-
-        /// <summary>Handle drag to screen position.</summary>
-        public void OnDrag(float screenX, float screenY)
-        {
-            if (!_isActive) return;
-
-            float dx = screenX - _centerX;
-            float dy = screenY - _centerY;
-
-            // Normalize by outer radius
-            float normalizedX = dx / _outerRadius;
-            float normalizedY = dy / _outerRadius;
-
-            // Clamp to unit circle
-            float magnitude = (float)Math.Sqrt(normalizedX * normalizedX + normalizedY * normalizedY);
-            if (magnitude > 1f)
+            // FIFA-style keyboard mapping
+            _keyboardMapping = new Dictionary<string, ActionType>
             {
-                normalizedX /= magnitude;
-                normalizedY /= magnitude;
-                magnitude = 1f;
-            }
+                { "space", ActionType.Pass },           // Space = Pass (A button equivalent)
+                { "w", ActionType.ThroughBall },        // W = Through ball (Y button equivalent)
+                { "d", ActionType.Shoot },              // D = Shoot (B button equivalent)
+                { "s", ActionType.Tackle },             // S = Tackle/Slide (X button equivalent)
+                { "leftshift", ActionType.Sprint },     // Left Shift = Sprint (RT equivalent)
+                { "q", ActionType.Switch },             // Q = Switch player (LB equivalent)
+                { "e", ActionType.LobPass },            // E = Lob pass (RB equivalent)
+                { "mouse0", ActionType.Shoot },         // Left Click = Shoot
+            };
 
-            // Apply dead zone
-            if (magnitude < _deadZone)
+            // FIFA-style gamepad mapping (Xbox layout)
+            _gamepadMapping = new Dictionary<string, ActionType>
             {
-                _outputX = 0f;
-                _outputY = 0f;
-                return;
-            }
+                { "buttonsouth", ActionType.Pass },         // A button = Pass
+                { "buttonnorth", ActionType.ThroughBall },  // Y button = Through ball
+                { "buttoneast", ActionType.Shoot },         // B button = Shoot
+                { "buttonwest", ActionType.Tackle },        // X button = Tackle/Slide
+                { "righttrigger", ActionType.Sprint },      // RT = Sprint
+                { "leftshoulder", ActionType.Switch },      // LB = Switch player
+                { "rightshoulder", ActionType.LobPass },    // RB = Lob pass
+            };
 
-            float remapped = (magnitude - _deadZone) / (1f - _deadZone);
-            float scale = remapped / magnitude;
-            _outputX = normalizedX * scale;
-            _outputY = normalizedY * scale;
+            // Movement input names for keyboard (WASD already handled by Unity Input System)
+            _movementMapping = new Dictionary<string, string>
+            {
+                { "keyboard", "wasd" },     // WASD for keyboard movement
+                { "gamepad", "leftstick" },  // Left stick for gamepad movement
+            };
         }
 
-        /// <summary>Handle pointer up.</summary>
-        public void OnPointerUp()
+        /// <summary>
+        /// Get the action type for a keyboard key name.
+        /// </summary>
+        public ActionType GetKeyboardAction(string keyName)
         {
-            _isActive = false;
-            _outputX = 0f;
-            _outputY = 0f;
+            if (_keyboardMapping.TryGetValue(keyName.ToLowerInvariant(), out ActionType action))
+                return action;
+            return ActionType.None;
         }
+
+        /// <summary>
+        /// Get the action type for a gamepad button name.
+        /// </summary>
+        public ActionType GetGamepadAction(string buttonName)
+        {
+            if (_gamepadMapping.TryGetValue(buttonName.ToLowerInvariant(), out ActionType action))
+                return action;
+            return ActionType.None;
+        }
+
+        /// <summary>
+        /// Get the movement input source for a control scheme.
+        /// </summary>
+        public string GetMovementSource(ControlScheme scheme)
+        {
+            string key = scheme == ControlScheme.KeyboardMouse ? "keyboard" : "gamepad";
+            return _movementMapping.TryGetValue(key, out string source) ? source : "";
+        }
+
+        /// <summary>
+        /// Returns the number of keyboard action bindings.
+        /// </summary>
+        public int KeyboardBindingCount => _keyboardMapping.Count;
+
+        /// <summary>
+        /// Returns the number of gamepad action bindings.
+        /// </summary>
+        public int GamepadBindingCount => _gamepadMapping.Count;
     }
 }

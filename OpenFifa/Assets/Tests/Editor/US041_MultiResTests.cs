@@ -22,10 +22,10 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ResolutionConfig_iPad_MinTouchTarget44()
+        public void ResolutionConfig_MinUITarget44()
         {
             var config = new ResolutionConfig();
-            Assert.AreEqual(44, config.MinTouchTargetPoints);
+            Assert.AreEqual(44, config.MinUITargetPoints);
         }
 
         [Test]
