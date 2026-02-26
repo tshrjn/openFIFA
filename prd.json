@@ -1159,7 +1159,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 50,
-      "passes": false,
+      "passes": true,
       "notes": "Create LocalMultiplayerManager : MonoBehaviour. Split screen into left/right halves. Track Touch.fingerId to separate inputs. Player 1: touches with position.x < Screen.width/2. Player 2: touches with position.x >= Screen.width/2. Each player gets own VirtualJoystick instance with zone restriction. Use EnhancedTouch API from Input System: EnhancedTouchSupport.Enable(), Touch.activeTouches. Create two PlayerInput components or two instances of input provider. Action buttons: duplicate ActionButtons prefab for each side. Ensure InputSystem multitouch is enabled.",
       "dependsOn": ["US-036", "US-037"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-050'"],

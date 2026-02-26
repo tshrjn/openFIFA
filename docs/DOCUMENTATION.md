@@ -26,6 +26,17 @@
 
 ## Log
 
+## 2026-02-27 Session — US-050: Local multiplayer on same device
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/LocalMultiplayerLogic.cs — SplitTouchZoneLogic, InputRouter, ActionButtonLayout, LocalMultiplayerConfig
+- OpenFifa/Assets/Scripts/Gameplay/LocalMultiplayerManager.cs — EnhancedTouch multitouch routing
+- OpenFifa/Assets/Tests/Editor/US050_LocalMultiplayerTests.cs — 14 EditMode tests
+
+**Known Issues**: None
+**Next**: US-035 — E2E user journey test
+
 ## 2026-02-27 Session — US-049: Visual regression baseline screenshots
 
 **Status**: Completed
