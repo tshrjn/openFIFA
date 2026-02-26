@@ -471,7 +471,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 20,
-      "passes": false,
+      "passes": true,
       "notes": "Add AnimationEvent to kick AnimationClip at the contact frame (~0.15s into clip for responsiveness). Event calls PlayerKicker.OnKickContact(). PlayerKicker : MonoBehaviour stores pending kick data (direction, force, type). On contact: ball.GetComponent<Rigidbody>().AddForce(direction * force, ForceMode.Impulse). BallOwnership.Release() called before force. Pass force ~8, Shoot force ~15. For <100ms feel, place AnimationEvent early in the clip or skip to contact frame.",
       "dependsOn": ["US-019", "US-003"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-020'"],

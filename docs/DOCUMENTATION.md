@@ -26,6 +26,27 @@
 
 ## Log
 
+## 2026-02-27 Session — US-020: Ball kick animation synchronized with force application
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/KickConfigData.cs — Pure C# kick config, KickType enum, KickLogic, KickResult
+- OpenFifa/Assets/Scripts/Gameplay/PlayerKicker.cs — Kick execution MonoBehaviour with animation sync
+- OpenFifa/Assets/Tests/Editor/US020_KickAnimationTests.cs — 10 EditMode tests
+
+**Decisions**:
+- KickLogic stores pending kick data, executed at contact frame via ExecuteKick()
+- Contact frame time 80ms (under 100ms requirement for responsive feel)
+- Pass force 8, Shoot force 15 (configurable via serialized fields)
+- OnKickContact() callable by AnimationEvent at contact frame
+- Ball ownership released before force applied
+- Direction normalized from player's transform.forward
+- Pure C# sqrt implementation for direction normalization (no Mathf dependency in Core)
+
+**Known Issues**: None
+
+**Next**: US-021 — Goal celebration, US-022 — Ball trail
+
 ## 2026-02-27 Session — US-019: Player animation state machine with placeholder animations
 
 **Status**: Completed
