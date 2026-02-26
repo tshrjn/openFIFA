@@ -766,7 +766,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 33,
-      "passes": false,
+      "passes": true,
       "notes": "Create SettingsManager : MonoBehaviour. Sliders: Slider.onValueChanged.AddListener(OnSFXVolumeChanged). Map 0-100 to AudioMixer dB: Mathf.Log10(value / 100f) * 20f (handle 0 as -80dB). PlayerPrefs.SetFloat('SFXVolume', value), PlayerPrefs.SetFloat('MusicVolume', value), PlayerPrefs.SetInt('Difficulty', index). Load in Start: slider.value = PlayerPrefs.GetFloat('SFXVolume', 75f). Difficulty enum { Easy, Medium, Hard } mapped to AI reaction time multipliers.",
       "dependsOn": ["US-028"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-033'"],

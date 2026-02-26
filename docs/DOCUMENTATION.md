@@ -26,6 +26,24 @@
 
 ## Log
 
+## 2026-02-27 Session — US-033: Settings screen with volume and difficulty controls
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/SettingsLogic.cs — Pure C# settings with volume clamping and dB conversion
+- OpenFifa/Assets/Scripts/UI/SettingsManager.cs — Settings MonoBehaviour with PlayerPrefs persistence
+- OpenFifa/Assets/Tests/Editor/US033_SettingsTests.cs — 9 EditMode tests
+
+**Decisions**:
+- Default volume 75, difficulty Medium
+- VolumeToDb: Log10(vol/100)*20, 0 maps to -80dB
+- PlayerPrefs keys: SFXVolume, MusicVolume, Difficulty
+- Slider onValueChanged immediately applies AudioMixer + saves
+
+**Known Issues**: None
+
+**Next**: US-034 — Scene transitions
+
 ## 2026-02-27 Session — US-032: Post-match results screen
 
 **Status**: Completed
