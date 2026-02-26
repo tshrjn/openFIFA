@@ -354,7 +354,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 15,
-      "passes": false,
+      "passes": true,
       "notes": "Create KickoffSequence : MonoBehaviour using a coroutine. Steps: 1) Set ball kinematic at center, 2) Move all players to FormationManager.GetWorldPositions(), 3) yield return new WaitForSeconds(1f), 4) Set ball non-kinematic, 5) Enable player input. Track which team kicks off with a bool that toggles on each goal. Use MatchStateMachine.TransitionTo(FirstHalf) at end. PlayerController.enabled = false during setup to block input.",
       "dependsOn": ["US-003", "US-007"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-015'"],

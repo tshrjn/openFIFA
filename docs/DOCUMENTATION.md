@@ -26,6 +26,25 @@
 
 ## Log
 
+## 2026-02-27 Session — US-015: Kickoff sequence with ball placement and player reset
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/KickoffState.cs — Kickoff state enum
+- OpenFifa/Assets/Scripts/Core/KickoffLogic.cs — Pure C# kickoff logic
+- OpenFifa/Assets/Scripts/Gameplay/KickoffSequence.cs — Kickoff MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US015_KickoffTests.cs — 8 EditMode tests
+
+**Decisions**:
+- KickoffLogic tracks which team kicks off (alternates on each goal)
+- Ball set to kinematic during setup, dynamic when play begins
+- Configurable setup delay (default 1s)
+- KickoffSequence uses coroutine for sequenced setup
+
+**Known Issues**: None
+
+**Next**: US-014 — Match state machine (now unblocked), US-016 — Player switching
+
 ## 2026-02-27 Session — US-013: Goalkeeper AI with positioning and diving
 
 **Status**: Completed
