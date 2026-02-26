@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-011: AI passing to detect open teammate and pass
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PositionData.cs — Lightweight position struct
+- OpenFifa/Assets/Scripts/Core/PassEvaluator.cs — Pure C# pass evaluation logic
+- OpenFifa/Assets/Scripts/AI/AIPassingSystem.cs — AI passing MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US011_AIPassingTests.cs — 7 EditMode tests
+
+**Decisions**:
+- PassEvaluator is pure C# for openness calculation and force scaling
+- Openness = distance to nearest opponent (higher = more open)
+- Pass force scales with distance, clamped to [4, 20] range
+- AIPassingSystem wraps PassEvaluator with Unity-specific ball force application
+- LastSelectedTargetIndex exposed for test verification
+
+**Known Issues**: None
+
+**Next**: US-012 — AI shooting toward goal
+
 ## 2026-02-27 Session — US-010: AI player finite state machine
 
 **Status**: Completed

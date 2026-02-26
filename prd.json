@@ -262,7 +262,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 11,
-      "passes": false,
+      "passes": true,
       "notes": "Create AIPassingSystem : MonoBehaviour or integrate into AIController. Openness score = min distance from teammate to any opponent. Use Physics.Linecast to check for obstructions. Pass force: Rigidbody.AddForce((targetPos - ballPos).normalized * passForce, ForceMode.Impulse). passForce ~8-12 based on distance. Evaluate pass options in a coroutine or on a timer (every 0.5s) to avoid per-frame cost. Use [SerializeField] float passForceMultiplier.",
       "dependsOn": ["US-010", "US-003"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-011'"],
