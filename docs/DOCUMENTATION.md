@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-016: Player switching to nearest teammate
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/PlayerSwitchLogic.cs — Pure C# nearest player finding and switch logic
+- OpenFifa/Assets/Scripts/Gameplay/PlayerSwitcher.cs — Player switching MonoBehaviour with Input System
+- OpenFifa/Assets/Tests/Editor/US016_PlayerSwitchingTests.cs — 9 EditMode tests
+
+**Decisions**:
+- PlayerSwitchLogic pure C# for EditMode testability
+- Tie-breaking: lowest index wins (deterministic)
+- PerformSwitch excludes current player (always switches to a different one)
+- Visual indicator via child "ActiveIndicator" GameObject toggling
+- PlayerController enabled on active, AIController enabled on non-active
+- SwitchResult struct captures previous/new index and whether switch occurred
+
+**Known Issues**: None
+
+**Next**: US-018 — Ball ownership tracking, US-019 — Player animations
+
 ## 2026-02-27 Session — US-014: Match state machine with full flow and pause support
 
 **Status**: Completed

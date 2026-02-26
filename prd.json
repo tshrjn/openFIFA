@@ -377,7 +377,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 16,
-      "passes": false,
+      "passes": true,
       "notes": "Create PlayerSwitcher : MonoBehaviour. On input, iterate team players, find min distance to ball (Vector3.Distance), swap PlayerController.enabled and AIController.enabled. Visual indicator: child GameObject with a SpriteRenderer or Projector, enabled only on active player. Use the Input System callback: playerSwitchAction.performed += ctx => SwitchPlayer(). Tie-breaking: use lowest player index. Store List<PlayerIdentity> teamPlayers reference.",
       "dependsOn": ["US-004", "US-009"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-016'"],
