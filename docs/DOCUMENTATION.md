@@ -26,6 +26,26 @@
 
 ## Log
 
+## 2026-02-27 Session — US-013: Goalkeeper AI with positioning and diving
+
+**Status**: Completed
+**Changes**:
+- OpenFifa/Assets/Scripts/Core/GoalkeeperState.cs — Goalkeeper state enum
+- OpenFifa/Assets/Scripts/Core/GoalkeeperLogic.cs — Pure C# GK logic
+- OpenFifa/Assets/Scripts/AI/GoalkeeperAI.cs — Goalkeeper MonoBehaviour
+- OpenFifa/Assets/Tests/Editor/US013_GoalkeeperAITests.cs — 8 EditMode tests
+
+**Decisions**:
+- GoalkeeperLogic pure C#: lateral positioning, shot detection, ball arrival prediction
+- Lateral position: lerp 60% toward ball, clamped to goal area width
+- Shot detection: dot product > 0.5 with speed above threshold
+- Dive: rapid movement to predicted ball arrival point
+- Recovery: slow return to center over configurable time
+
+**Known Issues**: None
+
+**Next**: US-014 — Match state machine, or US-015 — Kickoff sequence
+
 ## 2026-02-27 Session — US-012: AI shooting toward goal
 
 **Status**: Completed

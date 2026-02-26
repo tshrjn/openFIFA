@@ -308,7 +308,7 @@
         "Unity build completes with zero errors"
       ],
       "priority": 13,
-      "passes": false,
+      "passes": true,
       "notes": "Create GoalkeeperAI : MonoBehaviour extending or parallel to AIController. States: Positioning, Diving, Recovering. Positioning: Mathf.Lerp between goal center and ball X, clamped to goal area width. Shot detection: Vector3.Dot(ballVelocity.normalized, directionToGoal) > 0.7 and ball speed > threshold. Dive: Rigidbody.MovePosition toward predicted ball intercept point. Use Time.fixedDeltaTime * diveSpeed for smooth dive. Recovery: lerp back to center over 2s.",
       "dependsOn": ["US-010", "US-005"],
       "testCommands": ["unity -runTests -batchmode -nographics -testCategory 'US-013'"],
