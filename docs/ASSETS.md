@@ -6,7 +6,7 @@
 
 ## Art Style
 
-**Stylized low-poly** — clean, colorful, readable at broadcast camera distance. Not photorealistic.
+**AAA Photorealistic** — high-fidelity characters, detailed stadiums, broadcast-camera clarity. Targeting EA FC / FIFA / PES visual standards.
 
 ### Placeholder Convention (Phase 1-5)
 - Players: Unity Capsule (height 1.8m, radius 0.3m) with team-colored materials
@@ -15,16 +15,29 @@
 - Goals: Unity Cubes arranged as posts (2.44m high, 5m wide) with white material
 - Stadium: None — Poly Haven HDRI skybox only
 
-### Target Art (Phase 6)
-- Players: Low-poly humanoids (~5K triangles), distinct team jerseys
-- Ball: Soccer ball model with PBR (~1K triangles)
-- Pitch: Textured with mowed-band grass, center circle, penalty areas
-- Goals: 3D posts with net mesh + physics colliders
-- Stadium: Basic stands, floodlights, sideline geometry
+### Target Art (Phase 6 — AAA Quality)
+- Players: High-fidelity humanoids (30K tri LOD0, 5K tri LOD1, 1K tri LOD2), detailed team jerseys with numbers and crests
+- Ball: High-detail soccer ball model (5K triangles) with 4K PBR textures
+- Pitch: 4K textured with mowed-band grass, center circle, penalty areas
+- Goals: 3D posts with net mesh + physics colliders + realistic materials
+- Stadium: Full stadium with 8 crowd sections, floodlight towers, player tunnels, advertising boards
 
 ---
 
-## Free Asset Sources (Ranked by Priority)
+## Professional Asset Sources (AAA Tier)
+
+| Source | Type | Notes |
+|--------|------|-------|
+| **TurboSquid** | 3D Models | High-quality licensed character and stadium models. Search for "soccer player" or "football stadium". |
+| **CGTrader** | 3D Models | Professional marketplace with game-ready assets. Filter by polygon count and format. |
+| **Reallusion Character Creator** | Characters | AAA-quality character creation pipeline. Export to Unity with full rig and morph targets. |
+| **Rokoko Studio** | Motion Capture | Professional mocap suits and studio. Export BVH/FBX animations. Sports motion packs available. |
+| **iClone** | Characters + Animation | Real-time character animation. Pairs with Character Creator for full pipeline. |
+| **Daz3D** | Characters | Detailed humanoid base meshes. Export to Unity via Daz to Unity Bridge. |
+
+---
+
+## Placeholder / Open Source Tier (Ranked by Priority)
 
 ### Characters
 
@@ -142,36 +155,57 @@ When replacing placeholders with real assets:
 4. **Swap references** in scenes and scripts
 5. **Run ALL existing tests** — no regressions
 6. **Capture new visual regression baselines** if scene appearance changed
-7. **Commit with clear message**: `art(US-044): replace capsule players with Quaternius models`
+7. **Commit with clear message**: `art(US-044): replace capsule players with AAA character models`
 
-### Asset Naming Convention
+### Asset Naming Convention (AAA Pipeline)
 
 ```
 Assets/
 ├── Models/
 │   ├── Characters/
-│   │   ├── Player_Quaternius.fbx
-│   │   └── Goalkeeper_Quaternius.fbx
+│   │   ├── Player_LOD0.fbx          # 30K tri — close-up quality
+│   │   ├── Player_LOD1.fbx          # 5K tri — mid-range
+│   │   ├── Player_LOD2.fbx          # 1K tri — far distance
+│   │   └── Goalkeeper_LOD0.fbx
 │   ├── Ball/
-│   │   └── SoccerBall_Free3D.fbx
+│   │   └── SoccerBall_HQ.fbx        # 5K tri with panel detail
 │   └── Environment/
 │       ├── GoalPost.fbx
-│       └── Stadium_RLAB.fbx
+│       ├── Stadium_Full.fbx
+│       ├── Stadium_Stands_LOD0.fbx
+│       ├── Stadium_Stands_LOD1.fbx
+│       ├── Floodlight_Tower.fbx
+│       └── CrowdSection.fbx
 ├── Animations/
-│   ├── Mixamo/
+│   ├── Mocap/
 │   │   ├── SoccerIdle.fbx
 │   │   ├── SoccerPass.fbx
-│   │   └── SoccerShoot.fbx
-│   └── Extracted/          # Reusable AnimationClip assets
+│   │   ├── SoccerShoot.fbx
+│   │   ├── Dribble.fbx
+│   │   ├── Header.fbx
+│   │   ├── BicycleKick.fbx
+│   │   └── Celebration_01.fbx
+│   └── Extracted/                    # Reusable AnimationClip assets
 ├── Materials/
 │   ├── TeamA_Jersey.mat
 │   ├── TeamB_Jersey.mat
 │   ├── Pitch_Grass.mat
-│   └── Ball_PBR.mat
+│   ├── Ball_PBR.mat
+│   └── Stadium_Concrete.mat
 ├── Textures/
 │   ├── Pitch/
+│   │   ├── Grass_Albedo_4K.png
+│   │   ├── Grass_Normal_4K.png
+│   │   └── Grass_Roughness_4K.png
 │   ├── Characters/
+│   │   ├── Player_Albedo_2K.png
+│   │   ├── Player_Normal_2K.png
+│   │   ├── Jersey_NumberAtlas.png
+│   │   └── TeamCrest_Atlas.png
 │   └── Ball/
+│       ├── Ball_Albedo_4K.png
+│       ├── Ball_Normal_4K.png
+│       └── Ball_Roughness_4K.png
 └── Audio/
     ├── SFX/
     │   ├── Whistle_01.wav

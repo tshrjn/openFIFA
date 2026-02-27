@@ -13,7 +13,8 @@
 | 3. Game Feel | US-019 — US-027 | Animations, particles, SFX, celebrations, replays | All animations trigger correctly, audio plays |
 | 4. UI & Menus | US-028 — US-035 | Full menu flow, HUD, settings, transitions | E2E: menu → select → match → results → menu |
 | 5. Polish & Platform | US-036 — US-043 | Controls (keyboard/mouse + gamepad), controller rumble, performance, multi-res | 60fps on macOS, <200MB, zero GC |
-| 6. Asset Integration | US-044 — US-050 | Real models, Mixamo anims, stadium, audio, local MP | Visual baselines set, all asset swaps verified |
+| 6. Asset Integration | US-044 — US-050 | AAA models, mocap anims, stadium, audio, local MP | Visual baselines set, all asset swaps verified |
+| 7. AAA Polish | US-051 — US-056 | LOD system, dynamic lighting, crowd animation, jerseys, weather, broadcast camera | AAA visual fidelity at 60fps |
 
 ---
 
@@ -155,15 +156,15 @@ unity -runTests -batchmode -testCategory "Performance" -testResults ./test-resul
 
 ---
 
-## Phase 6: Asset Integration & Advanced
+## Phase 6: Asset Integration & Advanced (AAA Quality)
 
-**Goal**: Replace placeholders with real assets. Establish visual baselines. Add local multiplayer.
+**Goal**: Replace placeholders with AAA-quality assets. Establish visual baselines. Add local multiplayer.
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-044 | Import Quaternius characters + team colors | Pending |
-| US-045 | Mixamo soccer animations | Pending |
-| US-046 | Stadium environment | Pending |
+| US-044 | Import AAA character models with team uniforms | Pending |
+| US-045 | Professional motion-capture animation integration | Pending |
+| US-046 | AAA stadium environment with crowd, lighting, and detail | Pending |
 | US-047 | Soccer ball model + PBR | Pending |
 | US-048 | Audio integration (real sounds) | Pending |
 | US-049 | Visual regression baselines | Pending |
@@ -176,6 +177,36 @@ unity -runTests -batchmode -testCategory "VisualRegression" -testResults ./test-
 
 # Asset integrity (no missing scripts, broken shaders, missing clips)
 unity -runTests -batchmode -nographics -testCategory "AssetIntegrity" -testResults ./test-results/p6-assets.xml
+
+# Full suite (everything still works)
+unity -runTests -batchmode -nographics -testPlatform EditMode
+unity -runTests -batchmode -testPlatform PlayMode
+```
+
+---
+
+## Phase 7: AAA Polish
+
+**Goal**: Achieve AAA visual fidelity matching EA FC / FIFA / PES. LOD system for performance, dynamic lighting, crowd reactions, jersey customization, weather effects, and broadcast-quality camera replays.
+
+| Story | Title | Status |
+|-------|-------|--------|
+| US-051 | LOD system for characters and stadium | Pending |
+| US-052 | Dynamic stadium lighting with floodlights | Pending |
+| US-053 | Crowd animation system reacting to game events | Pending |
+| US-054 | Jersey customization with numbers, names, and crests | Pending |
+| US-055 | Advanced particle systems — weather and pitch effects | Pending |
+| US-056 | Broadcast camera system with TV-style replays | Pending |
+
+**Checkpoint validation**:
+```bash
+# AAA quality tests
+unity -runTests -batchmode -nographics -testCategory "US-051" -testResults ./test-results/p7-lod.xml
+unity -runTests -batchmode -nographics -testCategory "US-052" -testResults ./test-results/p7-lighting.xml
+unity -runTests -batchmode -nographics -testCategory "US-053" -testResults ./test-results/p7-crowd.xml
+unity -runTests -batchmode -nographics -testCategory "US-054" -testResults ./test-results/p7-jersey.xml
+unity -runTests -batchmode -nographics -testCategory "US-055" -testResults ./test-results/p7-weather.xml
+unity -runTests -batchmode -nographics -testCategory "US-056" -testResults ./test-results/p7-camera.xml
 
 # Full suite (everything still works)
 unity -runTests -batchmode -nographics -testPlatform EditMode

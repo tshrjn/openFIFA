@@ -45,7 +45,19 @@ namespace OpenFifa.Core
         public bool HasStandsGeometry = true;
 
         /// <summary>Number of stand sections around the pitch perimeter.</summary>
-        public int StandsSections = 4;
+        public int StandsSections = 8;
+
+        /// <summary>Whether floodlight towers are present in the stadium.</summary>
+        public bool HasFloodlights = true;
+
+        /// <summary>Whether animated crowd geometry is present in the stands.</summary>
+        public bool HasCrowdGeometry = true;
+
+        /// <summary>Whether advertising boards line the pitch perimeter.</summary>
+        public bool HasAdvertisingBoards = true;
+
+        /// <summary>Whether player tunnels are present at the stadium entrance.</summary>
+        public bool HasTunnels = true;
 
         // --- Screenshots ---
         /// <summary>Baseline screenshot width for visual regression.</summary>

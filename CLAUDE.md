@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-OpenFifa is a 5v5 AAA arcade-style soccer game for macOS, built with Unity 6 LTS + C# + URP. This is a premium-quality game targeting macOS desktops with FIFA-style keyboard/mouse and Xbox-like gamepad controls. Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
+OpenFifa is a 5v5 AAA arcade-style soccer game for macOS, built with Unity 6 LTS + C# + URP. This is a premium-quality game with AAA-quality art targeting EA FC / FIFA / PES visual standards, designed for macOS desktops with FIFA-style keyboard/mouse and Xbox-like gamepad controls. Development follows the long-horizon task pattern: each Claude Code session picks up where the last left off, guided by persistent documentation and a machine-readable PRD.
 
 ## Tech Stack
 

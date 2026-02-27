@@ -72,18 +72,26 @@ The game is single-player vs AI for v1, with local multiplayer (keyboard + gamep
 - Goals: Unity Cube primitives arranged as posts + crossbar
 - Stadium: Poly Haven HDRI skybox only
 
-### Phase 6: Asset Integration
-- Players: Quaternius low-poly humanoids with team jerseys
-- Ball: 3D soccer ball model with PBR material
-- Pitch: Textured with mowed-band grass pattern
-- Goals: 3D goal posts with net mesh
-- Stadium: Basic stands geometry + HDRI lighting
+### Phase 6: Asset Integration (AAA-Quality Assets)
+- Players: Professional high-fidelity humanoids (30K tri LOD0) with detailed team jerseys, numbers, and crests
+- Ball: High-detail soccer ball model (5K tri) with 4K PBR textures
+- Pitch: 4K textured with mowed-band grass pattern, corner flags, penalty areas
+- Goals: 3D goal posts with net mesh and realistic materials
+- Stadium: Full stadium with 8 crowd sections, floodlights, tunnels, advertising boards
+
+### Phase 7: AAA Polish
+- LOD system for characters (LOD0 30K, LOD1 5K, LOD2 1K) and stadium geometry
+- Dynamic stadium lighting with floodlight towers and time-of-day presets
+- Crowd animation system reacting to game events (goals, near-misses, fouls)
+- Jersey customization with numbers, names, and team crests
+- Weather and pitch particle effects (rain, snow, grass spray)
+- Broadcast camera system with TV-style multi-angle replays
 
 ### Visual Principles
-- Clean, readable at a distance (important for broadcast camera)
+- Photorealistic quality with broadcast-camera clarity
 - Distinct team colors (no ambiguity)
-- Consistent low-poly stylized aesthetic
-- No photorealism — clarity over fidelity
+- AAA visual fidelity targeting EA FC / FIFA / PES standards
+- LOD system maintains 60fps with high-fidelity assets
 
 ---
 

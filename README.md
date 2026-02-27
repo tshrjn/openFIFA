@@ -173,40 +173,47 @@ See [`CLAUDE.md`](CLAUDE.md) for the complete coding guide.
 **We need artists!** OpenFifa currently uses placeholder assets (Unity primitives with solid colors). We're looking for contributors to help with:
 
 ### Characters
-- Low-poly humanoid soccer player models (male/female)
-- Team jersey textures (10+ teams with distinct colors)
-- Goalkeeper-specific model variant
+- High-fidelity humanoid character models (15-30K triangles per character)
+- Team jersey textures with player numbers, names, and team crests (10+ teams with distinct colors)
+- Goalkeeper-specific model variant with unique gear
+- LOD variants: LOD0 (30K tri), LOD1 (5K tri), LOD2 (1K tri)
 
 ### Animations
-- Soccer-specific: dribbling, ball control, headers, bicycle kicks
-- Celebrations: 5+ unique goal celebrations
-- Goalkeeper: punching, distributing, catching
+- Motion-capture quality: dribbling, first touch, ball control, headers, bicycle kicks
+- Celebrations: 5+ unique goal celebrations with cinematic flair
+- Goalkeeper: diving saves, punching, distributing, catching
+- Animation blending for smooth 60fps transitions
 
 ### Environment
-- Stadium models (stands, floodlights, tunnels)
-- Pitch details (grass texture with mowed bands, corner flags, nets)
-- Scoreboard and advertising boards
+- Full stadium models (8 crowd sections, floodlight towers, player tunnels, advertising boards)
+- Pitch details (4K grass texture with mowed bands, corner flags, nets)
+- Scoreboard, dugouts, and broadcast camera positions
+
+### Lighting
+- Dynamic stadium floodlights, volumetric effects, time-of-day presets (Day, Dusk, Night)
 
 ### Audio
-- Crowd chants and reactions
+- Crowd chants and reactions (10+ variations for different game situations)
+- Spatial 3D audio positioning on the pitch
+- Dynamic crowd volume reactive to game events
 - Commentary clips (optional, stretch goal)
 - Menu music
 
 ### Art Style Guide
 
-We're targeting a **stylized low-poly aesthetic** — clean, colorful, and readable at a distance. Think of the visual clarity of Sensible Soccer combined with modern low-poly 3D art.
+We're targeting **AAA visual quality inspired by EA FC / FIFA / PES** — photorealistic characters, detailed stadiums, and broadcast-camera clarity. We're targeting photorealistic quality with broadcast-camera clarity -- think EA FC 25 / eFootball visual fidelity.
 
-**Accepted formats**: FBX, glTF/GLB (models), PNG (textures), WAV (audio), TTF/OTF (fonts)
+**Accepted formats**: FBX, glTF/GLB (models), PNG (textures, up to 4K), WAV (audio), TTF/OTF (fonts)
 
-**License requirement**: All contributed assets must be **CC0, CC-BY, or MIT** licensed.
+**License requirement**: All contributed assets must be **CC0, CC-BY, or MIT** licensed. Professional marketplace assets (TurboSquid, CGTrader) are acceptable if properly licensed.
 
-See [`docs/ASSETS.md`](docs/ASSETS.md) for the full asset pipeline guide and list of free sources we're already using.
+See [`docs/ASSETS.md`](docs/ASSETS.md) for the full asset pipeline guide and list of sources we're using.
 
 ---
 
 ## Roadmap
 
-Development is organized into 6 phases with ~50 user stories:
+Development is organized into 7 phases with 56 user stories:
 
 ```
 Phase 1: Foundation        [US-001 — US-008]  ░░░░░░░░░░  0%
@@ -215,6 +222,7 @@ Phase 3: Game Feel         [US-019 — US-027]  ░░░░░░░░░░  
 Phase 4: UI & Menus        [US-028 — US-035]  ░░░░░░░░░░  0%
 Phase 5: Polish & Platform  [US-036 — US-043]  ░░░░░░░░░░  0%
 Phase 6: Asset Integration [US-044 — US-050]  ░░░░░░░░░░  0%
+Phase 7: AAA Polish        [US-051 — US-056]  ░░░░░░░░░░  0%
 ```
 
 See [`docs/PLAN.md`](docs/PLAN.md) for detailed milestones and [`prd.json`](prd.json) for all user stories.

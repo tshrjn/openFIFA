@@ -9,10 +9,18 @@ namespace OpenFifa.Tests.Editor
     public class US044_CharacterModelTests
     {
         [Test]
-        public void CharacterModelConfig_MaxTriangles_Under2000()
+        public void CharacterModelConfig_TriangleBudget_InAAARange()
         {
             var config = new CharacterModelConfig();
-            Assert.Less(config.MaxTrianglesPerModel, 2000);
+            Assert.That(config.MaxTrianglesPerModel, Is.InRange(10000, 50000), "Character triangle budget should be in AAA range (10K-50K)");
+        }
+
+        [Test]
+        public void CharacterModelConfig_TextureResolution_IsHighFidelity()
+        {
+            var config = new CharacterModelConfig();
+            Assert.That(config.TextureResolution, Is.GreaterThanOrEqualTo(2048),
+                "Character texture resolution should be at least 2048 for AAA quality");
         }
 
         [Test]

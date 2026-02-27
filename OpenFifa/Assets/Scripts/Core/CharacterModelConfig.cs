@@ -25,12 +25,16 @@ namespace OpenFifa.Core
 
     /// <summary>
     /// Configuration for character models: polygon budget, team colors, rig type.
-    /// Maps to Quaternius low-poly characters with MaterialPropertyBlock coloring.
+    /// Maps to AAA-quality character models with MaterialPropertyBlock coloring.
     /// </summary>
     public class CharacterModelConfig
     {
-        /// <summary>Max triangle count per character model for mobile performance.</summary>
-        public int MaxTrianglesPerModel = 1999;
+        /// <summary>Max triangle count per character model for AAA quality.</summary>
+        public int MaxTrianglesPerModel = 30000;
+
+        public int MinTrianglesPerModel = 10000;
+
+        public int TextureResolution = 2048;
 
         /// <summary>Team A primary color (blue).</summary>
         public SimpleColor TeamAColor = new SimpleColor(0.1f, 0.2f, 0.85f);

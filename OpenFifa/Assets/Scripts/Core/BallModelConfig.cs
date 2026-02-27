@@ -6,8 +6,10 @@ namespace OpenFifa.Core
     /// </summary>
     public class BallModelConfig
     {
-        /// <summary>Maximum triangle count for mobile performance.</summary>
-        public int MaxTriangles = 999;
+        /// <summary>Maximum triangle count for high-fidelity ball model.</summary>
+        public int MaxTriangles = 5000;
+
+        public int TextureResolution = 4096;
 
         /// <summary>Albedo texture name (classic black/white pentagon pattern).</summary>
         public string AlbedoTextureName = "SoccerBall_Albedo";

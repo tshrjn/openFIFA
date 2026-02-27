@@ -9,10 +9,10 @@ namespace OpenFifa.Tests.Editor
     public class US047_BallModelTests
     {
         [Test]
-        public void BallModelConfig_MaxTriangles_Under1000()
+        public void BallModelConfig_TriangleBudget_InAAARange()
         {
             var config = new BallModelConfig();
-            Assert.Less(config.MaxTriangles, 1000);
+            Assert.That(config.MaxTriangles, Is.InRange(2000, 10000), "Ball triangle budget should be in AAA range (2K-10K)");
         }
 
         [Test]
