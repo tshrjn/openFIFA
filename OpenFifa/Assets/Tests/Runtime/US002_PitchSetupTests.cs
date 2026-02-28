@@ -246,10 +246,21 @@ namespace OpenFifa.Tests.Runtime
 
         private GameObject CreateTestBall(Vector3 position)
         {
-            var ball = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            ball.name = "TestBall";
-            ball.transform.position = position + Vector3.up * 0.5f;
-            ball.transform.localScale = Vector3.one * 0.22f;
+            var ball = new GameObject("TestBall");
+            // Ensure ball is above pitch surface (top at y=0.05, ball radius 0.11)
+            float minY = 0.5f;
+            ball.transform.position = new Vector3(position.x, Mathf.Max(position.y, minY), position.z);
+
+            var sphereCollider = ball.AddComponent<SphereCollider>();
+            sphereCollider.radius = 0.11f;
+
+            var physicsMaterial = new PhysicsMaterial("TestBallMaterial");
+            physicsMaterial.bounciness = 0.8f;
+            physicsMaterial.dynamicFriction = 0.5f;
+            physicsMaterial.staticFriction = 0.5f;
+            physicsMaterial.bounceCombine = PhysicsMaterialCombine.Maximum;
+            physicsMaterial.frictionCombine = PhysicsMaterialCombine.Average;
+            sphereCollider.sharedMaterial = physicsMaterial;
 
             var rb = ball.AddComponent<Rigidbody>();
             rb.mass = 0.43f;

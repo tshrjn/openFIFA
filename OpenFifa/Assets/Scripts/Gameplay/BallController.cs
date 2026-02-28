@@ -86,7 +86,7 @@ namespace OpenFifa.Gameplay
             physicsMaterial.bounciness = data.Bounciness;
             physicsMaterial.dynamicFriction = data.DynamicFriction;
             physicsMaterial.staticFriction = data.StaticFriction;
-            physicsMaterial.bounceCombine = PhysicsMaterialCombine.Average;
+            physicsMaterial.bounceCombine = PhysicsMaterialCombine.Maximum;
             physicsMaterial.frictionCombine = PhysicsMaterialCombine.Average;
             _sphereCollider.sharedMaterial = physicsMaterial;
 

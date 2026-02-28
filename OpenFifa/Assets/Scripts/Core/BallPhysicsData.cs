@@ -17,7 +17,7 @@ namespace OpenFifa.Core
             float mass = 0.43f,
             float drag = 0.1f,
             float angularDrag = 0.5f,
-            float bounciness = 0.6f,
+            float bounciness = 0.8f,
             float dynamicFriction = 0.5f,
             float staticFriction = 0.5f)
         {

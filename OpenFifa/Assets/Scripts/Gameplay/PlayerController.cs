@@ -92,6 +92,8 @@ namespace OpenFifa.Gameplay
 
             if (moveDirection.sqrMagnitude > 0.01f)
             {
+                // Ensure rigidbody is awake when player provides input
+                if (_rigidbody.IsSleeping()) _rigidbody.WakeUp();
                 // Determine target speed
                 float targetSpeed = IsSprinting ? _stats.SprintSpeed : _stats.BaseSpeed;
 
@@ -151,6 +153,17 @@ namespace OpenFifa.Gameplay
 
             _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
             _rigidbody.useGravity = true;
+
+            // Zero-friction material so ground contact doesn't resist velocity-based movement
+            var capsule = GetComponent<CapsuleCollider>();
+            if (capsule != null && capsule.sharedMaterial == null)
+            {
+                var mat = new PhysicsMaterial("PlayerMovement");
+                mat.dynamicFriction = 0f;
+                mat.staticFriction = 0f;
+                mat.frictionCombine = PhysicsMaterialCombine.Minimum;
+                capsule.sharedMaterial = mat;
+            }
         }
 
         // Input System callback methods (called by PlayerInput component)

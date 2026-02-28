@@ -32,11 +32,11 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void BallPhysicsData_DefaultBounciness_Is0Point6()
+        public void BallPhysicsData_DefaultBounciness_Is0Point8()
         {
             var data = new BallPhysicsData();
-            Assert.AreEqual(0.6f, data.Bounciness, 0.001f,
-                $"Default ball bounciness should be 0.6 but was {data.Bounciness}");
+            Assert.AreEqual(0.8f, data.Bounciness, 0.001f,
+                $"Default ball bounciness should be 0.8 but was {data.Bounciness}");
         }
 
         [Test]

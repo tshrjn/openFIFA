@@ -139,6 +139,10 @@ namespace OpenFifa.Gameplay
             collider.size = size;
             collider.center = Vector3.zero;
 
+            // Add kinematic Rigidbody so physics engine reliably registers the collider
+            var rb = wall.AddComponent<Rigidbody>();
+            rb.isKinematic = true;
+
             // Set layer
             int boundaryLayer = LayerMask.NameToLayer("Boundary");
             wall.layer = boundaryLayer != -1 ? boundaryLayer : 0;

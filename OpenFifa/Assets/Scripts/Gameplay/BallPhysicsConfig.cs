@@ -16,7 +16,7 @@ namespace OpenFifa.Gameplay
         [SerializeField] private float _angularDrag = 0.5f;
 
         [Header("Physic Material")]
-        [SerializeField] private float _bounciness = 0.6f;
+        [SerializeField] private float _bounciness = 0.8f;
         [SerializeField] private float _dynamicFriction = 0.5f;
         [SerializeField] private float _staticFriction = 0.5f;
 

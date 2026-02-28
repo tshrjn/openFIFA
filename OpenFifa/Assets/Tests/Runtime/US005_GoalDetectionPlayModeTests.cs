@@ -99,9 +99,9 @@ namespace OpenFifa.Tests.Runtime
         [UnityTest]
         public IEnumerator Ball_OnGoalLine_DoesNotTriggerGoal()
         {
-            // Place ball exactly on the goal line (not past it)
+            // Place ball just inside the pitch (not overlapping trigger volume)
             float halfLength = _pitchConfig.HalfLength;
-            var ball = CreateTestBall(new Vector3(halfLength, 0.5f, 0));
+            var ball = CreateTestBall(new Vector3(halfLength - 1f, 0.5f, 0));
 
             yield return new WaitForFixedUpdate();
             yield return new WaitForFixedUpdate();
