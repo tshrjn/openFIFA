@@ -82,3 +82,11 @@ test-artifacts/
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Screenshots (generated, not tracked)
+screenshots/
+
+# Large reference videos (keep frames only)
+docs/references/*.mp4
+docs/references/*.mkv
+docs/references/*.webm

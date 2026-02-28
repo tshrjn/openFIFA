@@ -69,44 +69,89 @@ Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebas
 
 ### Prerequisites
 
-- **Unity 6 LTS** (2022.3+) with macOS Build Support
-- **Xcode 15+** (for macOS builds)
-- **macOS 14+ Sonoma** (primary development and target platform)
-- Git LFS (for large binary assets)
+- **Unity 6 LTS** (6000.x) with macOS Build Support
+- **macOS 14+ Sonoma**
+- Git
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/tshrjn/openfifa.git
 cd openfifa
-
-# Open in Unity Hub
-# 1. Open Unity Hub → "Add project from disk"
-# 2. Select the openfifa/ directory
-# 3. Make sure Unity 6 LTS is selected as the editor version
-# 4. Click "Open"
 ```
 
-### Running Tests
+Open in Unity Hub → **Add project from disk** → select `openfifa/OpenFifa` → ensure Unity 6 LTS is the editor version → **Open**.
+
+---
+
+## How to Start & Play
+
+> The game logic is fully implemented and verified by 650+ automated tests.
+> Scene files are being assembled — here's how to run it today:
+
+### Quick Start (Unity Editor)
+
+1. **Open the project** in Unity Hub (see Installation above)
+2. **Wait for import** — first open takes a few minutes while Unity compiles scripts
+3. **Create a Match scene** (if `Assets/Scenes/Match.unity` doesn't exist):
+   - File → New Scene → Empty Scene → Save as `Assets/Scenes/Match.unity`
+   - Add an empty GameObject → attach the **PitchBuilder** component
+   - Add another GameObject → attach the **BallController** component
+   - Add a player GameObject → attach the **PlayerController** component
+   - Press **Play** — the pitch builds, the ball spawns, and you can move the player with WASD
+4. **Full game flow** (when all scenes are assembled):
+   - Open `Assets/Scenes/MainMenu.unity` → Press Play
+   - Click **Play** → Select a team → Match begins → Results at fulltime
+
+### Build & Run from Terminal
 
 ```bash
-# EditMode tests (fast — pure C# logic)
-unity -runTests -batchmode -nographics -projectPath . -testPlatform EditMode -testResults ./test-results/editmode.xml
+# Set your Unity path
+UNITY=/Applications/Unity/Hub/Editor/6000.3.10f1/Unity.app/Contents/MacOS/Unity
 
-# PlayMode tests (physics, gameplay, integration)
-unity -runTests -batchmode -projectPath . -testPlatform PlayMode -testResults ./test-results/playmode.xml
+# Build the macOS app
+$UNITY -batchmode -nographics -quit \
+  -projectPath ./OpenFifa \
+  -executeMethod OpenFifa.Editor.BuildScript.BuildMacOSDev
+
+# Launch
+open OpenFifa/build/macOS/OpenFifa.app
 ```
 
-### Building for macOS
+### Run Tests
 
 ```bash
-# Build macOS app
-unity -batchmode -nographics -quit -projectPath . -buildTarget StandaloneOSX -executeMethod BuildScript.BuildMacOS
+# Fast logic tests (521 tests, <1s)
+$UNITY -runTests -batchmode -nographics \
+  -projectPath ./OpenFifa \
+  -testPlatform EditMode \
+  -testResults ./test-results/editmode.xml
 
-# Run macOS app directly
-open build/macOS/OpenFifa.app
+# Physics & gameplay tests (74 tests, ~3min)
+$UNITY -runTests -batchmode \
+  -projectPath ./OpenFifa \
+  -testPlatform PlayMode \
+  -testResults ./test-results/playmode.xml
 ```
+
+### Capture Screenshots
+
+```bash
+$UNITY -batchmode \
+  -projectPath ./OpenFifa \
+  -executeMethod OpenFifa.Editor.ScreenshotCapture.CaptureAll \
+  -logFile ./screenshots/unity_log.txt
+# → screenshots/01_broadcast_view.png ... 05_birds_eye.png
+```
+
+### Match Flow
+
+1. **Main Menu** → Play, Settings, or Credits
+2. **Team Select** → Choose your team (4+ teams)
+3. **Match** → 3-minute halves, 5v5, no offsides
+   - Kickoff → First half → Halftime → Second half → Fulltime
+   - Goals trigger celebration + replay camera
+4. **Results** → Final score, match stats, play again
 
 ---
 

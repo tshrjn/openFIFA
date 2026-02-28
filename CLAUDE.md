@@ -136,6 +136,43 @@ Every completed story MUST pass ALL of these:
 4. **Full PlayMode suite**: zero failures (excluding `[Category("Quarantine")]`)
 5. **No new warnings**: Unity console has no new warnings from your changes
 
+## Visual Validation (Screenshots)
+
+Every feature or fix that changes rendering, physics objects, or scene hierarchy MUST include screenshot validation.
+
+### Screenshot Protocol
+
+1. **Capture** screenshots after your changes:
+   ```bash
+   unity -batchmode -projectPath ./OpenFifa \
+     -executeMethod OpenFifa.Editor.ScreenshotCapture.CaptureAll \
+     -logFile ./screenshots/unity_log.txt
+   ```
+2. **Inspect** all 5 screenshots for:
+   - No magenta/pink (shader errors)
+   - Expected objects visible (pitch, ball, players, markings)
+   - Correct colors (green pitch, white ball, white markings)
+   - Proper geometry (pitch dimensions, goal areas, boundaries)
+3. **Compare** against reference frames in `docs/references/` if available
+4. **Report** any visual regressions in commit message or DOCUMENTATION.md
+
+### When to Run
+
+- After modifying: PitchBuilder, BallController, PlayerController, StadiumBuilder
+- After modifying: any material, shader, or rendering config
+- After modifying: camera setup, lighting, or post-processing
+- Before every commit that touches `Gameplay/` or `Editor/` scripts
+
+### Screenshot Angles
+
+| File | View |
+|------|------|
+| `screenshots/01_broadcast_view.png` | TV-style elevated angle (full pitch) |
+| `screenshots/02_sideline_view.png` | Touchline perspective |
+| `screenshots/03_center_closeup.png` | Close-up on center pitch |
+| `screenshots/04_goal_area.png` | View from behind goal |
+| `screenshots/05_birds_eye.png` | Top-down overhead |
+
 ## Session Protocol
 
 ### Starting a Session

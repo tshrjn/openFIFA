@@ -47,14 +47,7 @@ namespace OpenFifa.Gameplay
 
             // Assign green material
             var renderer = pitch.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader == null || mat.shader.name == "Hidden/InternalErrorShader")
-            {
-                // Fallback if URP shader not available
-                mat = new Material(Shader.Find("Standard"));
-            }
-            mat.color = new Color(0.2f, 0.6f, 0.15f, 1f); // Green
-            renderer.sharedMaterial = mat;
+            renderer.sharedMaterial = CreateColorMaterial(new Color(0.2f, 0.6f, 0.15f, 1f));
 
             // Set layer
             int pitchLayer = LayerMask.NameToLayer("Pitch");
@@ -175,12 +168,7 @@ namespace OpenFifa.Gameplay
             }
 
             // White line material
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader == null || mat.shader.name == "Hidden/InternalErrorShader")
-            {
-                mat = new Material(Shader.Find("Sprites/Default"));
-            }
-            mat.color = Color.white;
+            var mat = CreateColorMaterial(Color.white);
             lineRenderer.material = mat;
 
             // Center spot
@@ -242,13 +230,21 @@ namespace OpenFifa.Gameplay
             lineRenderer.SetPosition(2, new Vector3(halfDepth, 0, -halfWidth));
             lineRenderer.SetPosition(3, new Vector3(-halfDepth, 0, -halfWidth));
 
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader == null || mat.shader.name == "Hidden/InternalErrorShader")
-            {
-                mat = new Material(Shader.Find("Sprites/Default"));
-            }
-            mat.color = Color.white;
-            lineRenderer.material = mat;
+            lineRenderer.material = CreateColorMaterial(Color.white);
+        }
+
+        private static Material CreateColorMaterial(Color color)
+        {
+            // Use Sprites/Default — works in both URP and Built-in, renders flat color.
+            // URP/Lit and Standard both render magenta in batch mode when URP context
+            // isn't fully initialized. Sprites/Default is unlit but always correct.
+            var shader = Shader.Find("Sprites/Default");
+            if (shader == null)
+                shader = Shader.Find("Hidden/Internal-Colored");
+
+            var mat = new Material(shader);
+            mat.color = color;
+            return mat;
         }
 
         private void CreateLineMarking(string name, Vector3 position, Vector3 scale)
@@ -260,13 +256,7 @@ namespace OpenFifa.Gameplay
             line.transform.localScale = scale;
 
             var renderer = line.GetComponent<MeshRenderer>();
-            var mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
-            if (mat.shader == null || mat.shader.name == "Hidden/InternalErrorShader")
-            {
-                mat = new Material(Shader.Find("Sprites/Default"));
-            }
-            mat.color = Color.white;
-            renderer.sharedMaterial = mat;
+            renderer.sharedMaterial = CreateColorMaterial(Color.white);
 
             // Remove collider - this is just a visual marking
             var collider = line.GetComponent<Collider>();
