@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-008")]
+    [Category("US008")]
     public class US008_HUDFormatTests
     {
         [Test]

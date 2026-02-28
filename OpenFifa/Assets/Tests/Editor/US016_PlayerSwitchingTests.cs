@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-016")]
+    [Category("US016")]
     public class US016_PlayerSwitchingTests
     {
         [Test]

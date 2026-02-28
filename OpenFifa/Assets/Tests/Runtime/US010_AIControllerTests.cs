@@ -9,7 +9,7 @@ using OpenFifa.Gameplay;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-010")]
+    [Category("US010")]
     public class US010_AIControllerTests
     {
         private GameObject _pitchRoot;

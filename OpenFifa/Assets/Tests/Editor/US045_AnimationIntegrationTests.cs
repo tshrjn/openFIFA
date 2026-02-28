@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-045")]
+    [Category("US045")]
     [Category("Art")]
     public class US045_AnimationIntegrationTests
     {

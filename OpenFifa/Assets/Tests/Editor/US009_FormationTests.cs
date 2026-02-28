@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-009")]
+    [Category("US009")]
     public class US009_FormationTests
     {
         [Test]
@@ -28,12 +28,12 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void FormationLayoutData_Default212_Has5Positions()
+        public void FormationLayoutData_Default212_Has6Positions()
         {
             var formation = FormationLayoutData.CreateDefault212();
             var positions = formation.GetSlots();
-            Assert.AreEqual(5, positions.Length,
-                $"2-1-2 formation should have 5 positions but had {positions.Length}");
+            Assert.AreEqual(6, positions.Length,
+                $"2-1-2 formation (GK + 2D + 1M + 2F) should have 6 positions but had {positions.Length}");
         }
 
         [Test]
@@ -96,13 +96,13 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void FormationLayoutData_GetPositions_ReturnsLength5()
+        public void FormationLayoutData_GetPositions_ReturnsLength6()
         {
             var formation = FormationLayoutData.CreateDefault212();
             float pitchLength = 50f;
             var positions = formation.GetWorldPositions(isHomeTeam: true, pitchLength: pitchLength);
-            Assert.AreEqual(5, positions.Length,
-                $"GetWorldPositions should return 5 positions but returned {positions.Length}");
+            Assert.AreEqual(6, positions.Length,
+                $"GetWorldPositions should return 6 positions but returned {positions.Length}");
         }
 
         [Test]

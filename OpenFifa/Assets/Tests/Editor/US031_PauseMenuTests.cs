@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-031")]
+    [Category("US031")]
     public class US031_PauseMenuTests
     {
         [Test]

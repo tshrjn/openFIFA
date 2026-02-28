@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-020")]
+    [Category("US020")]
     public class US020_KickAnimationTests
     {
         [Test]

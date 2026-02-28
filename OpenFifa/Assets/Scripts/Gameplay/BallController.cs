@@ -81,14 +81,14 @@ namespace OpenFifa.Gameplay
             _rigidbody.interpolation = RigidbodyInterpolation.Interpolate;
             _rigidbody.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
 
-            // Configure PhysicMaterial
-            var physicMaterial = new PhysicMaterial("BallPhysicMaterial");
-            physicMaterial.bounciness = data.Bounciness;
-            physicMaterial.dynamicFriction = data.DynamicFriction;
-            physicMaterial.staticFriction = data.StaticFriction;
-            physicMaterial.bounceCombine = PhysicMaterialCombine.Average;
-            physicMaterial.frictionCombine = PhysicMaterialCombine.Average;
-            _sphereCollider.sharedMaterial = physicMaterial;
+            // Configure PhysicsMaterial
+            var physicsMaterial = new PhysicsMaterial("BallPhysicsMaterial");
+            physicsMaterial.bounciness = data.Bounciness;
+            physicsMaterial.dynamicFriction = data.DynamicFriction;
+            physicsMaterial.staticFriction = data.StaticFriction;
+            physicsMaterial.bounceCombine = PhysicsMaterialCombine.Average;
+            physicsMaterial.frictionCombine = PhysicsMaterialCombine.Average;
+            _sphereCollider.sharedMaterial = physicsMaterial;
 
             // Set sphere collider size (standard soccer ball radius ~0.11m)
             _sphereCollider.radius = 0.11f;

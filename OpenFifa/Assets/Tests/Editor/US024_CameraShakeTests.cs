@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-024")]
+    [Category("US024")]
     public class US024_CameraShakeTests
     {
         [Test]

@@ -6,7 +6,7 @@ using UnityEngine.TestTools;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-001")]
+    [Category("US001")]
     public class US001_ProjectScaffoldPlayModeTests
     {
         [UnityTest]

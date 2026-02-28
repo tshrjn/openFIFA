@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-049")]
+    [Category("US049")]
     [Category("Visual")]
     public class US049_VisualRegressionTests
     {

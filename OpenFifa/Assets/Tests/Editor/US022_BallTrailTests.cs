@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-022")]
+    [Category("US022")]
     public class US022_BallTrailTests
     {
         [Test]

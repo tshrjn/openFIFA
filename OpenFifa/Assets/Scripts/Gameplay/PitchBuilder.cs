@@ -57,8 +57,8 @@ namespace OpenFifa.Gameplay
             renderer.sharedMaterial = mat;
 
             // Set layer
-            pitch.layer = LayerMask.NameToLayer("Pitch");
-            if (pitch.layer == -1) pitch.layer = 0;
+            int pitchLayer = LayerMask.NameToLayer("Pitch");
+            pitch.layer = pitchLayer != -1 ? pitchLayer : 0;
         }
 
         private void CreateBoundaryColliders()

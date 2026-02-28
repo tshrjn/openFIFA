@@ -8,7 +8,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-003")]
+    [Category("US003")]
     public class US003_BallPhysicsTests
     {
         private GameObject _pitchRoot;
@@ -81,27 +81,27 @@ namespace OpenFifa.Tests.Runtime
         }
 
         [UnityTest]
-        public IEnumerator Ball_PhysicMaterial_HasCorrectBounciness()
+        public IEnumerator Ball_PhysicsMaterial_HasCorrectBounciness()
         {
             _ball = CreateBall(Vector3.up * 0.5f);
             yield return null;
 
             var collider = _ball.GetComponent<SphereCollider>();
             Assert.IsNotNull(collider.sharedMaterial,
-                "Ball SphereCollider should have a PhysicMaterial assigned");
+                "Ball SphereCollider should have a PhysicsMaterial assigned");
             Assert.AreEqual(0.6f, collider.sharedMaterial.bounciness, 0.001f,
-                $"Ball PhysicMaterial bounciness should be 0.6 but was {collider.sharedMaterial.bounciness}");
-        }
+                $"Ball PhysicsMaterial bounciness should be 0.6 but was {collider.sharedMaterial.bounciness}");
+}
 
         [UnityTest]
-        public IEnumerator Ball_PhysicMaterial_HasCorrectDynamicFriction()
+        public IEnumerator Ball_PhysicsMaterial_HasCorrectDynamicFriction()
         {
             _ball = CreateBall(Vector3.up * 0.5f);
             yield return null;
 
             var collider = _ball.GetComponent<SphereCollider>();
             Assert.AreEqual(0.5f, collider.sharedMaterial.dynamicFriction, 0.001f,
-                $"Ball PhysicMaterial dynamic friction should be 0.5 but was {collider.sharedMaterial.dynamicFriction}");
+                $"Ball PhysicsMaterial dynamic friction should be 0.5 but was {collider.sharedMaterial.dynamicFriction}");
         }
 
         [UnityTest]
@@ -253,13 +253,13 @@ namespace OpenFifa.Tests.Runtime
             var sphereCollider = ball.AddComponent<SphereCollider>();
             sphereCollider.radius = 0.11f;
 
-            var physicMaterial = new PhysicMaterial("BallPhysicMaterial");
-            physicMaterial.bounciness = 0.6f;
-            physicMaterial.dynamicFriction = 0.5f;
-            physicMaterial.staticFriction = 0.5f;
-            physicMaterial.bounceCombine = PhysicMaterialCombine.Average;
-            physicMaterial.frictionCombine = PhysicMaterialCombine.Average;
-            sphereCollider.sharedMaterial = physicMaterial;
+            var physicsMaterial = new PhysicsMaterial("BallPhysicsMaterial");
+            physicsMaterial.bounciness = 0.6f;
+            physicsMaterial.dynamicFriction = 0.5f;
+            physicsMaterial.staticFriction = 0.5f;
+            physicsMaterial.bounceCombine = PhysicsMaterialCombine.Average;
+            physicsMaterial.frictionCombine = PhysicsMaterialCombine.Average;
+            sphereCollider.sharedMaterial = physicsMaterial;
 
             var rb = ball.AddComponent<Rigidbody>();
             rb.mass = 0.43f;

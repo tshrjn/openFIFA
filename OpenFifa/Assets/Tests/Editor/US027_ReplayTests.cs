@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-027")]
+    [Category("US027")]
     public class US027_ReplayTests
     {
         [Test]

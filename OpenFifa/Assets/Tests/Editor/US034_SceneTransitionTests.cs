@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-034")]
+    [Category("US034")]
     public class US034_SceneTransitionTests
     {
         [Test]

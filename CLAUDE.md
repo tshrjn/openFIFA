@@ -93,7 +93,7 @@ OpenFifa/                              # Unity project root
 - **Namespace**: `OpenFifa.Core`, `OpenFifa.Gameplay`, `OpenFifa.AI`, `OpenFifa.UI`, `OpenFifa.Audio`
 - **Tests**: `MethodUnderTest_Scenario_ExpectedResult` (e.g., `Ball_WhenKicked_ReachesGoalInExpectedTime`)
 - **Test files**: `{Feature}Tests.cs` (e.g., `BallPhysicsTests.cs`)
-- **Test categories**: `[Category("US-XXX")]` matching the story ID
+- **Test categories**: `[Category("USXXX")]` matching the story ID
 
 ### Code Style
 
@@ -113,7 +113,7 @@ unity -runTests -batchmode -nographics -projectPath ./OpenFifa -testPlatform Edi
 unity -runTests -batchmode -projectPath ./OpenFifa -testPlatform PlayMode -testResults ./test-results/playmode.xml
 
 # Specific story tests
-unity -runTests -batchmode -nographics -projectPath ./OpenFifa -testPlatform EditMode -testCategory "US-007" -testResults ./test-results/us007.xml
+unity -runTests -batchmode -nographics -projectPath ./OpenFifa -testPlatform EditMode -testCategory "US007" -testResults ./test-results/us007.xml
 
 # Full suite (EditMode + PlayMode)
 unity -runTests -batchmode -projectPath ./OpenFifa -testPlatform EditMode -testResults ./test-results/editmode.xml && \
@@ -131,7 +131,7 @@ unity -batchmode -nographics -quit -projectPath ./OpenFifa -buildTarget Standalo
 Every completed story MUST pass ALL of these:
 
 1. **Build**: `unity -batchmode -nographics -quit -buildTarget StandaloneOSX` and `-buildTarget iOS` both exit with code 0
-2. **Story tests**: `unity -runTests -testCategory "US-XXX"` — all pass
+2. **Story tests**: `unity -runTests -testCategory "USXXX"` — all pass
 3. **Full EditMode suite**: zero failures
 4. **Full PlayMode suite**: zero failures (excluding `[Category("Quarantine")]`)
 5. **No new warnings**: Unity console has no new warnings from your changes

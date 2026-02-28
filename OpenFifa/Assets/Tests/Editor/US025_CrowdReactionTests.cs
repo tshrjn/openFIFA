@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-025")]
+    [Category("US025")]
     public class US025_CrowdReactionTests
     {
         [Test]
@@ -63,8 +63,11 @@ namespace OpenFifa.Tests.Editor
         {
             var logic = new CrowdReactionLogic(25f);
             logic.UpdateBallPosition(25f, 0f);
+            // SmoothUpdate to converge smoothed intensity toward current (1.0)
+            for (int i = 0; i < 100; i++)
+                logic.SmoothUpdate(0.1f);
             Assert.Greater(logic.VolumeDe, -5f,
-                "High intensity should yield volume near 0 dB");
+                "High intensity should yield volume near 0 dB after smoothing");
         }
 
         [Test]

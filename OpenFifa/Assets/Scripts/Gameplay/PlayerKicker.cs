@@ -39,7 +39,7 @@ namespace OpenFifa.Gameplay
 
         private void Start()
         {
-            _ballOwnership = FindObjectOfType<BallOwnership>();
+            _ballOwnership = FindFirstObjectByType<BallOwnership>();
         }
 
         /// <summary>

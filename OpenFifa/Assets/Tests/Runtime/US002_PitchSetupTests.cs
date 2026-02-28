@@ -8,7 +8,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-002")]
+    [Category("US002")]
     public class US002_PitchSetupTests
     {
         private GameObject _pitchRoot;

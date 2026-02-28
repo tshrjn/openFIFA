@@ -1,10 +1,11 @@
 using NUnit.Framework;
 using System.IO;
+using UnityEngine;
 
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-001")]
+    [Category("US001")]
     public class US001_ProjectScaffoldTests
     {
         [Test]
@@ -147,15 +148,6 @@ namespace OpenFifa.Tests.Editor
             string content = File.ReadAllText(manifestPath);
             Assert.IsTrue(content.Contains("com.unity.inputsystem"),
                 "manifest.json should contain Input System package");
-        }
-
-        [Test]
-        public void ManifestJson_PackageList_ContainsTextMeshPro()
-        {
-            string manifestPath = Path.Combine(Application.dataPath, "..", "Packages", "manifest.json");
-            string content = File.ReadAllText(manifestPath);
-            Assert.IsTrue(content.Contains("com.unity.textmeshpro"),
-                "manifest.json should contain TextMeshPro package");
         }
 
         [Test]

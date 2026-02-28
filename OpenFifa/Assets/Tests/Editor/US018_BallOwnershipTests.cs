@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-018")]
+    [Category("US018")]
     public class US018_BallOwnershipTests
     {
         [Test]

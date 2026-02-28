@@ -160,7 +160,7 @@ We welcome contributions from everyone! OpenFifa is built by the community, for 
 ### Code Standards
 
 - **Namespace**: `OpenFifa.*`
-- **Testing**: NUnit 3, `[Category("US-XXX")]` tags, tolerance-based assertions
+- **Testing**: NUnit 3, `[Category("USXXX")]` tags, tolerance-based assertions
 - **Architecture**: Pure C# logic separated from MonoBehaviour, ScriptableObjects for tuning
 - **Style**: `[SerializeField] private` fields, no public fields on MonoBehaviours
 

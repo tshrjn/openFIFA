@@ -9,7 +9,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-005")]
+    [Category("US005")]
     public class US005_GoalDetectionPlayModeTests
     {
         private GameObject _pitchRoot;

@@ -5,7 +5,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-014")]
+    [Category("US014")]
     public class US014_MatchStateMachineTests
     {
         [Test]

@@ -10,7 +10,7 @@ using OpenFifa.UI;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-008")]
+    [Category("US008")]
     public class US008_HUDDisplayTests
     {
         private GameObject _canvasRoot;

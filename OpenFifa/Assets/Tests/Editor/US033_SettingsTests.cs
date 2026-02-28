@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-033")]
+    [Category("US033")]
     public class US033_SettingsTests
     {
         [Test]

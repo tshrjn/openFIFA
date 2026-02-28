@@ -8,7 +8,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Runtime
 {
     [TestFixture]
-    [Category("US-006")]
+    [Category("US006")]
     public class US006_BroadcastCameraTests
     {
         private GameObject _pitchRoot;

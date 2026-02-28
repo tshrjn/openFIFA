@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-013")]
+    [Category("US013")]
     public class US013_GoalkeeperAITests
     {
         [Test]

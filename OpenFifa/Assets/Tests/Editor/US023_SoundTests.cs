@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-023")]
+    [Category("US023")]
     public class US023_SoundTests
     {
         [Test]

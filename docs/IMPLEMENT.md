@@ -119,7 +119,7 @@ using NUnit.Framework;
 using OpenFifa.Core;
 
 [TestFixture]
-[Category("US-007")]
+[Category("US007")]
 public class MatchTimerTests
 {
     [Test]
@@ -142,7 +142,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 
 [TestFixture]
-[Category("US-003")]
+[Category("US003")]
 public class BallPhysicsTests
 {
     [UnityTest]
@@ -165,7 +165,7 @@ public class BallPhysicsTests
 1. **Never exact equality for physics** — use `Is.InRange()` or tolerance
 2. **Never time-based waits for sync** — use condition-based polling with timeout
 3. **Always include debugging context** in assertion messages
-4. **Category tag must match story ID** — `[Category("US-003")]`
+4. **Category tag must match story ID** — `[Category("US003")]`
 5. **One assertion per test when possible** — easier to debug failures
 
 ---

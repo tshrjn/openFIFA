@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("US-005")]
+    [Category("US005")]
     public class US005_GoalDetectionTests
     {
         [Test]
