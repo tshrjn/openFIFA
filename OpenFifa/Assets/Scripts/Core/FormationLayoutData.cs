@@ -71,6 +71,21 @@ namespace OpenFifa.Core
                 new FormationSlotData(PositionRole.Forward,    6f,   0f,   8f),  // RW
             });
         }
+
+        /// <summary>
+        /// Creates a Rush mode 4v4 formation (no goalkeeper).
+        /// 2 defenders, 1 midfielder, 1 forward — designed for small-pitch fast-paced play.
+        /// </summary>
+        public static FormationLayoutData CreateRush4v4()
+        {
+            return new FormationLayoutData("Rush-4v4", new FormationSlotData[]
+            {
+                new FormationSlotData(PositionRole.Defender,   -5f, 0f, -6f),  // Left Back
+                new FormationSlotData(PositionRole.Defender,    5f, 0f, -6f),  // Right Back
+                new FormationSlotData(PositionRole.Midfielder,  0f, 0f,  0f),  // Center Mid
+                new FormationSlotData(PositionRole.Forward,     0f, 0f,  8f),  // Striker
+            });
+        }
     }
 
     /// <summary>
