@@ -3,7 +3,9 @@
     "rootNamespace": "OpenFifa.Gameplay",
     "references": [
         "OpenFifa.Core",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.TextMeshPro",
+        "OpenFifa.AI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

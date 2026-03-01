@@ -2,8 +2,7 @@
     "name": "OpenFifa.AI",
     "rootNamespace": "OpenFifa.AI",
     "references": [
-        "OpenFifa.Core",
-        "OpenFifa.Gameplay"
+        "OpenFifa.Core"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
