@@ -31,8 +31,12 @@ namespace OpenFifa.Gameplay
             _config = config;
             CreatePitchSurface();
             CreateBoundaryColliders();
+            CreatePitchOutline();
             CreateCenterCircle();
             CreateGoalAreaMarkings();
+            CreatePenaltyAreas();
+            CreateCornerArcs();
+            CreatePenaltySpots();
         }
 
         private void CreatePitchSurface()
@@ -45,13 +49,62 @@ namespace OpenFifa.Gameplay
             // Y is thin (0.1), X is length, Z is width
             pitch.transform.localScale = new Vector3(_config.PitchLength, 0.1f, _config.PitchWidth);
 
-            // Assign green material
+            // Assign grass band material (lit, responds to stadium lighting)
             var renderer = pitch.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = CreateColorMaterial(new Color(0.2f, 0.6f, 0.15f, 1f));
+            renderer.sharedMaterial = CreateGrassBandMaterial();
+            renderer.receiveShadows = true;
 
             // Set layer
             int pitchLayer = LayerMask.NameToLayer("Pitch");
             pitch.layer = pitchLayer != -1 ? pitchLayer : 0;
+        }
+
+        /// <summary>
+        /// Creates a URP/Lit material with procedural grass band texture.
+        /// Alternating light/dark green stripes mimic freshly mowed pitch.
+        /// </summary>
+        private Material CreateGrassBandMaterial()
+        {
+            int texWidth = 512;
+            int texHeight = 512;
+            int bandCount = 10; // Number of stripe pairs across the pitch width
+            int bandHeight = texHeight / (bandCount * 2);
+
+            var lightGreen = new Color(0.22f, 0.55f, 0.18f);
+            var darkGreen = new Color(0.16f, 0.42f, 0.13f);
+
+            var tex = new Texture2D(texWidth, texHeight, TextureFormat.RGB24, true);
+            var pixels = new Color[texWidth * texHeight];
+
+            for (int y = 0; y < texHeight; y++)
+            {
+                // Determine which band this row falls in
+                int bandIndex = y / bandHeight;
+                bool isLight = (bandIndex % 2 == 0);
+                Color bandColor = isLight ? lightGreen : darkGreen;
+
+                for (int x = 0; x < texWidth; x++)
+                {
+                    pixels[y * texWidth + x] = bandColor;
+                }
+            }
+
+            tex.SetPixels(pixels);
+            tex.Apply(true);
+            tex.wrapMode = TextureWrapMode.Repeat;
+            tex.filterMode = FilterMode.Bilinear;
+
+            // Use URP/Lit for proper lighting response
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+                shader = Shader.Find("Sprites/Default"); // fallback for batch mode
+
+            var mat = new Material(shader);
+            mat.mainTexture = tex;
+            mat.SetFloat("_Smoothness", 0.15f); // Grass is matte
+            mat.SetFloat("_Metallic", 0f);
+
+            return mat;
         }
 
         private void CreateBoundaryColliders()
@@ -233,12 +286,124 @@ namespace OpenFifa.Gameplay
             lineRenderer.material = CreateColorMaterial(Color.white);
         }
 
+        /// <summary>
+        /// White outline around the entire pitch (touchlines + goal lines).
+        /// </summary>
+        private void CreatePitchOutline()
+        {
+            float hl = _config.HalfLength;
+            float hw = _config.HalfWidth;
+            float y = 0.06f;
+            float w = 0.12f; // line width
+
+            // Touchline North (positive Z)
+            CreateLineMarking("TouchlineNorth",
+                new Vector3(0f, y, hw), new Vector3(_config.PitchLength, 0.01f, w));
+            // Touchline South (negative Z)
+            CreateLineMarking("TouchlineSouth",
+                new Vector3(0f, y, -hw), new Vector3(_config.PitchLength, 0.01f, w));
+            // Goal line East (positive X)
+            CreateLineMarking("GoalLineEast",
+                new Vector3(hl, y, 0f), new Vector3(w, 0.01f, _config.PitchWidth));
+            // Goal line West (negative X)
+            CreateLineMarking("GoalLineWest",
+                new Vector3(-hl, y, 0f), new Vector3(w, 0.01f, _config.PitchWidth));
+        }
+
+        /// <summary>
+        /// Larger penalty area boxes at each end (wider and deeper than goal area).
+        /// </summary>
+        private void CreatePenaltyAreas()
+        {
+            float hl = _config.HalfLength;
+            float penaltyDepth = _config.GoalAreaDepth * 2.5f; // 10m deep
+            float penaltyWidth = _config.GoalWidth + 10f; // 15m wide
+
+            CreateGoalAreaMarking("PenaltyAreaEast",
+                new Vector3(hl - penaltyDepth / 2f, 0.06f, 0f),
+                penaltyDepth, penaltyWidth);
+
+            CreateGoalAreaMarking("PenaltyAreaWest",
+                new Vector3(-(hl - penaltyDepth / 2f), 0.06f, 0f),
+                penaltyDepth, penaltyWidth);
+        }
+
+        /// <summary>
+        /// Corner arcs — quarter circles at each corner of the pitch.
+        /// </summary>
+        private void CreateCornerArcs()
+        {
+            float hl = _config.HalfLength;
+            float hw = _config.HalfWidth;
+            float radius = 1f; // Standard corner arc radius
+
+            CreateCornerArc("CornerArcNE", new Vector3(hl, 0.06f, hw), 180f, 270f, radius);
+            CreateCornerArc("CornerArcNW", new Vector3(-hl, 0.06f, hw), 270f, 360f, radius);
+            CreateCornerArc("CornerArcSE", new Vector3(hl, 0.06f, -hw), 90f, 180f, radius);
+            CreateCornerArc("CornerArcSW", new Vector3(-hl, 0.06f, -hw), 0f, 90f, radius);
+        }
+
+        private void CreateCornerArc(string name, Vector3 position,
+            float startAngleDeg, float endAngleDeg, float radius)
+        {
+            var arc = new GameObject(name);
+            arc.transform.SetParent(transform);
+            arc.transform.localPosition = position;
+
+            var lr = arc.AddComponent<LineRenderer>();
+            lr.useWorldSpace = false;
+            lr.loop = false;
+            lr.startWidth = 0.1f;
+            lr.endWidth = 0.1f;
+
+            int segments = 16;
+            lr.positionCount = segments + 1;
+
+            for (int i = 0; i <= segments; i++)
+            {
+                float t = (float)i / segments;
+                float angle = Mathf.Lerp(startAngleDeg, endAngleDeg, t) * Mathf.Deg2Rad;
+                float x = Mathf.Cos(angle) * radius;
+                float z = Mathf.Sin(angle) * radius;
+                lr.SetPosition(i, new Vector3(x, 0f, z));
+            }
+
+            lr.material = CreateColorMaterial(Color.white);
+        }
+
+        /// <summary>
+        /// Penalty spots — small white dots at each end.
+        /// </summary>
+        private void CreatePenaltySpots()
+        {
+            float hl = _config.HalfLength;
+            float penaltyDist = _config.GoalAreaDepth * 2f; // 8m from goal line
+
+            CreateSpot("PenaltySpotEast", new Vector3(hl - penaltyDist, 0.06f, 0f));
+            CreateSpot("PenaltySpotWest", new Vector3(-(hl - penaltyDist), 0.06f, 0f));
+        }
+
+        private void CreateSpot(string name, Vector3 position)
+        {
+            var spot = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+            spot.name = name;
+            spot.transform.SetParent(transform);
+            spot.transform.localPosition = position;
+            spot.transform.localScale = new Vector3(0.25f, 0.01f, 0.25f);
+            spot.GetComponent<MeshRenderer>().sharedMaterial = CreateColorMaterial(Color.white);
+
+            var col = spot.GetComponent<Collider>();
+            if (col != null) Object.Destroy(col);
+        }
+
         private static Material CreateColorMaterial(Color color)
         {
-            // Use Sprites/Default — works in both URP and Built-in, renders flat color.
-            // URP/Lit and Standard both render magenta in batch mode when URP context
-            // isn't fully initialized. Sprites/Default is unlit but always correct.
-            var shader = Shader.Find("Sprites/Default");
+            // Use URP/Lit so materials respond to stadium lighting.
+            // Fall back to Sprites/Default for batch mode when URP context
+            // isn't fully initialized.
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null)
+                shader = Shader.Find("Sprites/Default");
             if (shader == null)
                 shader = Shader.Find("Hidden/Internal-Colored");
 
