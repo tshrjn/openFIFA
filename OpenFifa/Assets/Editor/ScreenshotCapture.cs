@@ -123,21 +123,28 @@ namespace OpenFifa.Editor
             var rt = new RenderTexture(Width, Height, 24, RenderTextureFormat.ARGB32);
             camera.targetTexture = rt;
             camera.Render();
+            GL.Flush();
 
-            RenderTexture.active = rt;
-            var tex = new Texture2D(Width, Height, TextureFormat.RGB24, false);
-            tex.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
-            tex.Apply();
+            Texture2D tex = null;
+            try
+            {
+                RenderTexture.active = rt;
+                tex = new Texture2D(Width, Height, TextureFormat.RGB24, false);
+                tex.ReadPixels(new Rect(0, 0, Width, Height), 0, 0);
+                tex.Apply();
 
-            byte[] bytes = tex.EncodeToPNG();
-            string path = Path.Combine(OutputDir, filename);
-            File.WriteAllBytes(path, bytes);
-            Debug.Log($"[ScreenshotCapture] Saved: {path} ({bytes.Length / 1024}KB)");
-
-            camera.targetTexture = null;
-            RenderTexture.active = null;
-            Object.DestroyImmediate(rt);
-            Object.DestroyImmediate(tex);
+                byte[] bytes = tex.EncodeToPNG();
+                string path = Path.Combine(OutputDir, filename);
+                File.WriteAllBytes(path, bytes);
+                Debug.Log($"[ScreenshotCapture] Saved: {path} ({bytes.Length / 1024}KB)");
+            }
+            finally
+            {
+                camera.targetTexture = null;
+                RenderTexture.active = null;
+                if (rt != null) Object.DestroyImmediate(rt);
+                if (tex != null) Object.DestroyImmediate(tex);
+            }
         }
 
         private static Material CreateColorMaterial(Color color)

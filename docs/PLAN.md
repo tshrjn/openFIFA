@@ -24,14 +24,14 @@
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-001 | Unity project scaffold + macOS/iPad build + test framework | Pending |
-| US-002 | Soccer pitch with boundaries | Pending |
-| US-003 | Ball physics | Pending |
-| US-004 | Single player controller | Pending |
-| US-005 | Goal detection system | Pending |
-| US-006 | Broadcast camera (Cinemachine) | Pending |
-| US-007 | Match timer + score tracking | Pending |
-| US-008 | Basic HUD (score + timer) | Pending |
+| US-001 | Unity project scaffold + macOS/iPad build + test framework | Complete |
+| US-002 | Soccer pitch with boundaries | Complete |
+| US-003 | Ball physics | Complete |
+| US-004 | Single player controller | Complete |
+| US-005 | Goal detection system | Complete |
+| US-006 | Broadcast camera (Cinemachine) | Complete |
+| US-007 | Match timer + score tracking | Complete |
+| US-008 | Basic HUD (score + timer) | Complete |
 
 **Checkpoint validation**:
 ```bash
@@ -57,16 +57,16 @@ unity -runTests -batchmode -testPlatform PlayMode -testResults ./test-results/p1
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-009 | Team formation system (2-1-2) | Pending |
-| US-010 | AI player FSM (idle, chase, return) | Pending |
-| US-011 | AI passing | Pending |
-| US-012 | AI shooting | Pending |
-| US-013 | Goalkeeper AI | Pending |
-| US-014 | Match state machine (full flow) | Pending |
-| US-015 | Kickoff sequence | Pending |
-| US-016 | Player switching | Pending |
-| US-017 | Tackle mechanic | Pending |
-| US-018 | Ball ownership system | Pending |
+| US-009 | Team formation system (2-1-2) | Complete |
+| US-010 | AI player FSM (idle, chase, return) | Complete |
+| US-011 | AI passing | Complete |
+| US-012 | AI shooting | Complete |
+| US-013 | Goalkeeper AI | Complete |
+| US-014 | Match state machine (full flow) | Complete |
+| US-015 | Kickoff sequence | Complete |
+| US-016 | Player switching | Complete |
+| US-017 | Tackle mechanic | Complete |
+| US-018 | Ball ownership system | Complete |
 
 **Checkpoint validation**:
 ```bash
@@ -86,15 +86,15 @@ unity -runTests -batchmode -testPlatform PlayMode
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-019 | Player animation state machine | Pending |
-| US-020 | Kick animation + force sync | Pending |
-| US-021 | Goal celebration sequence | Pending |
-| US-022 | Ball trail particles | Pending |
-| US-023 | Sound effects (whistle, kick, crowd, goal) | Pending |
-| US-024 | Camera shake on goal | Pending |
-| US-025 | Crowd reaction audio | Pending |
-| US-026 | Player run dust particles | Pending |
-| US-027 | Replay system (5-second goal replay) | Pending |
+| US-019 | Player animation state machine | Complete |
+| US-020 | Kick animation + force sync | Complete |
+| US-021 | Goal celebration sequence | Complete |
+| US-022 | Ball trail particles | Complete |
+| US-023 | Sound effects (whistle, kick, crowd, goal) | Complete |
+| US-024 | Camera shake on goal | Complete |
+| US-025 | Crowd reaction audio | Complete |
+| US-026 | Player run dust particles | Complete |
+| US-027 | Replay system (5-second goal replay) | Complete |
 
 **Checkpoint validation**:
 ```bash
@@ -113,14 +113,14 @@ unity -runTests -batchmode -testCategory "Audio" -testResults ./test-results/p3-
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-028 | Main menu scene | Pending |
-| US-029 | Team selection screen | Pending |
-| US-030 | Match HUD (full) | Pending |
-| US-031 | Pause menu | Pending |
-| US-032 | Post-match results screen | Pending |
-| US-033 | Settings screen | Pending |
-| US-034 | Scene transition system | Pending |
-| US-035 | E2E user journey test | Pending |
+| US-028 | Main menu scene | Complete |
+| US-029 | Team selection screen | Complete |
+| US-030 | Match HUD (full) | Complete |
+| US-031 | Pause menu | Complete |
+| US-032 | Post-match results screen | Complete |
+| US-033 | Settings screen | Complete |
+| US-034 | Scene transition system | Complete |
+| US-035 | E2E user journey test | Complete |
 
 **Checkpoint validation**:
 ```bash
@@ -136,14 +136,14 @@ unity -runTests -batchmode -testCategory "E2E" -testResults ./test-results/p4-e2
 
 | Story | Title | Status |
 |-------|-------|--------|
-| US-036 | FIFA-style keyboard/mouse + gamepad input mapping | Pending |
-| US-037 | FIFA-style action button mapping (keyboard + gamepad) | Pending |
-| US-038 | Controller rumble + screen shake + audio feedback | Pending |
-| US-039 | Draw call optimization | Pending |
-| US-040 | GC-free gameplay loop | Pending |
-| US-041 | Multi-resolution UI (macOS windows) | Pending |
-| US-042 | macOS build hardening | Pending |
-| US-043 | Performance budget test suite | Pending |
+| US-036 | FIFA-style keyboard/mouse + gamepad input mapping | Complete |
+| US-037 | FIFA-style action button mapping (keyboard + gamepad) | Complete |
+| US-038 | Controller rumble + screen shake + audio feedback | Complete |
+| US-039 | Draw call optimization | Complete |
+| US-040 | GC-free gameplay loop | Complete |
+| US-041 | Multi-resolution UI (macOS windows) | Complete |
+| US-042 | macOS build hardening | Complete |
+| US-043 | Performance budget test suite | Complete |
 
 **Checkpoint validation**:
 ```bash

@@ -136,6 +136,31 @@ Every completed story MUST pass ALL of these:
 4. **Full PlayMode suite**: zero failures (excluding `[Category("Quarantine")]`)
 5. **No new warnings**: Unity console has no new warnings from your changes
 
+## Coplay MCP — Compulsory Compile & Visual Checks
+
+Coplay MCP provides direct access to the Unity Editor. These checks are **mandatory** — not optional — for every feature, bug fix, or code change.
+
+### Compile Check (after every code change)
+```
+check_compile_errors → must return zero errors
+```
+
+### Visual Inspection (after any rendering/physics/scene change)
+```
+capture_scene_object / capture_ui_canvas → inspect captured screenshots
+```
+
+### When Required
+- **Compile check**: After EVERY `.cs` file edit, BEFORE committing
+- **Visual inspection**: After ANY change to Gameplay/, Editor/, Materials/, Shaders/, Scenes/, or ScriptableObjects/
+- **Bug fix verification**: After fixing any bug, capture + inspect to confirm fix is visually correct
+- **Feature completion**: Before marking any story as complete, run compile check + visual inspection
+
+### Failure Protocol
+- If compile errors: fix ALL errors before proceeding — do not move to next task
+- If visual regression: fix before moving on — do NOT defer visual bugs to later
+- If RenderTexture/shader errors in capture: fix ScreenshotCapture.cs or shader setup first
+
 ## Visual Validation (Screenshots)
 
 Every feature or fix that changes rendering, physics objects, or scene hierarchy MUST include screenshot validation.
@@ -187,8 +212,13 @@ Every feature or fix that changes rendering, physics objects, or scene hierarchy
 1. Write tests FIRST (TDD) when possible
 2. Run EditMode tests after every code change
 3. Run PlayMode tests after completing a feature
-4. If a test fails: read the assertion message, debug, fix, re-run
-5. If a test is flaky: tag with `[Category("Quarantine")]`, note in DOCUMENTATION.md
+4. **Coplay compile check** after every code change: use `check_compile_errors` via Coplay MCP — zero errors required before proceeding
+5. **Visual inspection** after any change to rendering, physics, scene hierarchy, materials, shaders, camera, or lighting:
+   - Capture screenshots via `ScreenshotCapture.CaptureAll()` or Coplay MCP scene capture
+   - Inspect for: no magenta/pink shaders, correct objects visible, proper colors and geometry
+   - If visual regression found: fix before moving on — do NOT defer visual bugs
+6. If a test fails: read the assertion message, debug, fix, re-run
+7. If a test is flaky: tag with `[Category("Quarantine")]`, note in DOCUMENTATION.md
 
 ### Ending a Session
 

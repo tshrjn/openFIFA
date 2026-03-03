@@ -462,7 +462,7 @@ PlayerSettings:
   AndroidTargetSdkVersion: 0
   m_HdrBitmapEncodingFormat: 0
   m_LightmapEncodingQuality: 2
-  m_ActiveInputHandler: 2
+  m_ActiveInputHandler: 1
   m_CloudEnabled: 0
   framebufferDepthMemorylessMode: 0
   qualitySettingsNames: []
