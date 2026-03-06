@@ -6,6 +6,7 @@
     "com.unity.ai.navigation": "2.0.10",
     "com.unity.analytics": "3.8.2",
     "com.unity.cinemachine": "3.1.2",
+    "com.coplaydev.coplay": "https://github.com/CoplayDev/unity-plugin.git#beta",
     "com.unity.collab-proxy": "2.11.3",
     "com.unity.ide.rider": "3.0.39",
     "com.unity.ide.visualstudio": "2.0.26",

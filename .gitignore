@@ -1,23 +1,24 @@
-# Unity generated files
-/[Ll]ibrary/
-/[Tt]emp/
-/[Oo]bj/
-/[Bb]uild/
-/[Bb]uilds/
-/[Ll]ogs/
-/[Uu]ser[Ss]ettings/
+# Unity generated files (match both root and OpenFifa/ subdirectory)
+**/[Ll]ibrary/
+**/[Tt]emp/
+**/[Oo]bj/
+**/[Bb]uild/
+**/[Bb]uilds/
+**/[Ll]ogs/
+**/[Uu]ser[Ss]ettings/
 
 # MemoryCaptures can get large
-/[Mm]emoryCaptures/
+**/[Mm]emoryCaptures/
 
 # Recordings can get large
-/[Rr]ecordings/
+**/[Rr]ecordings/
 
 # Uncomment if you don't want to track asset meta files
 # *.meta
 
 # Visual Studio cache directory
 .vs/
+**/.vscode/
 
 # Gradle cache directory
 .gradle/
@@ -28,6 +29,7 @@ ExportedObj/
 *.csproj
 *.unityproj
 *.sln
+*.slnx
 *.suo
 *.tmp
 *.user
@@ -58,10 +60,18 @@ sysinfo.txt
 crashlytics-build.properties
 
 # Packed Addressables
-/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
+**/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 
-# TextMeshPro
-/[Aa]ssets/TextMesh Pro/
+# TextMeshPro (auto-imported by Unity)
+**/[Aa]ssets/TextMesh Pro/
+**/[Aa]ssets/TextMesh Pro.meta
+
+# MobileDependencyResolver (auto-imported)
+**/[Aa]ssets/MobileDependencyResolver/
+**/[Aa]ssets/MobileDependencyResolver.meta
+
+# Coplay local package cache
+**/Packages/Coplay/
 
 # macOS
 .DS_Store

@@ -5,7 +5,9 @@
         "OpenFifa.Core",
         "Unity.InputSystem",
         "Unity.TextMeshPro",
-        "OpenFifa.AI"
+        "OpenFifa.AI",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
