@@ -100,3 +100,6 @@ screenshots/
 docs/references/*.mp4
 docs/references/*.mkv
 docs/references/*.webm
+
+# Git worktrees
+.worktrees/
