@@ -225,7 +225,61 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
             _marker = BuildMarkerRing();
             _marker.gameObject.SetActive(false);
+            ApplyWeatherVisuals(cam);
             BroadcastCamera.Snap();
+        }
+
+        /// <summary>The match's weather visuals (rain/snow particles, fog, pitch wetness); null in clear weather.</summary>
+        public WeatherSystem WeatherVisuals { get; private set; }
+
+        /// <summary>
+        /// Drives the visuals from <see cref="Weather"/> (-spWeather): the existing <see cref="WeatherSystem"/> for
+        /// precipitation and fog, kept in front of the broadcast camera, plus a cloudier sky and softer sun from
+        /// <see cref="MatchWeatherOption.LookFor"/>. Clear weather leaves the broadcast look untouched.
+        /// </summary>
+        private void ApplyWeatherVisuals(Camera cam)
+        {
+            if (Weather == WeatherType.Clear) return;
+            var look = MatchWeatherOption.LookFor(Weather);
+            foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                if (l.type == LightType.Directional)
+                {
+                    l.intensity *= look.SunScale;
+                    l.shadowStrength *= look.ShadowScale;
+                }
+            RenderSettings.ambientIntensity = look.AmbientScale;
+            var cloud = new Color(0.42f, 0.45f, 0.5f);
+            cam.backgroundColor = Color.Lerp(cam.backgroundColor, cloud, look.SkyGrey);
+
+            var go = new GameObject("Weather (" + Weather + ")");
+            go.transform.SetParent(transform, false);
+            WeatherVisuals = go.AddComponent<WeatherSystem>(); // Awake builds the rain and snow emitters
+            WeatherVisuals.FollowCamera = cam.transform;
+            WeatherVisuals.EmissionScale = 4f; // the preset rates are tuned for a close camera
+            WeatherVisuals.ConfigureForBroadcast(CreateWeatherParticleMaterial());
+            WeatherVisuals.SetWeatherImmediate(Weather);
+            Debug.Log("[" + ProductName + "] weather visuals: " + Weather + " (sun x" + look.SunScale + ", sky grey " + look.SkyGrey + ")");
+        }
+
+        private static Material CreateWeatherParticleMaterial()
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            bool urp = shader != null;
+            if (!urp) shader = Shader.Find("Sprites/Default");
+            if (shader == null) return null;
+            var mat = new Material(shader) { name = "WeatherParticleMaterial" };
+            if (urp)
+            {
+                mat.SetFloat("_Surface", 1f); // Transparent
+                mat.SetFloat("_Blend", 0f);   // Alpha
+                mat.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+                mat.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+                mat.SetFloat("_ZWrite", 0f);
+                mat.SetOverrideTag("RenderType", "Transparent");
+                mat.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                mat.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            }
+            return mat;
         }
 
         /// <summary>Visual ball = sim ball (Unity's sphere primitive is 1 m across), so it sits on the grass at y = r.</summary>

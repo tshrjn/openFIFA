@@ -127,6 +127,7 @@ namespace OpenFifa.Core
             Profile = SinglePlayerDifficulty.For(Options.Level);
             // The pitch condition goes into the ball config before the sim AND the AI ball model are built from it,
             // so the AI's flight and roll predictions match the ball it plays. Options.Config itself is not changed.
+            // The match's surface (Options.Surface, else from Options.Weather) wins over a surface already in Options.Config.
             var cfg = (Options.Config ?? new MatchSimConfig()).ForSurface(Options.EffectiveSurface);
             var setup = PrepareSetup(Options.Setup ?? MatchSetup.CreateDefault(Options.Seed), Options.Seed, Options.HumanTeam, Profile);
 
