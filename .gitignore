@@ -103,3 +103,7 @@ docs/references/*.webm
 
 # Git worktrees
 .worktrees/
+
+# iPad pipeline downloads (ci/ipad/ship.sh)
+OpenFifa/.build/
+!OpenFifa/Assets/Editor/Build/
