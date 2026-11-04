@@ -606,12 +606,15 @@ namespace OpenFifa.Gameplay
             dst.requiresDepthOption = src.requiresDepthOption;
         }
 
-        /// <summary>Bottom-right inset with the iPad's 4:3 landscape shape, a quarter of the window wide.</summary>
+        /// <summary>
+        /// Top-left inset with the iPad's 4:3 landscape shape, a quarter of the window wide. Top-left keeps it clear
+        /// of the match HUD's minimap (bottom-right) and scoreboard (top centre), which in simulation share the window.
+        /// </summary>
         private Rect SimulatedDeviceInset()
         {
             float w = 0.25f;
             float h = w * _nativeSize.Width / _nativeSize.Height * 3f / 4f;
-            return new Rect(1f - w - 0.015f, 0.025f, w, h);
+            return new Rect(0.015f, 1f - h - 0.025f, w, h);
         }
 
         private void FrameCompanionCamera()
