@@ -5,6 +5,8 @@ namespace OpenFifa.Core
     /// Models gravity, quadratic drag with a drag crisis, Magnus lift, spin decay, sliding and rolling friction,
     /// bounces with restitution and spin/velocity coupling, goal-frame collisions and net capture.
     /// Out-of-play is a rules decision and lives in <see cref="MatchSim"/>; this class only moves the ball.
+    /// Goal-frame contacts are swept (segment vs capsule), so a 45 m/s ball cannot tunnel through a post.
+    /// For AI ball prediction use <see cref="PredictBall"/> or the helpers in <see cref="BallFlight"/>.
     /// </summary>
     public static class BallIntegrator
     {
@@ -20,6 +22,7 @@ namespace OpenFifa.Core
             }
 
             BallStepFlags flags = BallStepFlags.None;
+            SimVec3 p0 = ball.Position;
             float m = cfg.Mass;
             float r = cfg.Radius;
             SimVec3 v = ball.Velocity;
@@ -33,7 +36,8 @@ namespace OpenFifa.Core
 
             if (ball.Grounded)
             {
-                // Ground contact: the normal force cancels gravity, Magnus only acts in the plane.
+                // Ground contact: the normal force cancels gravity. Magnus is deliberately NOT applied on the
+                // ground: grass contact dominates a rolling ball, so side spin only decays (no curl along the turf).
                 force = new SimVec3(force.X, 0f, force.Z);
                 v = new SimVec3(v.X, 0f, v.Z);
                 v += force * (dt / m);
@@ -70,7 +74,7 @@ namespace OpenFifa.Core
                 ball.Grounded = false;
             }
 
-            flags |= CollideGoalFrames(ref p, ref v, ref w, cfg, pitch);
+            flags |= CollideGoalFrames(p0, ref p, ref v, ref w, cfg, pitch);
 
             // Net capture: the ball has wholly crossed the goal line inside the mouth.
             float halfGoal = pitch.GoalWidth * 0.5f;
@@ -92,6 +96,17 @@ namespace OpenFifa.Core
             ball.Velocity = v;
             ball.Spin = w;
             return flags;
+        }
+
+        /// <summary>
+        /// Ball state after <paramref name="seconds"/> of free flight (no players), stepped with the real integrator
+        /// at <paramref name="dt"/> (default 120 Hz, the match sim's ball rate). Works on a copy: allocation-free.
+        /// </summary>
+        public static SimBall PredictBall(SimBall ball, BallSimConfig cfg, PitchSpec pitch, float seconds, float dt = 1f / 120f)
+        {
+            int steps = (int)(seconds / dt + 0.5f);
+            for (int i = 0; i < steps; i++) Step(ref ball, cfg, pitch, dt);
+            return ball;
         }
 
         /// <summary>Runs <paramref name="steps"/> substeps on a copy of the ball (AI prediction, tests).</summary>
@@ -173,46 +188,54 @@ namespace OpenFifa.Core
             }
         }
 
-        private static BallStepFlags CollideGoalFrames(ref SimVec3 p, ref SimVec3 v, ref SimVec3 w,
+        private static BallStepFlags CollideGoalFrames(SimVec3 p0, ref SimVec3 p, ref SimVec3 v, ref SimVec3 w,
             BallSimConfig cfg, PitchSpec pitch)
         {
-            // Only bother near either goal line.
-            float distToLine = pitch.HalfLength - SimMath.Abs(p.Z);
-            if (distToLine > 1.5f || distToLine < -1.5f) return BallStepFlags.None;
+            // Only bother near either goal line (at either end of this substep's motion).
+            float d0 = pitch.HalfLength - SimMath.Abs(p0.Z);
+            float d1 = pitch.HalfLength - SimMath.Abs(p.Z);
+            if (SimMath.Abs(d0) > 1.5f && SimMath.Abs(d1) > 1.5f) return BallStepFlags.None;
 
             float side = p.Z >= 0f ? 1f : -1f;
             float pr = cfg.PostRadius;
             float zc = side * (pitch.HalfLength - pr);
             float px = pitch.GoalWidth * 0.5f + pr;
             float barY = pitch.GoalHeight + pr;
-            BallStepFlags flags = BallStepFlags.None;
+            float minDist = cfg.Radius + pr;
+            var leftBottom = new SimVec3(-px, 0f, zc);
+            var leftTop = new SimVec3(-px, barY, zc);
+            var rightBottom = new SimVec3(px, 0f, zc);
+            var rightTop = new SimVec3(px, barY, zc);
 
-            if (CollideSegment(ref p, ref v, ref w, new SimVec3(-px, 0f, zc), new SimVec3(-px, barY, zc), cfg))
-                flags |= BallStepFlags.HitPost;
-            if (CollideSegment(ref p, ref v, ref w, new SimVec3(px, 0f, zc), new SimVec3(px, barY, zc), cfg))
-                flags |= BallStepFlags.HitPost;
-            if (CollideSegment(ref p, ref v, ref w, new SimVec3(-px, barY, zc), new SimVec3(px, barY, zc), cfg))
-                flags |= BallStepFlags.HitCrossbar;
-            return flags;
+            // Swept test against all three members; respond to the earliest contact only.
+            float best = 2f;
+            int which = -1;
+            if (SimGeometry.SweepSphereCapsule(p0, p, leftBottom, leftTop, minDist, out float h) && h < best) { best = h; which = 0; }
+            if (SimGeometry.SweepSphereCapsule(p0, p, rightBottom, rightTop, minDist, out h) && h < best) { best = h; which = 1; }
+            if (SimGeometry.SweepSphereCapsule(p0, p, leftTop, rightTop, minDist, out h) && h < best) { best = h; which = 2; }
+            if (which < 0) return BallStepFlags.None;
+
+            SimVec3 a = which == 0 ? leftBottom : (which == 1 ? rightBottom : leftTop);
+            SimVec3 b = which == 0 ? leftTop : rightTop;
+            // Overlapping from the start: resolve at the end position (as a static contact).
+            SimVec3 pc = best > 0f ? p0 + (p - p0) * best : p;
+            if (!Reflect(ref pc, ref v, ref w, a, b, minDist, cfg.PostRestitution)) return BallStepFlags.None;
+            p = pc;
+            return which == 2 ? BallStepFlags.HitCrossbar : BallStepFlags.HitPost;
         }
 
-        private static bool CollideSegment(ref SimVec3 p, ref SimVec3 v, ref SimVec3 w, SimVec3 a, SimVec3 b,
-            BallSimConfig cfg)
+        /// <summary>Pushes the ball out of the capsule [a, b] and reflects an approaching velocity. False if separating.</summary>
+        private static bool Reflect(ref SimVec3 p, ref SimVec3 v, ref SimVec3 w, SimVec3 a, SimVec3 b, float minDist,
+            float restitution)
         {
-            SimVec3 ab = b - a;
-            float t = SimMath.Clamp01(SimVec3.Dot(p - a, ab) / ab.SqrMagnitude);
-            SimVec3 q = a + ab * t;
+            SimVec3 q = SimGeometry.ClosestOnSegment(p, a, b);
             SimVec3 d = p - q;
-            float minDist = cfg.Radius + cfg.PostRadius;
-            float distSqr = d.SqrMagnitude;
-            if (distSqr >= minDist * minDist || distSqr < 1e-10f) return false;
-
-            float dist = SimMath.Sqrt(distSqr);
-            SimVec3 n = d / dist;
-            p = q + n * minDist;
+            float dist = d.Magnitude;
+            SimVec3 n = dist > 1e-6f ? d / dist : -v.Normalized;
             float vn = SimVec3.Dot(v, n);
             if (vn >= 0f) return false;
-            v -= n * ((1f + cfg.PostRestitution) * vn);
+            p = q + n * minDist;
+            v -= n * ((1f + restitution) * vn);
             w *= 0.6f;
             return true;
         }

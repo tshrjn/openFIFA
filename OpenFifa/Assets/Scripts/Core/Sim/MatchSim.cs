@@ -9,6 +9,12 @@ namespace OpenFifa.Core
     /// <see cref="PlayerIntent"/> per player (index = player id; Home 0-10, Away 11-21, slot 0 = keeper).
     /// Same config + setup + seed + intents gives bit-identical state and events on the same runtime.
     /// The presentation layer reads <see cref="State"/> and the event list and never writes back.
+    /// Determinism is per runtime: the sim uses IEEE float math plus System.Math (Sqrt, Exp, Sin, Cos, Atan2, Acos),
+    /// whose last-bit results can differ between Mono and IL2CPP, between JIT/AOT code paths and between CPU
+    /// architectures (x64 vs ARM64). Intent-only replays and lockstep netplay are exact only on the same build and
+    /// platform; to share replays across devices store periodic snapshots (<see cref="CaptureSnapshot"/>) and
+    /// re-sync from them rather than trusting re-simulation alone. Possession ties are broken with the seeded RNG,
+    /// never by player order.
     /// </summary>
     public sealed partial class MatchSim
     {
@@ -89,6 +95,7 @@ namespace OpenFifa.Core
             if (_s.Phase == SimMatchPhase.Stoppage && _s.Tick >= _s.PhaseEndTick) SetupRestart();
 
             UpdatePlayers(intents);
+            SeparatePlayers();
             if (_s.Phase == SimMatchPhase.AwaitingRestart) EnforceRestartPositions();
             ResolveContacts();
             if (_s.Phase == SimMatchPhase.InPlay) UpdateDribble();
@@ -117,7 +124,10 @@ namespace OpenFifa.Core
             _events.Clear();
         }
 
-        /// <summary>Ball state after <paramref name="seconds"/> of free flight (no players), for AI interception.</summary>
+        /// <summary>
+        /// Ball state after <paramref name="seconds"/> of free flight (no players), for AI interception. Allocation-free.
+        /// Ground-pass timing and speed helpers for the AI are in <see cref="BallFlight"/>.
+        /// </summary>
         public SimBall PredictBall(float seconds)
         {
             int steps = (int)(seconds / _cfg.BallDt + 0.5f);
@@ -136,7 +146,8 @@ namespace OpenFifa.Core
             h.Add(_s.Owner); h.Add(_s.KeeperHolding ? 1 : 0); h.Add(_s.LastTouchPlayer); h.Add((int)_s.LastTouchTeam);
             h.Add((int)_s.PossessionTeam); h.Add(_s.OffsideMask); h.Add(_s.OffsidePasser);
             h.Add(_s.PassLive ? 1 : 0); h.Add(_s.PassFrom); h.Add(_s.PassTarget); h.Add((int)_s.PassTeam); h.Add(_s.AssistCandidate);
-            h.Add(_s.ShotLive ? 1 : 0); h.Add(_s.Shooter); h.Add(_s.KickSerial); h.Add(_s.HomeSaveSerial); h.Add(_s.AwaySaveSerial);
+            h.Add(_s.ShotLive ? 1 : 0); h.Add(_s.Shooter); h.Add(_s.PenaltyKicker); h.Add(_s.PenaltyKickTick);
+            h.Add(_s.IndirectRestartLive ? 1 : 0); h.Add(_s.KickSerial); h.Add(_s.HomeSaveSerial); h.Add(_s.AwaySaveSerial);
             h.Add(_s.HomeShots); h.Add(_s.AwayShots); h.Add(_s.HomePossessionTicks); h.Add(_s.AwayPossessionTicks);
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
             {

@@ -140,6 +140,20 @@ namespace OpenFifa.Core
         public float GkMaxReachHeight = 2.5f;
         public float GkParrySpeedFactor = 0.35f;
 
+        // ---- Bodies (ball-vs-player deflection and player-player separation). ----
+        /// <summary>Radius (m) of a player's body capsule; two players are kept 2x this apart.</summary>
+        public float PlayerBodyRadius = 0.3f;
+
+        /// <summary>Top of an outfield player's body capsule (m): the head.</summary>
+        public float PlayerHeadHeight = 1.9f;
+
+        /// <summary>Restitution of the ball off a body (bodies are soft) and the tangential speed kept.</summary>
+        public float BodyRestitution = 0.35f;
+        public float BodyTangentialKeep = 0.75f;
+
+        /// <summary>Speed (m/s) at which a caught ball is gathered from the catch point into the hands.</summary>
+        public float GkGatherSpeed = 6f;
+
         public SimActionConfig Clone() => (SimActionConfig)MemberwiseClone();
     }
 }

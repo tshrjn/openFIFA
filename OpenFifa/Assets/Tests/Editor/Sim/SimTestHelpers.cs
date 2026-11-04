@@ -31,6 +31,19 @@ namespace OpenFifa.Tests.Editor.Sim
             s.OffsideMask = 0;
         }
 
+        /// <summary>Schedules a restart: the next Step sets it up (ball placed, taker chosen, opponents held off).</summary>
+        public static void ScheduleRestart(MatchSim sim, RestartType type, SimTeam team, SimVec3 spot)
+        {
+            var s = sim.State;
+            s.Phase = SimMatchPhase.Stoppage;
+            s.PendingRestart = type;
+            s.RestartTeam = team;
+            s.RestartSpot = spot;
+            s.PhaseEndTick = s.Tick + 1;
+            s.Owner = -1;
+            s.KeeperHolding = false;
+        }
+
         public static void Place(MatchSim sim, int id, float x, float z)
         {
             sim.State.Players[id].Position = new SimVec3(x, 0f, z);

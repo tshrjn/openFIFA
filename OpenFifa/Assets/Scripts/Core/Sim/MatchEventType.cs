@@ -48,5 +48,7 @@ namespace OpenFifa.Core
         Whiff,
         HalfTime,
         FullTime,
+        /// <summary>The loose ball bounced off a player's body. Player = that player, Other = previous toucher, Speed = ball speed after.</summary>
+        Deflection,
     }
 }

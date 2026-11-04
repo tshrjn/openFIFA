@@ -53,8 +53,28 @@ namespace OpenFifa.Core
         public SimTeam PassTeam = SimTeam.None;
         public int AssistCandidate = -1;
 
+        /// <summary>
+        /// A shot is on its way. Stays true through keeper saves (parries) and deflections off opponents, so a parried
+        /// ball that still goes in is the shooter's goal; any controlled touch or a teammate's deflection ends it.
+        /// </summary>
         public bool ShotLive;
         public int Shooter = -1;
+
+        /// <summary>
+        /// Taker of a penalty whose outcome is still open (-1 none): set at the contact frame, cleared once the ball
+        /// is dead, stops, is held, or is touched by anyone other than the defending keeper. The half cannot end
+        /// while it is set (a penalty at the whistle is played out).
+        /// </summary>
+        public int PenaltyKicker = -1;
+        public int PenaltyKickTick;
+
+        /// <summary>
+        /// The last kick was an indirect free kick or a throw-in and nobody else has touched the ball since:
+        /// it cannot score directly (goal kick, or a corner if it went into the kicker's own goal).
+        /// </summary>
+        public bool IndirectRestartLive;
+
+        public bool PenaltyInProgress => PenaltyKicker >= 0;
 
         /// <summary>Incremented on every kick; a keeper gets one save attempt per kick.</summary>
         public int KickSerial;

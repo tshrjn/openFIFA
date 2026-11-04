@@ -9,33 +9,52 @@ namespace OpenFifa.Core
 
             if (_s.KeeperHolding && _s.Owner >= 0)
             {
-                SimPlayer k = _s.Players[_s.Owner];
-                _s.Ball.Position = new SimVec3(k.Position.X, 1.0f, k.Position.Z) + k.FacingDir * 0.3f;
-                _s.Ball.Velocity = k.Velocity;
-                _s.Ball.Spin = SimVec3.Zero;
-                _s.Ball.Grounded = false;
-                if (!InOwnPenaltyArea(k.Team, k.Position))
-                {
-                    // Carried out of the box: the keeper must drop the ball to his feet.
-                    _s.KeeperHolding = false;
-                    _s.Ball.Position = new SimVec3(_s.Ball.Position.X, _cfg.Ball.Radius, _s.Ball.Position.Z);
-                    _s.Ball.Velocity = k.Velocity.Flat;
-                    _s.Ball.Grounded = true;
-                }
-
+                StepHeldBall();
                 return;
             }
 
             float bdt = _cfg.BallDt;
             for (int sub = 0; sub < _cfg.BallSubsteps; sub++)
             {
+                SimVec3 p0 = _s.Ball.Position;
                 BallStepFlags f = BallIntegrator.Step(ref _s.Ball, _cfg.Ball, _cfg.Pitch, bdt);
                 if ((f & BallStepFlags.HitPost) != 0)
                     Emit(MatchEventType.PostHit, _s.LastTouchPlayer, -1, _s.LastTouchTeam, _s.Ball.Position, _s.Ball.Velocity.Magnitude);
                 if ((f & BallStepFlags.HitCrossbar) != 0)
                     Emit(MatchEventType.CrossbarHit, _s.LastTouchPlayer, -1, _s.LastTouchTeam, _s.Ball.Position, _s.Ball.Velocity.Magnitude);
                 if (_s.Ball.InNet != 0) break;
-                if (_s.Phase == SimMatchPhase.InPlay && _s.Owner < 0) TrySaves();
+                if (_s.Phase != SimMatchPhase.InPlay) continue;
+                CollideBallWithBodies(p0);
+                if (_s.Owner < 0) TrySaves();
+                if (_s.KeeperHolding) break;
+            }
+        }
+
+        /// <summary>
+        /// The keeper has the ball in his hands. A ball caught at full stretch is gathered from the catch point to the
+        /// hold point at <see cref="SimActionConfig.GkGatherSpeed"/> (plus the keeper's own speed), never teleported.
+        /// </summary>
+        private void StepHeldBall()
+        {
+            SimPlayer k = _s.Players[_s.Owner];
+            float dt = _cfg.Dt;
+            SimVec3 hold = new SimVec3(k.Position.X, 1.0f, k.Position.Z) + k.FacingDir * 0.3f;
+            SimVec3 from = _s.Ball.Position;
+            SimVec3 to = hold - from;
+            float dist = to.Magnitude;
+            float maxStep = (_cfg.Actions.GkGatherSpeed + k.Speed) * dt;
+            SimVec3 pos = dist <= maxStep ? hold : from + to * (maxStep / dist);
+            _s.Ball.Position = pos;
+            _s.Ball.Velocity = dist <= maxStep ? k.Velocity : (pos - from) / dt;
+            _s.Ball.Spin = SimVec3.Zero;
+            _s.Ball.Grounded = false;
+            if (!InOwnPenaltyArea(k.Team, k.Position))
+            {
+                // Carried out of the box: the keeper must drop the ball to his feet.
+                _s.KeeperHolding = false;
+                _s.Ball.Position = new SimVec3(_s.Ball.Position.X, _cfg.Ball.Radius, _s.Ball.Position.Z);
+                _s.Ball.Velocity = k.Velocity.Flat;
+                _s.Ball.Grounded = true;
             }
         }
 
@@ -47,9 +66,16 @@ namespace OpenFifa.Core
                    && depthCoord <= _cfg.Pitch.HalfLength + 0.5f;
         }
 
-        /// <summary>Keepers get one save attempt per kick when the ball comes within diving reach heading at goal.</summary>
+        /// <summary>
+        /// Keepers get one save attempt per kick, resolved when the ball reaches its closest approach (it crosses the
+        /// keeper's plane during the next ball substep). The ball must then be within reach along the dive: the
+        /// lateral offset from the keeper perpendicular to the ball's path, plus any height above a standing reach.
+        /// A catch leaves the ball at the catch point (it is gathered smoothly afterwards); a parry deflects it from
+        /// there; a beaten keeper cannot also grab the ball on the same kick.
+        /// </summary>
         private void TrySaves()
         {
+            float bdt = _cfg.BallDt;
             for (int t = 0; t < 2; t++)
             {
                 SimTeam team = t == 0 ? SimTeam.Home : SimTeam.Away;
@@ -62,63 +88,185 @@ namespace OpenFifa.Core
                 if (!ka.IsGoalkeeper || !InOwnPenaltyArea(team, k.Position)) continue;
 
                 SimBall b = _s.Ball;
-                int goalSign = -AttackSign(team);
-                float speed = b.Velocity.Magnitude;
-                if (b.Velocity.Z * goalSign < 3f) continue;
-                // Must be heading roughly on target.
-                float tLine = (goalSign * _cfg.Pitch.HalfLength - b.Position.Z) / b.Velocity.Z;
-                if (tLine < 0f) continue;
-                float xAtLine = b.Position.X + b.Velocity.X * tLine;
-                if (SimMath.Abs(xAtLine) > _cfg.Pitch.GoalWidth * 0.5f + 1.5f) continue;
+                if (!HeadingAtGoal(team, b)) continue;
 
-                float reach = _cfg.Actions.GkStandingReach + _cfg.Actions.GkDiveReachRange * SimPlayerAttributes.N(ka.GkDiving);
-                if (SimMath.FlatDistance(k.Position, b.Position) > reach || b.Position.Y > _cfg.Actions.GkMaxReachHeight) continue;
-                // How far the keeper must stretch: his distance from the ball's flat path, plus any height above his head.
-                SimVec3 dir = b.Velocity.Flat.Normalized;
+                // Closest approach: wait until the ball crosses the keeper's plane within the next substep.
+                SimVec3 flatV = b.Velocity.Flat;
+                float flatSpeed = flatV.Magnitude;
+                SimVec3 dir = flatV / flatSpeed;
                 SimVec3 rel = (k.Position - b.Position).Flat;
-                float lateral = SimMath.Abs(dir.X * rel.Z - dir.Z * rel.X) + SimMath.Max(0f, b.Position.Y - 2.0f);
-                if (lateral > reach) continue;
+                float along = SimVec3.Dot(rel, dir);
+                if (along > flatSpeed * bdt) continue;
+                if (along < -0.5f) continue; // already past him
+                float tCa = SimMath.Max(0f, along) / flatSpeed;
+                SimVec3 ca = b.Position + b.Velocity * tCa + new SimVec3(0f, -0.5f * _cfg.Ball.Gravity * tCa * tCa, 0f);
 
+                // This is the keeper's one chance at this kick, whether or not it is in reach.
                 if (t == 0) _s.HomeSaveSerial = _s.KickSerial; else _s.AwaySaveSerial = _s.KickSerial;
+                float reach = _cfg.Actions.GkStandingReach + _cfg.Actions.GkDiveReachRange * SimPlayerAttributes.N(ka.GkDiving);
+                float lateral = SimMath.Abs(dir.X * rel.Z - dir.Z * rel.X) + SimMath.Max(0f, ca.Y - 2.0f);
+                if (ca.Y > _cfg.Actions.GkMaxReachHeight || lateral > reach) continue;
+
+                float speed = b.Velocity.Magnitude;
                 float p = 0.35f + 0.6f * SimPlayerAttributes.N(ka.GkReflexes)
                           - SimMath.Max(0f, speed - 15f) * 0.02f - (lateral / reach) * 0.35f;
                 if (lateral <= _cfg.Actions.GkStandingReach) p += 0.2f;
                 p = SimMath.Clamp(p, 0.03f, 0.97f);
-                if (_s.Rng.NextFloat() >= p) continue;
+                if (_s.Rng.NextFloat() >= p)
+                {
+                    // Beaten: he cannot claim the ball as it goes past (it may still hit his body).
+                    k.ControlBlockedUntilTick = _s.Tick + _cfg.SecondsToTicks(0.3f);
+                    continue;
+                }
 
-                int shooter = _s.LastTouchPlayer;
+                int shooter = _s.ShotLive ? _s.Shooter : _s.LastTouchPlayer;
                 float pCatch = SimPlayerAttributes.N(ka.GkHandling) * 0.95f - SimMath.Max(0f, speed - 14f) * 0.035f
-                               - (lateral > _cfg.Actions.GkStandingReach ? 0.25f : 0f);
+                               - (lateral > _cfg.Actions.GkStandingReach ? 0.25f : 0f)
+                               + SimMath.Max(0f, 12f - speed) * 0.05f; // slow balls are simply gathered
                 bool caught = _s.Rng.NextFloat() < pCatch;
-                Emit(MatchEventType.Save, gk, shooter, team, b.Position, speed, 0f, caught ? 1 : 0);
-                _s.ShotLive = false;
+                Emit(MatchEventType.Save, gk, shooter, team, ca, speed, 0f, caught ? 1 : 0);
                 _s.PassLive = false;
                 _s.LastTouchPlayer = gk;
                 _s.LastTouchTeam = team;
+                _s.Ball.Position = new SimVec3(ca.X, SimMath.Max(ca.Y, _cfg.Ball.Radius), ca.Z);
                 // A save is not a deliberate play: the offside mask stays (Law 11).
                 if (caught)
                 {
+                    _s.ShotLive = false;
+                    _s.PenaltyKicker = -1;
+                    _s.IndirectRestartLive = false;
                     _s.Ball.Velocity = SimVec3.Zero;
                     _s.Ball.Spin = SimVec3.Zero;
                     SetOwner(gk);
                     _s.KeeperHolding = true;
-                    _s.Ball.Position = new SimVec3(k.Position.X, 1.0f, k.Position.Z);
                     _s.Ball.Grounded = false;
                 }
                 else
                 {
-                    float side = b.Position.X >= k.Position.X ? 1f : -1f;
+                    // Parry: ShotLive stays, so a parry that still goes in is the shooter's goal.
+                    NoteTouch(gk);
+                    float side = ca.X >= k.Position.X ? 1f : -1f;
                     float vz = -b.Velocity.Z * _cfg.Actions.GkParrySpeedFactor;
                     float vx = b.Velocity.X * 0.4f + side * (2f + 4f * _s.Rng.NextFloat());
                     _s.Ball.Velocity = new SimVec3(vx, 1f + speed * 0.12f, vz);
                     _s.Ball.Spin = SimVec3.Zero;
                     _s.Ball.Grounded = false;
+                    k.ControlBlockedUntilTick = _s.Tick + _cfg.SecondsToTicks(0.4f);
                     _s.KickSerial++;
                     if (t == 0) _s.HomeSaveSerial = _s.KickSerial; else _s.AwaySaveSerial = _s.KickSerial;
                 }
 
                 return;
             }
+        }
+
+        /// <summary>The ball is moving toward <paramref name="team"/>'s goal at 3 m/s or more, roughly on target.</summary>
+        private bool HeadingAtGoal(SimTeam team, SimBall b)
+        {
+            int goalSign = -AttackSign(team);
+            if (b.Velocity.Z * goalSign < 3f) return false;
+            float tLine = (goalSign * _cfg.Pitch.HalfLength - b.Position.Z) / b.Velocity.Z;
+            if (tLine < 0f) return false;
+            float xAtLine = b.Position.X + b.Velocity.X * tLine;
+            return SimMath.Abs(xAtLine) <= _cfg.Pitch.GoalWidth * 0.5f + 1.5f;
+        }
+
+        /// <summary>The keeper still has a save attempt to come for the current kick (resolved at closest approach).</summary>
+        private bool SavePending(int id)
+        {
+            SimTeam team = TeamOf(id);
+            if (id != KeeperId(team) || _s.LastTouchTeam == team) return false;
+            int serial = team == SimTeam.Home ? _s.HomeSaveSerial : _s.AwaySaveSerial;
+            return serial != _s.KickSerial && HeadingAtGoal(team, _s.Ball);
+        }
+
+        /// <summary>
+        /// Ball vs body capsules for players who cannot control the ball right now (blocked after a kick or a beaten
+        /// save, on the ground, sliding) or when it is above their control height (head up to
+        /// <see cref="SimActionConfig.PlayerHeadHeight"/>). Players who can control it are left to
+        /// <see cref="UpdatePossession"/> (first touch). Keepers' hands are the save and pickup logic, which reach
+        /// higher (<see cref="SimActionConfig.GkMaxReachHeight"/>). Swept over the substep, earliest contact wins.
+        /// </summary>
+        private void CollideBallWithBodies(SimVec3 p0)
+        {
+            var ac = _cfg.Actions;
+            SimVec3 p1 = _s.Ball.Position;
+            float r = _cfg.Ball.Radius;
+            float br = ac.PlayerBodyRadius;
+            float best = 2f;
+            int hitId = -1;
+            SimVec3 hitA = SimVec3.Zero, hitB = SimVec3.Zero;
+            float hitRadius = 0f;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+            {
+                ref SimPlayer pl = ref _s.Players[i];
+                if (pl.SentOff || i == _s.Owner) continue;
+                bool blocked = _s.Tick < pl.ControlBlockedUntilTick;
+                // The ball leaving the kicker's foot does not hit the kicker.
+                if (blocked && i == _s.LastTouchPlayer) continue;
+                // Coarse reject: the capsule's flat reach.
+                float fx = pl.Position.X - p1.X, fz = pl.Position.Z - p1.Z;
+                if (fx * fx + fz * fz > 9f) continue;
+
+                bool down = pl.ActionState == SimPlayerActionState.Grounded || pl.ActionState == SimPlayerActionState.Sliding;
+                SimVec3 a, b;
+                float rad;
+                if (down)
+                {
+                    // Lying or sliding: a low capsule along the facing.
+                    SimVec3 fwd = pl.FacingDir * 0.7f;
+                    a = new SimVec3(pl.Position.X, 0.18f, pl.Position.Z) - fwd;
+                    b = new SimVec3(pl.Position.X, 0.18f, pl.Position.Z) + fwd;
+                    rad = 0.18f + r;
+                }
+                else
+                {
+                    bool keeperHands = AttributesOf(i).IsGoalkeeper && InOwnPenaltyArea(pl.Team, pl.Position);
+                    float controlTop = keeperHands ? ac.GkMaxReachHeight : ac.ControlMaxHeight;
+                    bool canControl = !blocked && p1.Y <= controlTop;
+                    if (canControl) continue;
+                    a = new SimVec3(pl.Position.X, br, pl.Position.Z);
+                    b = new SimVec3(pl.Position.X, SimMath.Max(br, ac.PlayerHeadHeight - br), pl.Position.Z);
+                    rad = br + r;
+                }
+
+                if (!SimGeometry.SweepSphereCapsule(p0, p1, a, b, rad, out float h) || h >= best) continue;
+                // Only an approaching ball bounces (relative to the player's motion).
+                SimVec3 pc = p0 + (p1 - p0) * h;
+                SimVec3 n = pc - SimGeometry.ClosestOnSegment(pc, a, b);
+                if (SimVec3.Dot(_s.Ball.Velocity - pl.Velocity, n) >= 0f) continue;
+                best = h;
+                hitId = i;
+                hitA = a;
+                hitB = b;
+                hitRadius = rad;
+            }
+
+            if (hitId < 0) return;
+            ref SimPlayer hp = ref _s.Players[hitId];
+            SimVec3 contact = best > 0f ? p0 + (p1 - p0) * best : p1;
+            SimVec3 q = SimGeometry.ClosestOnSegment(contact, hitA, hitB);
+            SimVec3 d = contact - q;
+            float dist = d.Magnitude;
+            SimVec3 nrm = dist > 1e-6f ? d / dist : -_s.Ball.Velocity.Normalized;
+            SimVec3 vRel = _s.Ball.Velocity - hp.Velocity;
+            float vn = SimVec3.Dot(vRel, nrm);
+            SimVec3 tangential = vRel - nrm * vn;
+            SimVec3 vOut = tangential * ac.BodyTangentialKeep - nrm * (vn * ac.BodyRestitution) + hp.Velocity;
+
+            SimVec3 pos = q + nrm * hitRadius;
+            _s.Ball.Position = new SimVec3(pos.X, SimMath.Max(pos.Y, r), pos.Z);
+            _s.Ball.Velocity = vOut;
+            _s.Ball.Spin *= 0.5f;
+            _s.Ball.Grounded = _s.Ball.Position.Y <= r + 1e-3f && vOut.Y <= 0.01f;
+
+            int previous = _s.LastTouchPlayer;
+            SimTeam team = hp.Team;
+            if (_s.ShotLive && _s.Shooter >= 0 && TeamOf(_s.Shooter) == team) _s.Shooter = hitId;
+            _s.LastTouchPlayer = hitId;
+            _s.LastTouchTeam = team;
+            NoteTouch(hitId);
+            Emit(MatchEventType.Deflection, hitId, previous, team, _s.Ball.Position, vOut.Magnitude);
         }
 
         private void UpdateDribble()
@@ -205,6 +353,8 @@ namespace OpenFifa.Core
             return best;
         }
 
+        private const float TieEpsilon = 1e-4f;
+
         /// <summary>Loose-ball pickup. The owner keeps priority while the ball is within his control radius.</summary>
         private void UpdatePossession()
         {
@@ -219,6 +369,7 @@ namespace OpenFifa.Core
 
             float h = _s.Ball.Position.Y;
             int best = -1;
+            int ties = 0;
             float bestD = float.MaxValue;
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
             {
@@ -227,10 +378,23 @@ namespace OpenFifa.Core
                 if (p.ActionState == SimPlayerActionState.Grounded || p.ActionState == SimPlayerActionState.Sliding) continue;
                 float d = SimMath.FlatDistance(p.Position, _s.Ball.Position);
                 bool keeperHands = AttributesOf(i).IsGoalkeeper && InOwnPenaltyArea(p.Team, p.Position);
+                // A shot on its way to the keeper is resolved by the save at closest approach, not by a pickup.
+                if (keeperHands && SavePending(i)) continue;
                 float radius = keeperHands ? ac.ControlRadius * 1.5f : ac.ControlRadius;
                 float maxH = keeperHands ? ac.GkMaxReachHeight : ac.ControlMaxHeight;
                 if (d > radius || h > maxH || d >= ownerDist) continue;
-                if (d < bestD) { bestD = d; best = i; }
+                if (d < bestD - TieEpsilon)
+                {
+                    bestD = d;
+                    best = i;
+                    ties = 1;
+                }
+                else if (d <= bestD + TieEpsilon)
+                {
+                    // Equidistant: a seeded draw, so ties do not always go to the lower id (Home).
+                    ties++;
+                    if (_s.Rng.Range(0, ties) == 0) best = i;
+                }
             }
 
             if (best >= 0) GainPossession(best, true);
@@ -260,6 +424,9 @@ namespace OpenFifa.Core
             }
 
             ClearOffside();
+            // Any controlled touch ends a penalty in progress (held or played) and an untouched indirect restart.
+            _s.PenaltyKicker = -1;
+            _s.IndirectRestartLive = false;
             ref SimPlayer p = ref _s.Players[id];
             SimTeam team = p.Team;
             SimPlayerAttributes a = AttributesOf(id);

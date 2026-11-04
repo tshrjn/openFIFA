@@ -42,6 +42,8 @@ namespace OpenFifa.Core
             _s.PassLive = false;
             _s.ShotLive = false;
             _s.PossessionTeam = SimTeam.None;
+            _s.PenaltyKicker = -1;
+            _s.IndirectRestartLive = false;
             ClearOffside();
 
             MatchEventType ev;
@@ -167,10 +169,12 @@ namespace OpenFifa.Core
                 {
                     SimVec3 rel = (pos - ball).Flat;
                     float d = rel.Magnitude;
-                    if (d < radius)
+                    // Inside the distance, or nudged off the pitch next to it (e.g. by player separation): put back
+                    // on the pitch at least the distance away.
+                    if (d < radius || (d < radius + 1f && !OnPitch(pos)))
                     {
                         SimVec3 dir = d > 1e-3f ? rel / d : new SimVec3(0f, 0f, -sign);
-                        pos = ball + dir * radius;
+                        pos = PlaceAtDistance(ball, dir, SimMath.Max(d, radius));
                     }
                 }
 
@@ -191,6 +195,32 @@ namespace OpenFifa.Core
                 BeginWindUp(ref _s.Players[taker], IntentAction.Pass, 0.4f, aim, mate, _cfg.Actions.PassWindup);
             }
         }
+
+        /// <summary>
+        /// A point <paramref name="radius"/> from the ball, as close in direction to <paramref name="dir"/> as the pitch
+        /// allows: near a goal line or touchline the direction is rotated in 15 degree steps until the point is on the
+        /// pitch (so a wall is never placed off the field), else clamped onto it.
+        /// </summary>
+        private SimVec3 PlaceAtDistance(SimVec3 ball, SimVec3 dir, float radius)
+        {
+            SimVec3 cand = ball + dir * radius;
+            if (OnPitch(cand)) return cand;
+            for (int k = 1; k <= 12; k++)
+            {
+                float a = k * 15f * SimMath.Deg2Rad;
+                cand = ball + SimMath.RotateY(dir, a) * radius;
+                if (OnPitch(cand)) return cand;
+                cand = ball + SimMath.RotateY(dir, -a) * radius;
+                if (OnPitch(cand)) return cand;
+            }
+
+            cand = ball + dir * radius;
+            return new SimVec3(SimMath.Clamp(cand.X, -_cfg.Pitch.HalfWidth, _cfg.Pitch.HalfWidth), 0f,
+                SimMath.Clamp(cand.Z, -_cfg.Pitch.HalfLength, _cfg.Pitch.HalfLength));
+        }
+
+        private bool OnPitch(SimVec3 p) =>
+            SimMath.Abs(p.X) <= _cfg.Pitch.HalfWidth && SimMath.Abs(p.Z) <= _cfg.Pitch.HalfLength;
 
         private int NearestTeammate(int id)
         {
@@ -214,13 +244,22 @@ namespace OpenFifa.Core
             float r = _cfg.Ball.Radius;
             var pitch = _cfg.Pitch;
 
+            SimTeam last = _s.LastTouchTeam == SimTeam.None ? SimTeam.Home : _s.LastTouchTeam;
             if (b.InNet != 0)
             {
+                // Law 13 / 15: an indirect free kick or a throw-in cannot score directly.
+                if (_s.IndirectRestartLive)
+                {
+                    Emit(MatchEventType.OutOfPlay, _s.LastTouchPlayer, -1, last,
+                        new SimVec3(b.Position.X, 0f, b.InNet * pitch.HalfLength), b.Velocity.Magnitude);
+                    AwardGoalLineRestart(b.InNet, b.Position.X, last);
+                    return;
+                }
+
                 ScoreGoal(b.InNet);
                 return;
             }
 
-            SimTeam last = _s.LastTouchTeam == SimTeam.None ? SimTeam.Home : _s.LastTouchTeam;
             if (SimMath.Abs(b.Position.X) > pitch.HalfWidth + r)
             {
                 float sx = SimMath.Sign(b.Position.X);
@@ -233,20 +272,27 @@ namespace OpenFifa.Core
             if (SimMath.Abs(b.Position.Z) > pitch.HalfLength + r)
             {
                 int end = b.Position.Z > 0f ? 1 : -1;
-                SimTeam defending = AttackSign(SimTeam.Home) == end ? SimTeam.Away : SimTeam.Home;
                 SimVec3 exit = new SimVec3(SimMath.Clamp(b.Position.X, -pitch.HalfWidth, pitch.HalfWidth), 0f, end * pitch.HalfLength);
                 Emit(MatchEventType.OutOfPlay, _s.LastTouchPlayer, -1, last, exit, b.Velocity.Magnitude);
-                float sx = b.Position.X >= 0f ? 1f : -1f;
-                if (last == defending)
-                {
-                    SimVec3 corner = new SimVec3(sx * (pitch.HalfWidth - 0.5f), 0f, end * (pitch.HalfLength - 0.5f));
-                    AwardRestart(RestartType.Corner, Opponent(defending), corner, _cfg.OutOfPlayDelay);
-                }
-                else
-                {
-                    SimVec3 gk = new SimVec3(sx * 5f, 0f, end * (pitch.HalfLength - _cfg.GoalAreaDepth));
-                    AwardRestart(RestartType.GoalKick, defending, gk, _cfg.OutOfPlayDelay);
-                }
+                AwardGoalLineRestart(end, b.Position.X, last);
+            }
+        }
+
+        /// <summary>Ball over the goal line at end <paramref name="end"/> (+1/-1): corner if the defenders put it there, else goal kick.</summary>
+        private void AwardGoalLineRestart(int end, float x, SimTeam last)
+        {
+            var pitch = _cfg.Pitch;
+            SimTeam defending = AttackSign(SimTeam.Home) == end ? SimTeam.Away : SimTeam.Home;
+            float sx = x >= 0f ? 1f : -1f;
+            if (last == defending)
+            {
+                SimVec3 corner = new SimVec3(sx * (pitch.HalfWidth - 0.5f), 0f, end * (pitch.HalfLength - 0.5f));
+                AwardRestart(RestartType.Corner, Opponent(defending), corner, _cfg.OutOfPlayDelay);
+            }
+            else
+            {
+                SimVec3 gk = new SimVec3(sx * 5f, 0f, end * (pitch.HalfLength - _cfg.GoalAreaDepth));
+                AwardRestart(RestartType.GoalKick, defending, gk, _cfg.OutOfPlayDelay);
             }
         }
 
@@ -256,6 +302,13 @@ namespace OpenFifa.Core
             if (scoring == SimTeam.Home) _s.HomeScore++; else _s.AwayScore++;
             int scorer = _s.LastTouchPlayer;
             bool ownGoal = _s.LastTouchTeam != scoring;
+            // A shot that goes in off the keeper (parry) or off a defender is the shooter's goal, not an own goal.
+            if (_s.ShotLive && _s.Shooter >= 0 && TeamOf(_s.Shooter) == scoring)
+            {
+                scorer = _s.Shooter;
+                ownGoal = false;
+            }
+
             int assist = !ownGoal && _s.AssistCandidate >= 0 && _s.AssistCandidate != scorer
                          && TeamOf(_s.AssistCandidate) == scoring ? _s.AssistCandidate : -1;
             Emit(MatchEventType.Goal, scorer, assist, scoring, _s.Ball.Position, _s.Ball.Velocity.Magnitude, 0f, ownGoal ? 1 : 0);
@@ -372,10 +425,15 @@ namespace OpenFifa.Core
 
         private void CheckClock()
         {
+            // A penalty is over once the ball stops (or, as a guard, a few seconds after the kick).
+            if (_s.PenaltyKicker >= 0 && _s.Phase == SimMatchPhase.InPlay
+                && (_s.Ball.Velocity.SqrMagnitude == 0f || _s.Tick > _s.PenaltyKickTick + _cfg.SecondsToTicks(6f)))
+                _s.PenaltyKicker = -1;
+
             if (_s.Clock < _cfg.HalfDurationSeconds) return;
             if (_s.Phase == SimMatchPhase.HalfTime || _s.Phase == SimMatchPhase.FullTime) return;
-            // A penalty awarded before the whistle must still be taken.
-            if (_s.PendingRestart == RestartType.Penalty) return;
+            // A penalty awarded before the whistle must still be taken, and played out until its outcome.
+            if (_s.PendingRestart == RestartType.Penalty || _s.PenaltyKicker >= 0) return;
 
             _s.Owner = -1;
             _s.KeeperHolding = false;

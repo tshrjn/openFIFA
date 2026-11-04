@@ -283,6 +283,9 @@ namespace OpenFifa.Core
             }
 
             _s.LastKickRestart = restart;
+            _s.IndirectRestartLive = restart == RestartType.IndirectFreeKick || restart == RestartType.ThrowIn;
+            _s.PenaltyKicker = restart == RestartType.Penalty ? id : -1;
+            _s.PenaltyKickTick = _s.Tick;
             EvaluateOffside(id, restart);
 
             float speed = k.Velocity.Magnitude;
@@ -513,7 +516,47 @@ namespace OpenFifa.Core
             _s.LastTouchPlayer = toucher;
             _s.LastTouchTeam = TeamOf(toucher);
             _s.Players[toucher].ControlBlockedUntilTick = _s.Tick + _cfg.SecondsToTicks(0.15f);
+            NoteTouch(toucher);
             ClearOffside();
+        }
+
+        /// <summary>
+        /// Bookkeeping for any touch other than a kick: an indirect restart has now been touched, and a penalty in
+        /// progress ends unless the toucher is the defending goalkeeper (a parry keeps it alive: it can still go in).
+        /// </summary>
+        private void NoteTouch(int id)
+        {
+            _s.IndirectRestartLive = false;
+            if (_s.PenaltyKicker >= 0 && id != KeeperId(Opponent(TeamOf(_s.PenaltyKicker)))) _s.PenaltyKicker = -1;
+        }
+
+        /// <summary>
+        /// Keeps players at least two body radii apart (one deterministic pass in id order). A restart taker stands
+        /// still at the ball, so the other player takes the whole correction.
+        /// </summary>
+        private void SeparatePlayers()
+        {
+            float minD = 2f * _cfg.Actions.PlayerBodyRadius;
+            float minD2 = minD * minD;
+            int taker = _s.Phase == SimMatchPhase.AwaitingRestart ? _s.RestartTakerId : -1;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+            {
+                if (_s.Players[i].SentOff) continue;
+                for (int j = i + 1; j < MatchSimState.PlayerCount; j++)
+                {
+                    if (_s.Players[j].SentOff) continue;
+                    SimVec3 d = (_s.Players[j].Position - _s.Players[i].Position).Flat;
+                    float d2 = d.SqrMagnitude;
+                    if (d2 >= minD2) continue;
+                    float dist = SimMath.Sqrt(d2);
+                    // Coincident players: split along a fixed, team-dependent axis.
+                    SimVec3 n = dist > 1e-4f ? d / dist : new SimVec3(i < j ? 1f : -1f, 0f, 0f);
+                    float push = minD - dist;
+                    float wi = j == taker ? 1f : (i == taker ? 0f : 0.5f);
+                    _s.Players[i].Position -= n * (push * wi);
+                    _s.Players[j].Position += n * (push * (1f - wi));
+                }
+            }
         }
     }
 }

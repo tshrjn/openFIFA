@@ -87,6 +87,9 @@ namespace OpenFifa.Core
 
         public float CrossSectionArea => 3.14159265f * Radius * Radius;
 
+        /// <summary>Lazily built ground-roll lookup for <see cref="BallFlight"/> (validated against the fields above).</summary>
+        [System.NonSerialized] internal BallFlight.RollTable CachedRollTable;
+
         public BallSimConfig Clone() => (BallSimConfig)MemberwiseClone();
     }
 }

@@ -5,8 +5,9 @@ namespace OpenFifa.Core
     /// <summary>
     /// Assisted kick solver: turns an intent (action, power, aim, optional target) into a launch velocity and
     /// spin, then perturbs it inside a skill-based error cone sampled from the sim's seeded RNG.
-    /// The solved trajectories are approximations of the integrator (constant deceleration for ground passes,
-    /// drag-compensated vacuum range for lofted balls); assistance does not need to be exact.
+    /// Ground-pass speeds come from <see cref="BallFlight.GroundPassSpeedFor"/> and lofted speeds from a bisection
+    /// against the integrator (<see cref="LoftedSpeed"/>), so an assisted pass arrives where and how it was meant to
+    /// before the error cone is applied.
     /// </summary>
     public static class KickSolver
     {
@@ -95,8 +96,7 @@ namespace OpenFifa.Core
                     }
                     else
                     {
-                        float decel = ball.RollingResistance * ball.Gravity + 0.25f;
-                        speed = SimMath.Min(SimMath.Sqrt(arrive * arrive + 2f * decel * d), cfg.PassMaxSpeed);
+                        speed = SimMath.Min(BallFlight.GroundPassSpeedFor(ball, d, arrive), cfg.PassMaxSpeed);
                         elevation = 0f;
                     }
                     break;
@@ -118,7 +118,8 @@ namespace OpenFifa.Core
             float vErr = rng.NextGaussian() * sigma * 0.5f;
             float sErr = 1f + rng.NextGaussian() * sigma * 0.4f;
             result.HorizontalError = hErr;
-            if (result.UsedWeakFoot) speed *= 0.92f + 0.02f * a.WeakFoot;
+            // Weak foot costs pace; a 4-5 star weak foot is as strong as the preferred one, never stronger.
+            if (result.UsedWeakFoot) speed *= SimMath.Min(1f, 0.92f + 0.02f * SimMath.Clamp(a.WeakFoot, 1, 5));
 
             float yaw = SimMath.Yaw(aim) + curlPreAim + hErr;
             float pitch = elevation + vErr;
