@@ -192,7 +192,7 @@ namespace OpenFifa.Core
             CounterActive = hasPossession && openPlay && boost > 0f && world.Time - _regainTime < CounterWindow * boost &&
                             ballDepth < (CounterActive ? CounterEndDepth : CounterStartDepth);
             _restBehind = CountBehindBall(world, ballDepth, ownerIndex, sign);
-            OnBall.Directness = TeamAIMath.Clamp01(Effective.Directness + (CounterActive ? 0.4f * boost : 0f));
+            OnBall.Directness = TeamAIMath.Clamp01(Effective.Directness + (CounterActive ? 0.25f * boost : 0f));
             OnBall.CrossBias = 0.3f * TeamAIMath.Clamp01((Effective.Width - 0.6f) * 2.5f);
 
             // ---- Layer 2: formation anchors ----
