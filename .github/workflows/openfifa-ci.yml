@@ -1,4 +1,4 @@
-name: OpenFifa CI
+name: OpenFootball CI
 
 on:
   push:

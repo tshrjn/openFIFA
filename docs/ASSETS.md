@@ -1,4 +1,4 @@
-# OpenFifa: Asset Pipeline Guide
+# OpenFootball: Asset Pipeline Guide
 
 > How to find, import, and manage game assets. Designed for agent-driven asset discovery.
 

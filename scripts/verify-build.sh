@@ -1,5 +1,5 @@
 #!/bin/bash
-# OpenFifa Platform Build Verification Script
+# OpenFootball Platform Build Verification Script
 # Verifies BOTH macOS .app bundle AND iPad (via Xcode/Simulator) builds.
 #
 # Usage: ./scripts/verify-build.sh [macos_build_path] [ipad_build_path]
@@ -15,7 +15,7 @@ PASS_COUNT=0
 TOTAL_CHECKS=0
 
 echo "=========================================="
-echo "  OpenFifa Platform Build Verification"
+echo "  OpenFootball Platform Build Verification"
 echo "=========================================="
 echo ""
 
@@ -106,11 +106,11 @@ else
         -scheme "Unity-iPhone" \
         -destination 'platform=iOS Simulator,name=iPad Pro 13-inch (M4)' \
         -configuration Debug \
-        build 2>&1 | tee /tmp/openfifa-ipad-build.log
+        build 2>&1 | tee /tmp/openfootball-ipad-build.log
 
     if [ ${PIPESTATUS[0]} -ne 0 ]; then
         echo "  FAIL: iPad Xcode build failed"
-        grep "error:" /tmp/openfifa-ipad-build.log || true
+        grep "error:" /tmp/openfootball-ipad-build.log || true
     else
         echo "  OK: iPad Xcode build succeeded"
         PASS_COUNT=$((PASS_COUNT + 1))
@@ -119,9 +119,9 @@ else
     # 2.3 No build errors
     TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
     echo "[2.3] Checking for build errors..."
-    if grep -q "error:" /tmp/openfifa-ipad-build.log 2>/dev/null; then
+    if grep -q "error:" /tmp/openfootball-ipad-build.log 2>/dev/null; then
         echo "  FAIL: Build errors detected:"
-        grep "error:" /tmp/openfifa-ipad-build.log
+        grep "error:" /tmp/openfootball-ipad-build.log
     else
         echo "  OK: No build errors"
         PASS_COUNT=$((PASS_COUNT + 1))

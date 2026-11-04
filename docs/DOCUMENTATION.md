@@ -1,4 +1,4 @@
-# OpenFifa Development Log
+# OpenFootball Development Log
 
 > Real-time record of decisions, progress, and issues. **Read this first** at the start of every session.
 
@@ -473,7 +473,7 @@ Possible next steps:
 - MenuNavigationLogic maps buttons to scene names (TeamSelect, Settings, Credits)
 - UIScalerConfig: 1920x1080 reference, matchWidthOrHeight 0.5
 - MainMenuController uses Button.onClick.AddListener for navigation
-- Title displayed as TMP_Text with "OpenFifa"
+- Title displayed as TMP_Text with "OpenFootball"
 
 **Known Issues**: None
 

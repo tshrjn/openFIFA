@@ -7,7 +7,7 @@ namespace OpenFifa.Gameplay
     /// ScriptableObject holding player stats configuration.
     /// Exposes tunable values in the Unity Inspector.
     /// </summary>
-    [CreateAssetMenu(fileName = "PlayerStatsConfig", menuName = "OpenFifa/Config/Player Stats")]
+    [CreateAssetMenu(fileName = "PlayerStatsConfig", menuName = "OpenFootball/Config/Player Stats")]
     public class PlayerStatsConfig : ScriptableObject
     {
         [Header("Movement")]

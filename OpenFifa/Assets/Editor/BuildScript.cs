@@ -7,7 +7,7 @@ namespace OpenFifa.Editor
 {
     public static class BuildScript
     {
-        [MenuItem("OpenFifa/Build/iOS")]
+        [MenuItem("OpenFootball/Build/iOS")]
         public static void BuildIOS()
         {
             var scenes = EditorBuildSettings.scenes
@@ -43,7 +43,7 @@ namespace OpenFifa.Editor
             }
         }
 
-        [MenuItem("OpenFifa/Build/macOS (Dev)")]
+        [MenuItem("OpenFootball/Build/macOS (Dev)")]
         public static void BuildMacOSDev()
         {
             var scenes = EditorBuildSettings.scenes
@@ -59,7 +59,7 @@ namespace OpenFifa.Editor
             var options = new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = "build/macOS/OpenFifa.app",
+                locationPathName = "build/macOS/OpenFootball.app",
                 target = BuildTarget.StandaloneOSX,
                 options = BuildOptions.Development | BuildOptions.AllowDebugging
             };
