@@ -14,6 +14,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// frame. Rosters come from StreamingAssets (plus user files in persistentDataPath); commentary is shown as subtitles.
     ///
     /// Command line (player or batch editor): -spLevel 0..6, -spSeed N, -spHalf seconds, -spAutoStart, -spAiVsAi,
+    /// -spHome clubId, -spAway clubId, -spLeague leagueId (ids from the roster JSON; both clubs from one league),
     /// -spCapture dir (see <see cref="SinglePlayerCapture"/>).
     /// </summary>
     [DefaultExecutionOrder(-50)]
@@ -47,6 +48,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public List<string> RosterProblems { get; } = new List<string>();
         public int HomeClubIndex { get; set; }
         public int AwayClubIndex { get; set; } = 1;
+        /// <summary>League the clubs are picked from (index into <see cref="Leagues"/>; -spLeague/-spHome/-spAway set it).</summary>
+        public int LeagueIndex { get; set; }
+        /// <summary>Club ids asked for on the command line (null = default), resolved after the rosters load.</summary>
+        public string ArgLeague, ArgHome, ArgAway;
+        private int _defaultLeague, _defaultHome, _defaultAway = 1;
         public RosterClub HomeClub { get; private set; }
         public RosterClub AwayClub { get; private set; }
         public string[] Names { get; private set; } = new string[MatchSimState.PlayerCount];
@@ -83,6 +89,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             ParseCommandLine();
             BuildEnvironment();
             LoadRosters();
+            ApplyClubSelection();
             LoadCommentary();
         }
 
@@ -104,6 +111,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spAutoStart") AutoStart = true;
                 else if (a == "-spAiVsAi") AiVsAi = true;
                 else if (a == "-spBot") ScriptedHuman = true;
+                else if (a == "-spHome" && next != null) ArgHome = next;
+                else if (a == "-spAway" && next != null) ArgAway = next;
+                else if (a == "-spLeague" && next != null) ArgLeague = next;
             }
         }
 
@@ -441,6 +451,26 @@ namespace OpenFifa.Gameplay.SinglePlayer
             foreach (var p in RosterProblems) Debug.LogWarning("[" + ProductName + "] " + p);
         }
 
+        /// <summary>Applies -spLeague/-spHome/-spAway; these become the defaults the menu returns to.</summary>
+        private void ApplyClubSelection()
+        {
+            int l = LeagueIndex, h = HomeClubIndex, w = AwayClubIndex;
+            if (RosterSelection.TryResolve(Leagues, ArgLeague, ArgHome, ArgAway, ref l, ref h, ref w, RosterProblems))
+            {
+                LeagueIndex = l;
+                HomeClubIndex = h;
+                AwayClubIndex = w;
+            }
+            else
+            {
+                Debug.LogWarning("[" + ProductName + "] club selection ignored: " + RosterProblems[RosterProblems.Count - 1] +
+                                 "\n" + RosterSelection.Describe(Leagues));
+            }
+            _defaultLeague = LeagueIndex;
+            _defaultHome = HomeClubIndex;
+            _defaultAway = AwayClubIndex;
+        }
+
         private void LoadCommentary()
         {
             try
@@ -461,7 +491,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
         }
 
-        public IReadOnlyList<RosterClub> Clubs => Leagues.Count > 0 ? Leagues[0].Clubs : null;
+        public IReadOnlyList<RosterClub> Clubs => Leagues.Count > 0 ? Leagues[Mathf.Clamp(LeagueIndex, 0, Leagues.Count - 1)].Clubs : null;
 
         // ------------------------------------------------------------------ match
 
@@ -559,13 +589,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
             StartMatch(level);
         }
 
-        /// <summary>Back to the picker with the launch defaults (level, first two clubs).</summary>
+        /// <summary>Back to the picker with the launch defaults (level, the command-line clubs or the first two).</summary>
         public void QuitToMenu()
         {
             EndMatch();
             Level = _defaultLevel;
-            HomeClubIndex = 0;
-            AwayClubIndex = 1;
+            LeagueIndex = _defaultLeague;
+            HomeClubIndex = _defaultHome;
+            AwayClubIndex = _defaultAway;
         }
 
         public static ulong NextSeed(ulong seed) => seed * 6364136223846793005UL + 1442695040888963407UL;
