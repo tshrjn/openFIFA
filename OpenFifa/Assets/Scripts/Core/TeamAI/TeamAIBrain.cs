@@ -54,6 +54,24 @@ namespace OpenFifa.Core
         private int _restBehind;
 
         /// <summary>
+        /// 0..1: how hard the side defends its box, from line depth (0 at Depth 0.5 or higher, 1 at Depth 0.1 or
+        /// lower, after mentality). Deep sides put bodies between the ball and goal, double up on a carrier in the box,
+        /// mark tighter and keep the keeper on his line. Neutral sides are unchanged.
+        /// </summary>
+        public float BoxGuard => TeamAIMath.Clamp01((0.5f - Effective.Depth) * 2.5f);
+        /// <summary>Ball depth (0..1 from our goal) inside which box defending switches on: about 30 m from goal.</summary>
+        public const float BoxDefendDepth = 0.29f;
+        /// <summary>Distance (m) in front of the ball, toward goal, of a lane-blocker's spot.</summary>
+        public const float LaneBlockDistance = 2.5f;
+        /// <summary>Box defenders this tick (up to two outfielders screening the shot lane), -1 when unused.</summary>
+        private readonly int[] _laneBlockers = { -1, -1, -1 };
+        private bool _boxDefending;
+        private float _boxDepth;
+        /// <summary>How much further out (fraction of the pitch) a fully deep side starts defending its box: it meets
+        /// the carrier at the edge of its block (about 42 m out) instead of jockeying him back to the penalty area.</summary>
+        public const float BoxEngageReach = 0.11f;
+
+        /// <summary>
         /// 0..1: how hard a pressing side (PressingIntensity above 0.5) squeezes while it is in its high press or
         /// counter-press; 0 in every other phase and for neutral or passive sides. Drives tighter cover shadows on the
         /// nearest passing options (to intercept), a closer second presser and earlier tackles.
@@ -194,6 +212,7 @@ namespace OpenFifa.Core
             _restBehind = CountBehindBall(world, ballDepth, ownerIndex, sign);
             OnBall.Directness = TeamAIMath.Clamp01(Effective.Directness + (CounterActive ? 0.25f * boost : 0f));
             OnBall.CrossBias = 0.3f * TeamAIMath.Clamp01((Effective.Width - 0.6f) * 2.5f);
+            OnBall.ChanceQuality = TeamAIOnBall.ChanceQualityFor(Effective.Directness);
 
             // ---- Layer 2: formation anchors ----
             float line = TeamAIFormationShape.ComputeAnchors(phase, Effective, ball, sign, pitch, Anchors);
@@ -242,6 +261,20 @@ namespace OpenFifa.Core
             {
                 SelectPressers(world, ball);
                 if (world.Directives[Team].PressActive(world.Time)) ApplyPressRequest(world, ball);
+            }
+
+            // ---- Box defending (deep sides): screen the shot lane, double the carrier ----
+            _laneBlockers[0] = -1;
+            _laneBlockers[1] = -1;
+            _laneBlockers[2] = -1;
+            float guard = BoxGuard;
+            _boxDepth = BoxDefendDepth + BoxEngageReach * guard;
+            _boxDefending = guard > 0f && !hasPossession && ownerIndex >= 0 && ownerTeam != Team && ballDepth < _boxDepth;
+            if (_boxDefending)
+            {
+                SelectLaneBlockers(world, ball, sign, guard >= 0.8f ? 3 : (guard >= 0.5f ? 2 : 1));
+                // In the box the second man doubles up on the carrier instead of covering.
+                if (SecondPresserIndex < 0 && guard >= 0.5f) SecondPresserIndex = NearestOutfielderExcept(world, ball, PresserIndex);
             }
 
             // ---- Human-directed run ----
@@ -310,7 +343,8 @@ namespace OpenFifa.Core
                     }
                     else
                     {
-                        TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ownerIndex < 0 ? Trajectory : null, ref cmd);
+                        TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ownerIndex < 0 ? Trajectory : null,
+                            _boxDefending ? 1f - 0.35f * BoxGuard : 1f, ref cmd);
                     }
                     continue;
                 }
@@ -598,6 +632,22 @@ namespace OpenFifa.Core
                 return;
             }
 
+            // Box defending: a lane-blocker stands between the ball and the middle of the goal, on the carrier's line.
+            if (_boxDefending && (i == _laneBlockers[0] || i == _laneBlockers[1] || i == _laneBlockers[2]))
+            {
+                var goalMid = TeamAIMath.OwnGoal(sign, pitch);
+                var dir = TeamAIMath.FlatDirection(ball, goalMid);
+                float dist = i == _laneBlockers[0] ? LaneBlockDistance : LaneBlockDistance + 3.5f;
+                var spot = ball + dir * Math.Min(dist, TeamAIMath.FlatDistance(ball, goalMid) * 0.5f);
+                // The second blocker covers the cut-back toward the penalty spot, the third the far-post side.
+                if (i == _laneBlockers[1]) spot = new SimVec3(spot.X * 0.5f, 0f, spot.Z);
+                if (i == _laneBlockers[2]) spot = new SimVec3(-spot.X * 0.3f, 0f, spot.Z);
+                SetMoveTracking(ref cmd, p, spot, world.Players[ownerIndex].Velocity, TeamAIMath.FlatDistance(p.Position, spot) > 6f,
+                    TeamAIIntent.CoverShadow);
+                cmd.TargetPlayerId = world.Players[ownerIndex].Id;
+                return;
+            }
+
             // Recovery: players caught upfield of the ball sprint back to shape.
             if (phase == TeamAIPhase.Recovery || phase == TeamAIPhase.CounterPress)
             {
@@ -616,7 +666,7 @@ namespace OpenFifa.Core
                 var target = new SimVec3(anchor.X, 0f, lineZ);
                 var intent = TeamAIIntent.KeepLine;
                 var markVel = SimVec3.Zero;
-                int opp = FindMarkTarget(world, anchor, sign, 11f, BackLineDepth + 0.12f);
+                int opp = FindMarkTarget(world, anchor, sign, _boxDefending ? 11f + 5f * BoxGuard : 11f, BackLineDepth + 0.12f);
                 if (opp >= 0)
                 {
                     _oppTaken[opp] = true;
@@ -627,7 +677,8 @@ namespace OpenFifa.Core
                     if (oppDepth < BackLineDepth)
                     {
                         // Attacker already goal-side of the line: track him, goal-side.
-                        var mark = op + TeamAIMath.FlatDirection(op, ownGoal) * 1.5f;
+                        // Goal-side by 1.5 m; a box-defending side marks tighter (1 m), so cut-backs find a body.
+                        var mark = op + TeamAIMath.FlatDirection(op, ownGoal) * (_boxDefending ? 1.5f - 0.5f * BoxGuard : 1.5f);
                         x = mark.X;
                         depth = TeamAIMath.Depth(mark.Z, sign, pitch);
                         intent = TeamAIIntent.Mark;
@@ -716,7 +767,8 @@ namespace OpenFifa.Core
                     pressAllowed = PressTriggerActive || anchorToBall < 7f * aggression;
                     break;
                 case TeamAIPhase.LowBlock:
-                    pressAllowed = PressTriggerActive && ballDepth < 0.4f || anchorToBall < 5f * aggression || ballDepth < 0.2f;
+                    pressAllowed = PressTriggerActive && ballDepth < 0.4f || anchorToBall < 5f * aggression || ballDepth < 0.2f ||
+                                   _boxDefending;
                     break;
                 default:
                     pressAllowed = PressTriggerActive || dist < 6f;
@@ -811,6 +863,42 @@ namespace OpenFifa.Core
                 if (TeamAIMath.Depth(o.Position.Z, sign, world.Pitch) < ballDepth - 0.02f) n++;
             }
             return n;
+        }
+
+        /// <summary>Up to <paramref name="count"/> outfielders (not pressers, centre-backs last) closest to the shot lane.</summary>
+        private void SelectLaneBlockers(TeamAIWorld world, SimVec3 ball, int sign, int count)
+        {
+            var goalMid = TeamAIMath.OwnGoal(sign, world.Pitch);
+            var lanePoint = ball + TeamAIMath.FlatDirection(ball, goalMid) * LaneBlockDistance;
+            for (int k = 0; k < count; k++)
+            {
+                int best = -1;
+                float bd = float.MaxValue;
+                for (int j = 0; j < world.PlayerCount; j++)
+                {
+                    var o = world.Players[j];
+                    if (!o.Active || o.Team != Team || o.Role == TeamAIRole.GK || o.HumanControlled) continue;
+                    if (j == PresserIndex || j == SecondPresserIndex || j == _laneBlockers[0] || j == _laneBlockers[1]) continue;
+                    float d = TeamAIMath.FlatDistance(o.Position, lanePoint);
+                    if (o.Role == TeamAIRole.CB) d += 6f; // centre-backs keep the line and the markers
+                    if (d < bd) { bd = d; best = j; }
+                }
+                _laneBlockers[k] = best;
+            }
+        }
+
+        private int NearestOutfielderExcept(TeamAIWorld world, SimVec3 ball, int except)
+        {
+            int best = -1;
+            float bd = float.MaxValue;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (j == except || !o.Active || o.Team != Team || o.Role == TeamAIRole.GK || o.HumanControlled) continue;
+                float t = TeamAIMath.TimeToIntercept(o, ball, 0.2f);
+                if (t < bd) { bd = t; best = j; }
+            }
+            return best;
         }
 
         private int FindMarkTarget(TeamAIWorld world, SimVec3 anchor, int sign, float radius, float maxDepth)
