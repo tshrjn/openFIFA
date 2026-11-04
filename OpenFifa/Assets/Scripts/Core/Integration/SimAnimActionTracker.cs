@@ -35,7 +35,10 @@ namespace OpenFifa.Core
     /// Contacts the sim resolves without a wind-up are predicted so the clip can start ahead of them and its contact
     /// frame lands on the tick the sim resolves the contact:
     /// <list type="bullet">
-    /// <item>Dribble touches: the owner's next touch is due at <see cref="SimPlayer.NextTouchTick"/>.</item>
+    /// <item>Dribble touches: <see cref="MatchSim.TryPredictDribbleTouch"/>, the sim's own rule: the first tick at or
+    /// after <see cref="SimPlayer.NextTouchTick"/> at which the owner has caught up to within
+    /// <see cref="MatchSim.DribbleCatchUpFactor"/> x ControlRadius of the ball (a sprinting player pushes it 1.4-3 m
+    /// ahead, so the touch usually comes well after NextTouchTick).</item>
     /// <item>First touches: the loose ball's path (the sim's own integrator, <see cref="PredictSeconds"/> ahead) against
     /// each player's extrapolated position and control radius; the earliest eligible player gets the action.</item>
     /// <item>Keeper saves: the substep where the ball reaches the keeper's plane (the sim's closest-approach rule), for a
@@ -52,8 +55,13 @@ namespace OpenFifa.Core
         public const float HoldAfterContact = 0.6f;
         /// <summary>Celebrations and falls last longer.</summary>
         public const float LongHold = 2.5f;
-        /// <summary>A resolved touch (dribble or first touch) yields to the next predicted dribble touch after this (s).</summary>
-        public const float TouchHold = 0.1f;
+        /// <summary>
+        /// A resolved touch (dribble or first touch) yields to the next predicted dribble touch after this (s): the touch
+        /// IK's whole blend-out (<see cref="DribbleTouchSolver.BlendOut"/>) plus a little over one 60 Hz tick, because the
+        /// driver renders up to one tick behind the sim. A shorter hold hands the driver the next touch's id while the
+        /// previous touch is still at 20-30 % IK weight, and the switch drops it to 0 in one frame (foot pop).
+        /// </summary>
+        public const float TouchHold = DribbleTouchSolver.BlendOut + 0.02f;
         /// <summary>How far ahead loose-ball contacts (first touches, saves) are predicted (s).</summary>
         public const float PredictSeconds = 1.0f;
 
@@ -188,11 +196,13 @@ namespace OpenFifa.Core
             _actions[id].IsDribbleTouch = dribble;
         }
 
-        private static ActionSide DiveSide(in SimPlayer p, SimVec3 ball)
+        private static ActionSide DiveSide(in SimPlayer p, SimVec3 ball) => DiveSide(p.Position, p.Facing, ball);
+
+        private static ActionSide DiveSide(SimVec3 keeper, float facing, SimVec3 ball)
         {
             // Dive side: which side of the keeper's facing the ball is on.
-            SimVec3 right = SimMath.FromYaw(p.Facing + SimMath.Pi * 0.5f);
-            return SimVec3.Dot((ball - p.Position).Flat, right) >= 0f ? ActionSide.Right : ActionSide.Left;
+            SimVec3 right = SimMath.FromYaw(facing + SimMath.Pi * 0.5f);
+            return SimVec3.Dot((ball - keeper).Flat, right) >= 0f ? ActionSide.Right : ActionSide.Left;
         }
 
         private void StartNow(MatchSim sim, int id, AnimActionKind kind, SimVec3 ball, SimVec3 dir)
@@ -251,7 +261,13 @@ namespace OpenFifa.Core
             a.Direction = flat.SqrMagnitude > 1e-6f ? flat.Normalized : SimVec3.Zero;
             a.RootAtContact = (p.Position + p.Velocity.Flat * lead).Flat;
             a.YawAtContact = p.Facing;
-            if (kind == AnimActionKind.GoalkeeperDive) a.Side = DiveSide(p, ball);
+            if (kind == AnimActionKind.GoalkeeperDive)
+            {
+                // The AI keeps moving the keeper until the save: side and reach direction from where he will be.
+                a.Side = DiveSide(a.RootAtContact, p.Facing, ball);
+                SimVec3 reach = (ball - a.RootAtContact).Flat;
+                if (reach.SqrMagnitude > 1e-6f) a.Direction = reach.Normalized;
+            }
             else
             {
                 var attr = sim.AttributesOf(id);
@@ -285,11 +301,11 @@ namespace OpenFifa.Core
             var s = sim.State;
             ref readonly var p = ref s.Players[id];
             if (p.SentOff || (!p.IsFree && p.ActionState != SimPlayerActionState.Recovery) || Busy(id)) return;
-            int tick = p.NextTouchTick > s.Tick ? p.NextTouchTick : s.Tick + 1;
-            float lead = (tick - s.Tick) * sim.Dt;
-            SimBall b = sim.PredictBall(lead);
+            // No touch within the horizon (still catching up, or about to lose the ball): nothing to announce yet; an
+            // earlier prediction is withdrawn and comes back once the touch is in range.
+            if (!sim.TryPredictDribbleTouch(id, sim.Config.SecondsToTicks(PredictSeconds), out int tick, out SimVec3 ball)) return;
             SimVec3 dir = p.Speed > 0.5f ? p.Velocity.Flat : p.FacingDir;
-            SetPredicted(sim, id, AnimActionKind.FirstTouch, true, tick, b.Position, dir);
+            SetPredicted(sim, id, AnimActionKind.FirstTouch, true, tick, ball, dir);
         }
 
         private void PredictLooseBall(MatchSim sim)

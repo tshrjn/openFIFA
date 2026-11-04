@@ -73,6 +73,75 @@ namespace OpenFifa.Core
             return preferred;
         }
 
+        // ------------------------------------------------------------------ gait phase (measured, not nominal)
+
+        /// <summary>Default fraction of the locomotion cycle each foot is on the ground (running ~0.3-0.4).</summary>
+        public const float DefaultStanceFraction = 0.35f;
+        /// <summary>Default phase span (cycle fraction) over which the touch IK fades out at the edges of a stance.</summary>
+        public const float DefaultStanceEdge = 0.05f;
+
+        /// <summary>Wraps x into [0, 1).</summary>
+        public static float Wrap01(float x)
+        {
+            float f = x - (float)System.Math.Floor(x);
+            return f >= 1f ? 0f : f;
+        }
+
+        /// <summary>Cycle phase at which <paramref name="foot"/> strikes the ground (the left foot half a cycle after the right).</summary>
+        public static float StrikePhase(ActionSide foot, float rightStrikePhase) =>
+            Wrap01(foot == ActionSide.Right ? rightStrikePhase : rightStrikePhase + 0.5f);
+
+        /// <summary>
+        /// True when <paramref name="foot"/> is on the ground at cycle phase <paramref name="phase"/> (a locomotion cycle of
+        /// normalised time 0..1 is one right step plus one left step; each foot stands for <paramref name="stanceFraction"/>
+        /// of the cycle from its strike).
+        /// </summary>
+        public static bool IsPlanted(ActionSide foot, float phase, float rightStrikePhase = 0f, float stanceFraction = DefaultStanceFraction)
+            => Wrap01(phase - StrikePhase(foot, rightStrikePhase)) < stanceFraction;
+
+        /// <summary>
+        /// The foot that touches the ball at cycle phase <paramref name="phase"/>: the one whose next strike comes first, i.e.
+        /// the foot in late swing, reaching forward. Never a planted foot while the stance fraction is below one half.
+        /// </summary>
+        public static ActionSide SwingingFootAt(float phase, float rightStrikePhase = 0f)
+        {
+            float toRight = Wrap01(StrikePhase(ActionSide.Right, rightStrikePhase) - phase);
+            float toLeft = Wrap01(StrikePhase(ActionSide.Left, rightStrikePhase) - phase);
+            if (toRight <= 0f) toRight = 1f; // striking now: it is landing, not reaching
+            if (toLeft <= 0f) toLeft = 1f;
+            return toRight <= toLeft ? ActionSide.Right : ActionSide.Left;
+        }
+
+        /// <summary>
+        /// Foot that touches the ball, from the locomotion cycle measured on the Animator (normalised time and its rate)
+        /// instead of a nominal stride: the cycle is advanced to the contact tick and the foot in late swing there takes the
+        /// touch. Use this whenever the phase is known; <see cref="ChooseFoot"/> is the fallback.
+        /// </summary>
+        /// <param name="phaseNow">Locomotion cycle phase now (fraction of normalised time).</param>
+        /// <param name="cyclesPerSecond">Measured cycle rate (normalised time per second).</param>
+        /// <param name="timeToContact">Seconds from now to the contact tick.</param>
+        public static ActionSide ChooseFootFromPhase(float phaseNow, float cyclesPerSecond, float timeToContact, float rightStrikePhase = 0f)
+        {
+            if (timeToContact < 0f) timeToContact = 0f;
+            if (cyclesPerSecond < 0f) cyclesPerSecond = -cyclesPerSecond;
+            return SwingingFootAt(Wrap01(phaseNow + cyclesPerSecond * timeToContact), rightStrikePhase);
+        }
+
+        /// <summary>
+        /// How much touch IK <paramref name="foot"/> may take at cycle phase <paramref name="phase"/>: 1 in swing, 0 in
+        /// mid-stance (pulling a planted foot to the ball drags it along the ground: foot skate), with a smooth fade over
+        /// <paramref name="edge"/> of the cycle at touch-down and lift-off.
+        /// </summary>
+        public static float SwingWeight(ActionSide foot, float phase, float rightStrikePhase = 0f,
+            float stanceFraction = DefaultStanceFraction, float edge = DefaultStanceEdge)
+        {
+            float u = Wrap01(phase - StrikePhase(foot, rightStrikePhase));
+            if (u >= stanceFraction) return 1f;
+            float depth = u < stanceFraction - u ? u : stanceFraction - u;
+            if (edge <= 0f) return 0f;
+            return 1f - AnimMath.SmoothStep01(depth / edge);
+        }
+
         /// <summary>
         /// Touch IK weight at time t for a touch at <paramref name="contactTime"/>: smooth ramp from 0 at
         /// contact - BlendIn to <paramref name="peak"/> at contact, smooth release to 0 at contact + BlendOut.

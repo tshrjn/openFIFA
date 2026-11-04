@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using OpenFifa.Core;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.EnhancedTouch;
 using ETouch = UnityEngine.InputSystem.EnhancedTouch.Touch;
 
@@ -15,6 +16,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// Touch is edge-based, so it is sampled every rendered frame (<see cref="PollFrame"/>, called by the controller
     /// before it advances the session) into a <see cref="TouchEventQueue"/>, and each sim tick drains the queue. That
     /// keeps every press and release exactly once at 120, 60 or 30 Hz frame rates against the 60 Hz sim.
+    /// Gamepad and keyboard buttons work the same way: each frame's held state plus wasPressedThisFrame /
+    /// wasReleasedThisFrame go into a <see cref="GamepadEdgeQueue"/>, drained per tick, so a tap that starts and ends
+    /// between two ticks is not lost.
     /// </summary>
     public sealed class SinglePlayerInput : IHumanInputSource
     {
@@ -25,6 +29,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private readonly List<TouchPoint> _touches = new List<TouchPoint>(16);
         private readonly List<TouchPoint> _frameTouches = new List<TouchPoint>(10);
         private readonly TouchEventQueue _touchQueue = new TouchEventQueue();
+        private readonly GamepadEdgeQueue _padQueue = new GamepadEdgeQueue();
+        private InputDevice _padDevice;
+        private int _padFrame = -1;
 
         /// <summary>True when the last read used touch (no gamepad connected).</summary>
         public bool UsingTouch { get; private set; }
@@ -53,6 +60,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// </summary>
         public void PollFrame(bool simAdvancing)
         {
+            PollButtons(simAdvancing);
             if (!TouchPath)
             {
                 _touchQueue.Reset();
@@ -72,7 +80,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (pad != null)
             {
                 UsingTouch = false;
-                intent = Gamepad.Tick(ReadGamepad(pad), ctx);
+                if (_padFrame != Time.frameCount) PollButtons(true); // PollFrame not called this frame
+                intent = Gamepad.Tick(_padQueue.Drain(), ctx); // every press/release since the last tick, once
             }
             else if (TouchPath)
             {
@@ -85,10 +94,87 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 // Desktop without a pad: keyboard mapped to a virtual gamepad. Touch overlay is still shown for mouse testing.
                 UsingTouch = Touchscreen.current != null;
-                intent = Gamepad.Tick(ReadKeyboard(Keyboard.current), ctx);
+                if (_padFrame != Time.frameCount) PollButtons(true);
+                intent = Gamepad.Tick(_padQueue.Drain(), ctx);
             }
             Last = intent;
             return intent;
+        }
+
+        /// <summary>
+        /// Samples the gamepad (or the keyboard when no pad is connected) for this rendered frame into the edge queue.
+        /// Not advancing: edges are discarded so menu presses never reach the match.
+        /// </summary>
+        private void PollButtons(bool simAdvancing)
+        {
+            // Once per frame: pushing the same wasPressedThisFrame twice would deliver the press twice.
+            if (_padFrame == Time.frameCount)
+            {
+                if (!simAdvancing) _padQueue.DiscardEdges();
+                return;
+            }
+            _padFrame = Time.frameCount;
+            var pad = UnityEngine.InputSystem.Gamepad.current;
+            InputDevice device = pad != null ? pad : (TouchPath ? null : (InputDevice)Keyboard.current);
+            if (!ReferenceEquals(device, _padDevice))
+            {
+                _padQueue.Reset();
+                _padDevice = device;
+            }
+            if (device == null) return;
+            GamepadButton pressed, released;
+            GamepadFrame state = pad != null
+                ? ReadGamepad(pad, out pressed, out released)
+                : ReadKeyboard(Keyboard.current, out pressed, out released);
+            _padQueue.PushFrame(state, pressed, released);
+            if (!simAdvancing) _padQueue.DiscardEdges();
+        }
+
+        private static void Edge(ButtonControl c, GamepadButton bit, ref GamepadButton pressed, ref GamepadButton released)
+        {
+            if (c == null) return;
+            if (c.wasPressedThisFrame) pressed |= bit;
+            if (c.wasReleasedThisFrame) released |= bit;
+        }
+
+        /// <summary>Held state plus this frame's press/release edges.</summary>
+        public static GamepadFrame ReadGamepad(UnityEngine.InputSystem.Gamepad pad, out GamepadButton pressed, out GamepadButton released)
+        {
+            pressed = released = GamepadButton.None;
+            Edge(pad.buttonSouth, GamepadButton.South, ref pressed, ref released);
+            Edge(pad.buttonEast, GamepadButton.East, ref pressed, ref released);
+            Edge(pad.buttonWest, GamepadButton.West, ref pressed, ref released);
+            Edge(pad.buttonNorth, GamepadButton.North, ref pressed, ref released);
+            Edge(pad.leftShoulder, GamepadButton.LeftShoulder, ref pressed, ref released);
+            Edge(pad.rightShoulder, GamepadButton.RightShoulder, ref pressed, ref released);
+            Edge(pad.leftTrigger, GamepadButton.LeftTrigger, ref pressed, ref released);
+            Edge(pad.rightTrigger, GamepadButton.RightTrigger, ref pressed, ref released);
+            Edge(pad.dpad.up, GamepadButton.DpadUp, ref pressed, ref released);
+            Edge(pad.dpad.down, GamepadButton.DpadDown, ref pressed, ref released);
+            Edge(pad.dpad.left, GamepadButton.DpadLeft, ref pressed, ref released);
+            Edge(pad.dpad.right, GamepadButton.DpadRight, ref pressed, ref released);
+            Edge(pad.leftStickButton, GamepadButton.LeftStickPress, ref pressed, ref released);
+            Edge(pad.rightStickButton, GamepadButton.RightStickPress, ref pressed, ref released);
+            Edge(pad.startButton, GamepadButton.Start, ref pressed, ref released);
+            Edge(pad.selectButton, GamepadButton.Select, ref pressed, ref released);
+            return ReadGamepad(pad);
+        }
+
+        /// <summary>Keyboard held state plus this frame's press/release edges (same mapping as <see cref="ReadKeyboard(Keyboard)"/>).</summary>
+        public static GamepadFrame ReadKeyboard(Keyboard kb, out GamepadButton pressed, out GamepadButton released)
+        {
+            pressed = released = GamepadButton.None;
+            if (kb == null) return default;
+            Edge(kb.spaceKey, GamepadButton.South, ref pressed, ref released);
+            Edge(kb.fKey, GamepadButton.East, ref pressed, ref released);
+            Edge(kb.eKey, GamepadButton.West, ref pressed, ref released);
+            Edge(kb.rKey, GamepadButton.North, ref pressed, ref released);
+            Edge(kb.qKey, GamepadButton.LeftShoulder, ref pressed, ref released);
+            Edge(kb.zKey, GamepadButton.RightShoulder, ref pressed, ref released);
+            Edge(kb.escapeKey, GamepadButton.Start, ref pressed, ref released);
+            Edge(kb.cKey, GamepadButton.LeftTrigger, ref pressed, ref released);
+            Edge(kb.leftShiftKey, GamepadButton.RightTrigger, ref pressed, ref released);
+            return ReadKeyboard(kb);
         }
 
         public static GamepadFrame ReadGamepad(UnityEngine.InputSystem.Gamepad pad)

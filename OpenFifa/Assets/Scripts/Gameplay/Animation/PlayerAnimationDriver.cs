@@ -55,6 +55,16 @@ namespace OpenFifa.Gameplay
         [Tooltip("Look-at weight multiplier during a dribble touch (a glance at the ball, not a full head turn).")]
         [SerializeField, Range(0f, 1f)] private float dribbleTouchLookAtScale = 0.5f;
 
+        [Header("Gait phase (dribble-touch foot)")]
+        [Tooltip("Pick the touching foot from the Locomotion state's normalised time (measured cycle) instead of a nominal stride.")]
+        [SerializeField] private bool useLocomotionPhase = true;
+        [Tooltip("Normalised-time phase (0..1) at which the right foot strikes the ground in the locomotion clips; the left strikes half a cycle later.")]
+        [SerializeField, Range(0f, 1f)] private float rightFootStrikePhase = 0f;
+        [Tooltip("Fraction of the cycle each foot is on the ground.")]
+        [SerializeField, Range(0.05f, 0.49f)] private float stanceFraction = DribbleTouchSolver.DefaultStanceFraction;
+        [Tooltip("Touch IK weight multiplier while the touching foot is planted (0 = skip: never drag a grounded foot).")]
+        [SerializeField, Range(0f, 1f)] private float plantedTouchIkScale = 0f;
+
         private static readonly int SpeedHash = Animator.StringToHash(AnimStateNames.ParamSpeed);
         private static readonly int ForwardHash = Animator.StringToHash(AnimStateNames.ParamForward);
         private static readonly int StrafeHash = Animator.StringToHash(AnimStateNames.ParamStrafe);
@@ -62,6 +72,7 @@ namespace OpenFifa.Gameplay
         private static readonly int LocoRateHash = Animator.StringToHash(AnimStateNames.ParamLocoRate);
         private static readonly int ActionRateHash = Animator.StringToHash(AnimStateNames.ParamActionRate);
         private static readonly int MirrorHash = Animator.StringToHash(AnimStateNames.ParamMirror);
+        private static readonly int LocomotionHash = Animator.StringToHash(AnimStateNames.Locomotion);
 
         private IPlayerAnimSource _source;
         private readonly AnimSnapshotInterpolator _interpolator = new AnimSnapshotInterpolator();
@@ -80,6 +91,8 @@ namespace OpenFifa.Gameplay
         private bool _hasLastTouchFoot;
         private ActionSide _lastTouchFoot;
         private float _lastTouchEnd = float.NegativeInfinity;
+        private float _tickSeconds;
+        private readonly GaitPhaseEstimator _gait = new GaitPhaseEstimator();
 
         private Vector3 _prevVelocity;
         private Vector3 _acceleration;
@@ -210,12 +223,14 @@ namespace OpenFifa.Gameplay
                 _interpolator.Push(rawTime, rawPos.ToSim(), rawYawRad);
                 AnimSnapshot snap = _interpolator.Sample(alpha, fixedDt);
                 _simTime = snap.Time;
+                _tickSeconds = fixedDt;
                 pos = snap.Position.ToUnity();
                 yaw = SimYawToDegrees(snap.YawRad);
             }
             else
             {
                 _interpolator.Reset();
+                _tickSeconds = 0f; // unknown: the policy assumes 60 Hz
                 _simTime = rawTime;
                 pos = rawPos;
                 yaw = SimYawToDegrees(rawYawRad);
@@ -243,6 +258,7 @@ namespace OpenFifa.Gameplay
             _prevYaw = yaw;
             _hasPrev = true;
 
+            SampleGait(dt);
             PollAction(pos, vel, yaw);
             DriveLocomotion(dt, pos, vel, yaw);
             UpdateActionPlayback();
@@ -266,41 +282,148 @@ namespace OpenFifa.Gameplay
 
         // ------------------------------------------------------------------ actions
 
+        /// <summary>
+        /// Applies <see cref="ActionPlaybackPolicy"/>: the tracker refreshes a prediction under the same id and snaps it to
+        /// the resolved tick, so a same-id report whose contact moved re-plans (a playing clip is re-timed, not restarted);
+        /// a report withdrawn before its contact aborts the action; a new running touch waits for the previous one to
+        /// finish blending out.
+        /// </summary>
         private void PollAction(Vector3 pos, Vector3 vel, float yaw)
         {
             PlayerAnimAction a = _source.CurrentAction;
-            if (a.IsNone || a.Id == _planActionId) return;
+            bool layered = !a.IsNone && _planner.ProfileFor(a.Kind).LayeredOnLocomotion;
+            var decision = ActionPlaybackPolicy.Decide(_plan, _planActionId, _actionStarted, a.IsNone, a.Id, a.ContactTime,
+                a.BallAtContact.ToSim(), layered, _simTime, _tickSeconds);
+            switch (decision)
+            {
+                case ActionPlaybackDecision.Start:
+                    StartPlan(a, layered, pos, vel, yaw);
+                    break;
+                case ActionPlaybackDecision.Replan:
+                    Replan(a, pos, vel, yaw);
+                    break;
+                case ActionPlaybackDecision.Abort:
+                    AbortAction();
+                    break;
+                // Keep, Defer: the current plan continues (a deferred touch is picked up once the old one ends).
+            }
+        }
 
-            bool layered = _planner.ProfileFor(a.Kind).LayeredOnLocomotion;
-            // A running touch never cuts a full-body clip that is still playing (e.g. the first-touch or pass clip);
-            // it is picked up on a later frame if the source still reports it.
-            if (layered && _plan != null && !_plan.Profile.LayeredOnLocomotion && _actionStarted) return;
+        private ActionSyncRequest RequestFor(in PlayerAnimAction a, ActionSide side, Vector3 pos, Vector3 vel, float yaw)
+        {
+            Vector3 rootAtContact = a.HasRootAtContact
+                ? a.RootAtContact
+                : pos + vel * Mathf.Max(0f, a.ContactTime - _simTime);
+            float yawAtContact = a.HasRootAtContact ? SimYawToDegrees(a.YawAtContact) : yaw;
+            return new ActionSyncRequest(a.Kind, side, _simTime, a.ContactTime, pos.ToSim(),
+                rootAtContact.ToSim(), yawAtContact, a.BallAtContact.ToSim(), a.Direction.ToSim(), vel.magnitude,
+                EstimateNextFootfall(), pos.y);
+        }
+
+        private void StartPlan(in PlayerAnimAction a, bool layered, Vector3 pos, Vector3 vel, float yaw)
+        {
             ActionSide side = a.Side;
             if (layered)
             {
                 // A dribble without touches in between (another action, or a long gap) starts a new alternation.
                 if (_plan == null || !_plan.Profile.LayeredOnLocomotion) _hasLastTouchFoot &= _simTime - _lastTouchEnd < 0.6f;
-                bool hasSwing = TryEstimateNextFootfall(out ActionSide swing);
-                side = DribbleTouchSolver.ChooseFoot(hasSwing, swing, a.ContactTime - _simTime, vel.magnitude,
-                    _hasLastTouchFoot, _lastTouchFoot, a.Side, _planner.Stride);
+                float ttc = a.ContactTime - _simTime;
+                if (useLocomotionPhase && _gait.Valid)
+                {
+                    // Measured cycle: the foot in late swing at the contact tick.
+                    side = DribbleTouchSolver.ChooseFootFromPhase(_gait.Phase, _gait.CyclesPerSecond, ttc, rightFootStrikePhase);
+                }
+                else
+                {
+                    bool hasSwing = TryEstimateNextFootfall(out ActionSide swing);
+                    side = DribbleTouchSolver.ChooseFoot(hasSwing, swing, ttc, vel.magnitude,
+                        _hasLastTouchFoot, _lastTouchFoot, a.Side, _planner.Stride);
+                }
                 _hasLastTouchFoot = true;
                 _lastTouchFoot = side;
             }
 
-            Vector3 rootAtContact = a.HasRootAtContact
-                ? a.RootAtContact
-                : pos + vel * Mathf.Max(0f, a.ContactTime - _simTime);
-            float yawAtContact = a.HasRootAtContact ? SimYawToDegrees(a.YawAtContact) : yaw;
-
-            var request = new ActionSyncRequest(a.Kind, side, _simTime, a.ContactTime, pos.ToSim(),
-                rootAtContact.ToSim(), yawAtContact, a.BallAtContact.ToSim(), a.Direction.ToSim(), vel.magnitude,
-                EstimateNextFootfall(), pos.y);
-
+            var request = RequestFor(a, side, pos, vel, yaw);
             EndAction();
             _plan = _planner.Plan(request);
             _planActionId = a.Id;
             _actionStarted = false;
             _contactFired = false;
+        }
+
+        /// <summary>Same action, new contact (snapped to the resolved tick, or a refreshed prediction).</summary>
+        private void Replan(in PlayerAnimAction a, Vector3 pos, Vector3 vel, float yaw)
+        {
+            ActionSyncPlan old = _plan;
+            bool layered = old.Profile.LayeredOnLocomotion;
+            // Keep the foot of a touch and the side of a clip already playing (no mid-clip mirror flip).
+            ActionSide side = layered || _actionStarted ? old.Request.Side : a.Side;
+            ActionSyncPlan fresh = _planner.Plan(RequestFor(a, side, pos, vel, yaw));
+            if (_actionStarted && !layered)
+            {
+                // Clip already playing: continue from the frame shown now at the rate that lands the new contact.
+                ActionTimingPlan timing = ActionPlaybackPolicy.Retime(old.Timing, fresh.Profile, _simTime, a.ContactTime);
+                fresh = new ActionSyncPlan(fresh.Request, fresh.Profile, timing, fresh.Warp, fresh.Ik, fresh.HasStridePlan, fresh.Stride);
+                animator.SetFloat(ActionRateHash, timing.PlaybackRate);
+            }
+            _plan = fresh;
+            // _actionStarted and _contactFired carry over: the same action is still playing.
+        }
+
+        /// <summary>The action was withdrawn before its contact (deflection, someone else got the ball): stop it.</summary>
+        private void AbortAction()
+        {
+            if (_plan == null) return;
+            if (_plan.Profile.LayeredOnLocomotion) _lastTouchEnd = _simTime;
+            else if (_actionStarted && animator.HasState(actionLayer, LocomotionHash))
+                animator.CrossFadeInFixedTime(LocomotionHash, actionCrossFade * 2f, actionLayer);
+            EndAction();
+        }
+
+        /// <summary>Tracks the Locomotion state's normalised time for the touch-foot choice; reset outside it.</summary>
+        private void SampleGait(float dt)
+        {
+            if (!useLocomotionPhase || Halted || (_backend != null && _backend.IsActive) || animator.IsInTransition(0))
+            {
+                _gait.Reset();
+                return;
+            }
+            AnimatorStateInfo st = animator.GetCurrentAnimatorStateInfo(0);
+            if (st.shortNameHash != LocomotionHash)
+            {
+                _gait.Reset();
+                return;
+            }
+            _gait.Push(st.normalizedTime, dt);
+        }
+
+        /// <summary>
+        /// Touch IK multiplier for the strike foot now: 1 in swing, down to <see cref="plantedTouchIkScale"/> while it is
+        /// planted, so the IK never drags a grounded foot (foot skate). Uses the measured gait when available, otherwise
+        /// the pose (the strike foot is the lower foot and at ground height).
+        /// </summary>
+        private float StrikeFootSwingScale(ContactEffector strike)
+        {
+            if (strike != ContactEffector.LeftFoot && strike != ContactEffector.RightFoot) return 1f;
+            ActionSide foot = strike == ContactEffector.LeftFoot ? ActionSide.Left : ActionSide.Right;
+            if (useLocomotionPhase && _gait.Valid && !animator.IsInTransition(0))
+            {
+                AnimatorStateInfo st = animator.GetCurrentAnimatorStateInfo(0);
+                if (st.shortNameHash == LocomotionHash)
+                {
+                    float w = DribbleTouchSolver.SwingWeight(foot, DribbleTouchSolver.Wrap01(st.normalizedTime),
+                        rightFootStrikePhase, stanceFraction);
+                    return Mathf.Lerp(plantedTouchIkScale, 1f, w);
+                }
+            }
+            if (!animator.isHuman) return 1f;
+            Transform lf = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
+            Transform rf = animator.GetBoneTransform(HumanBodyBones.RightFoot);
+            if (lf == null || rf == null) return 1f;
+            Transform me = foot == ActionSide.Left ? lf : rf, other = foot == ActionSide.Left ? rf : lf;
+            bool planted = me.position.y <= other.position.y
+                           && me.position.y - transform.position.y <= ContactIkSolver.DefaultAnkleHeight + 0.05f;
+            return planted ? plantedTouchIkScale : 1f;
         }
 
         private void UpdateActionPlayback()
@@ -480,6 +603,7 @@ namespace OpenFifa.Gameplay
                 bool layered = _plan.Profile.LayeredOnLocomotion;
                 // Dribble touch: short in/out envelope around the contact tick, capped so the run cycle still shows.
                 float ws = ik.StrikeWeightAt(_simTime) * (layered ? dribbleTouchIkWeight : 1f);
+                if (layered && ws > 0f) ws *= StrikeFootSwingScale(ik.StrikeEffector);
                 if (ws > 0f) ApplyEffector(ik.StrikeEffector, ik.StrikeTarget.ToUnity(), ws);
                 float wp = ik.PlantWeightAt(_simTime);
                 if (wp > 0f) ApplyEffector(ik.PlantEffector, ik.PlantTarget.ToUnity(), wp);

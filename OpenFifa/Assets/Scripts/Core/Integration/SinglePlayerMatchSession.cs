@@ -287,6 +287,7 @@ namespace OpenFifa.Core
                 StepInternal(commentaryNow);
                 steps++;
             }
+            // The engine's Tick/Push results are views it reuses on the next call: copy them (AddRange), never keep them.
             if (_commentaryEngine != null) _frameCues.AddRange(_commentaryEngine.Tick(commentaryNow >= 0 ? commentaryNow : SimTime));
             return steps;
         }

@@ -66,6 +66,9 @@ namespace OpenFifa.Core
         // Reused scratch and output lists (see the allocation note above).
         private readonly List<CommentaryCue> _tickCues = new List<CommentaryCue>(4);
         private readonly List<CommentaryCue> _pushCues = new List<CommentaryCue>(4);
+        // Read-only views handed to callers (allocated once): a returned list cannot be cast back and mutated.
+        private readonly System.Collections.ObjectModel.ReadOnlyCollection<CommentaryCue> _tickView;
+        private readonly System.Collections.ObjectModel.ReadOnlyCollection<CommentaryCue> _pushView;
         private readonly List<string> _contexts = new List<string>(Contexts.Length);
         private readonly List<CommentaryLine> _fits = new List<CommentaryLine>(16);
         private readonly List<CommentaryLine> _fresh = new List<CommentaryLine>(16);
@@ -98,6 +101,8 @@ namespace OpenFifa.Core
             _bank = bank ?? throw new ArgumentNullException(nameof(bank));
             _config = config ?? new CommentaryConfig();
             _rng = new CommentaryRandom(seed);
+            _tickView = _tickCues.AsReadOnly();
+            _pushView = _pushCues.AsReadOnly();
         }
 
         public void SetCrowdIntensity(float value) => CrowdIntensity = Clamp01(value);
@@ -139,10 +144,11 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Feeds one event (at e.Time). Returns cues to act on immediately, in a list owned by the engine that is reused
-        /// by the next <see cref="Push"/> (a <see cref="Tick"/> does not touch it).
+        /// Feeds one event (at e.Time). Returns cues to act on immediately, as a read-only view of a list owned by the
+        /// engine. Lifetime: the view stays valid until the next <see cref="Push"/>, which clears and refills it (a
+        /// <see cref="Tick"/> does not touch it). Callers that keep cues past that must copy them (e.g. List.AddRange).
         /// </summary>
-        public List<CommentaryCue> Push(CommentaryEvent e)
+        public IReadOnlyList<CommentaryCue> Push(CommentaryEvent e)
         {
             if (e == null) throw new ArgumentNullException(nameof(e));
             double now = e.Time;
@@ -199,19 +205,20 @@ namespace OpenFifa.Core
 
             UpdateMatchState(e);
             Advance(now, cues);
-            return cues;
+            return _pushView;
         }
 
         /// <summary>
-        /// Advances the scheduler; call every frame. Returns cues to act on, in a list owned by the engine that is
-        /// reused by the next <see cref="Tick"/> (a <see cref="Push"/> does not touch it). Allocation-free when nothing starts.
+        /// Advances the scheduler; call every frame. Returns cues to act on, as a read-only view of a list owned by the
+        /// engine. Lifetime: valid until the next <see cref="Tick"/>, which clears and refills it (a <see cref="Push"/> does
+        /// not touch it); copy to keep. Allocation-free when nothing starts.
         /// </summary>
-        public List<CommentaryCue> Tick(double now)
+        public IReadOnlyList<CommentaryCue> Tick(double now)
         {
             var cues = _tickCues;
             cues.Clear();
             Advance(now, cues);
-            return cues;
+            return _tickView;
         }
 
         private void Advance(double now, List<CommentaryCue> cues)

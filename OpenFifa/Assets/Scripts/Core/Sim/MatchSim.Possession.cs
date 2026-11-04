@@ -319,7 +319,7 @@ namespace OpenFifa.Core
             bool sharpTurn = SimMath.Abs(SimMath.DeltaAngle(p.LastTouchYaw, dirYaw)) > ac.RetouchTurnDeg * SimMath.Deg2Rad
                              && _s.Tick >= p.LastTouchTick + _cfg.SecondsToTicks(ac.MinTouchInterval);
             if (!due && !sharpTurn) return;
-            if (d > ac.ControlRadius * 1.3f) return; // must catch up with the ball first
+            if (d > ac.ControlRadius * DribbleCatchUpFactor) return; // must catch up with the ball first
 
             SimPlayerAttributes a = AttributesOf(id);
             float drib = SimPlayerAttributes.N(a.Dribbling);

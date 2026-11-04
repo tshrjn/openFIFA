@@ -32,14 +32,14 @@ namespace OpenFifa.Tests.Editor
             };
         }
 
-        private static CommentaryUtterance Started(List<CommentaryCue> cues, CommentaryVoice voice)
+        private static CommentaryUtterance Started(IReadOnlyList<CommentaryCue> cues, CommentaryVoice voice)
         {
             foreach (var c in cues)
                 if (c.Kind == CommentaryCueKind.Start && c.Utterance.Voice == voice) return c.Utterance;
             return null;
         }
 
-        private static bool Stopped(List<CommentaryCue> cues, CommentaryVoice voice)
+        private static bool Stopped(IReadOnlyList<CommentaryCue> cues, CommentaryVoice voice)
         {
             foreach (var c in cues)
                 if (c.Kind == CommentaryCueKind.Stop && c.Utterance.Voice == voice) return true;
@@ -165,7 +165,7 @@ namespace OpenFifa.Tests.Editor
             double t = 1;
             for (int i = 0; i < 40; i++, t += 1.5)
             {
-                var cues = e.Push(Ev(types[i % types.Length], t, "Okafor"));
+                var cues = new List<CommentaryCue>(e.Push(Ev(types[i % types.Length], t, "Okafor")));
                 cues.AddRange(e.Tick(t + 0.75));
                 Assert.IsNull(Started(cues, CommentaryVoice.Analyst));
                 Assert.IsFalse(e.IsStoppage);
