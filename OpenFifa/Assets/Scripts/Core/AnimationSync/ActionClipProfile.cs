@@ -41,12 +41,19 @@ namespace OpenFifa.Core
         /// (and/or an additive touch layer) over the running cycle. Timing then only places the IK weight curve.
         /// </summary>
         public bool LayeredOnLocomotion { get; }
+        /// <summary>
+        /// The body warp may only move the body sideways (along the root's right axis), never forward/back or in yaw, and
+        /// it lives inside the contact window: eased in over the half window before contact and out over
+        /// <see cref="FollowThrough"/> after it. Used by running dribble touches: the sim root keeps running and only the
+        /// shown body leans/steps up to <see cref="MaxWarpDistance"/> toward a ball that sits to one side.
+        /// </summary>
+        public bool LateralWarpOnly { get; }
 
         public ActionClipProfile(AnimActionKind kind, float clipLength, float contactTime, float minWindup,
             float minRate, float maxRate, SimVec3 contactOffset, SimVec3 plantFootOffset,
             SimVec3 rootDisplacementToContact, float strikeYawOffset, float maxWarpDistance, float maxWarpYaw,
             float warpWindow, float followThrough, float releaseTime, float plantLeadTime, bool usesRunUp,
-            bool layeredOnLocomotion = false)
+            bool layeredOnLocomotion = false, bool lateralWarpOnly = false)
         {
             Kind = kind;
             ClipLength = clipLength;
@@ -66,6 +73,7 @@ namespace OpenFifa.Core
             PlantLeadTime = plantLeadTime;
             UsesRunUp = usesRunUp;
             LayeredOnLocomotion = layeredOnLocomotion;
+            LateralWarpOnly = lateralWarpOnly;
         }
 
         /// <summary>Normalized clip time of the contact frame.</summary>
@@ -109,11 +117,14 @@ namespace OpenFifa.Core
                         0f, 0.35f, 60f, 0.20f, 0.08f, 0.20f, 0.10f, false);
                 case AnimActionKind.DribbleTouch:
                     // No clip: a 0.24 s IK envelope centred on the contact tick (in 0.12 s, out 0.12 s), rate fixed at 1,
-                    // no wind-up to protect, no plant foot, no run-up and no body warp (the sim root keeps running).
+                    // no wind-up to protect, no plant foot, no run-up. The only body warp is sideways: the sim touches a
+                    // ball up to ~0.8 m to the side of the root, beyond leg reach, so the shown body shifts up to
+                    // DribbleTouchSolver.MaxLateralShift toward it inside the same 0.24 s window (no forward/back, no yaw:
+                    // the sim root keeps running).
                     return new ActionClipProfile(kind, 2f * DribbleTouchSolver.BlendIn, DribbleTouchSolver.BlendIn, 0f, 1f, 1f,
                         new SimVec3(0.09f, 0.11f, 0.35f), NoOffset, NoOffset,
-                        0f, 0f, 0f, 2f * DribbleTouchSolver.BlendIn, DribbleTouchSolver.BlendOut, 0f, 0f, false,
-                        layeredOnLocomotion: true);
+                        0f, DribbleTouchSolver.MaxLateralShift, 0f, 2f * DribbleTouchSolver.BlendIn, DribbleTouchSolver.BlendOut, 0f, 0f, false,
+                        layeredOnLocomotion: true, lateralWarpOnly: true);
                 case AnimActionKind.Header:
                     return new ActionClipProfile(kind, 1.00f, 0.45f, 0.15f, 0.7f, 1.5f,
                         new SimVec3(0f, 1.80f, 0.18f), NoOffset, NoOffset,

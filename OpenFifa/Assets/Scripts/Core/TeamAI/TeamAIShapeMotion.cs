@@ -5,10 +5,10 @@ namespace OpenFifa.Core
     /// <summary>
     /// Off-ball shape motion: what keeps players who are "holding shape" from standing frozen on their spot.
     /// <list type="bullet">
-    /// <item><b>Block slide</b>: the formation anchors are a function of the ball, so they move when the ball moves.
-    /// <see cref="TeamAIBrain"/> differentiates them (anchors now vs anchors for the ball <see cref="AnchorLookAhead"/>
-    /// ahead) and passes that velocity as the move target's velocity, so a holder flows with the block instead of
-    /// waiting in the arrival dead zone until his spot is 1.2 m away and then stepping.</item>
+    /// <item><b>Block slide</b>: the formation anchors are an instant function of the ball. <see cref="TeamAIBrain"/>
+    /// keeps shape spots that follow them with a <see cref="ShapeSmoothing"/> s lag at no more than
+    /// <see cref="SlideSpeed"/>, and passes each spot's velocity as the move target's velocity, so a holder walks or jogs
+    /// with the block instead of waiting in the arrival dead zone and then chasing a spot that jumped.</item>
     /// <item><b>Micro-adjustments</b>: real players are almost never still in open play (they walk and jog small
     /// corrections: checking a shoulder, re-angling a body, adjusting to a team-mate). <see cref="Adjustment"/> is a
     /// slow per-player ellipse round the spot (period 6-8 s, about 1 m) whose speed never drops below about
@@ -19,14 +19,31 @@ namespace OpenFifa.Core
     /// </summary>
     public static class TeamAIShapeMotion
     {
-        /// <summary>Seconds of ball travel used to differentiate the anchors.</summary>
-        public const float AnchorLookAhead = 0.25f;
-        /// <summary>Fastest ball speed (m/s) fed to the anchor look-ahead (a 25 m/s shot must not drag the block).</summary>
-        public const float MaxAnchorBallSpeed = 12f;
-        /// <summary>Fastest anchor velocity (m/s) passed on: a block slides at a jog, never a sprint.</summary>
-        public const float MaxAnchorSpeed = 4f;
-        /// <summary>Smoothing time constant (s) of the anchor velocity (dribble zig-zags must not flip the block).</summary>
-        public const float AnchorVelocitySmoothing = 0.35f;
+        /// <summary>Lag (s) with which shape spots follow their anchors.</summary>
+        public const float ShapeSmoothing = 0.7f;
+
+        /// <summary>
+        /// Fastest a shape spot slides (m/s): a block shifts at a jog, quicker out of possession and in transitions, a
+        /// quicker for a stronger side (<see cref="TeamAITempo.DifficultyFactor"/>).
+        /// </summary>
+        public static float SlideSpeed(TeamAIPhase phase, float theta)
+        {
+            float v;
+            switch (phase)
+            {
+                case TeamAIPhase.Recovery:
+                case TeamAIPhase.CounterPress: v = 3.4f; break;
+                case TeamAIPhase.HighPress:
+                case TeamAIPhase.MidBlock:
+                case TeamAIPhase.LowBlock:
+                case TeamAIPhase.SetPieceAgainst: v = 2.6f; break;
+                case TeamAIPhase.Progression:
+                case TeamAIPhase.FinalThird: v = 4.5f; break; // an attack moves up quickly
+                default: v = 2.0f; break;
+            }
+            return v * TeamAITempo.DifficultyFactor(theta);
+        }
+
 
         /// <summary>Semi-axes (m) of the adjustment ellipse: the long axis, and the short one.</summary>
         public const float MainAmplitude = 1.1f;

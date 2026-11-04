@@ -13,6 +13,11 @@ namespace OpenFifa.Core
         public const float BlendIn = 0.12f;
         /// <summary>Seconds over which the touch IK weight ramps out after the contact tick.</summary>
         public const float BlendOut = 0.12f;
+        /// <summary>
+        /// Largest sideways shift (m) of the shown body toward the ball during a touch (lateral-only warp, eased in and out
+        /// over the touch window). With the leg's own sideways reach this covers balls out to about 0.6-0.7 m.
+        /// </summary>
+        public const float MaxLateralShift = 0.25f;
         /// <summary>Below this speed (m/s) there is no usable gait cycle to read the stride parity from.</summary>
         public const float MinGaitSpeed = 0.8f;
 
