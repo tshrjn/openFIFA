@@ -345,6 +345,23 @@ namespace OpenFifa.Tests.Editor.TeamAI
         // ------------------------------------------------------------------ rosters
 
         [Test]
+        public void PremierLeaguePack_EveryClubHasAStyle_AndTheStylesAreVaried()
+        {
+            var r = RosterLoader.Load(System.IO.File.ReadAllText(OpenFifa.Tests.Editor.RosterTestData.PremierLeaguePath),
+                "premier_league.roster.json");
+            Assert.IsTrue(r.Success, r.Describe());
+            var seen = new System.Collections.Generic.HashSet<TeamAIStyle>();
+            foreach (var c in r.League.Clubs)
+            {
+                Assert.IsTrue(TeamAITactics.TryParseStyle(c.Style, out var st), c.Name + " style " + c.Style);
+                var t = RosterMatchBuilder.TacticsFor(c, RosterMatchBuilder.ParseFormation(c.Formation));
+                if (st != TeamAIStyle.Balanced) Assert.AreEqual(st, t.Style, c.Name);
+                seen.Add(st);
+            }
+            Assert.GreaterOrEqual(seen.Count, 5, "a league of one style plays one game");
+        }
+
+        [Test]
         public void RosterStyle_PicksTheStylesTactics_OtherwiseReputationSliders()
         {
             var players = new RosterPlayer[0];

@@ -419,6 +419,32 @@ def build_player(club_id, ln, parts):
     }
 
 
+# Team AI playing style per club (TeamAITactics.TryParseStyle names; see docs/TEAM_TACTICS.md). An editorial read of
+# how each side plays, not data from any licensed source.
+STYLES = {
+    "bournemouth": "high-press",
+    "arsenal": "possession",
+    "aston-villa": "balanced",
+    "brentford": "long-ball",
+    "brighton": "possession",
+    "chelsea": "possession",
+    "coventry": "counter",
+    "crystal-palace": "counter",
+    "everton": "park-the-bus",
+    "fulham": "balanced",
+    "hull": "counter",
+    "ipswich": "counter",
+    "leeds": "high-press",
+    "liverpool": "high-press",
+    "man-city": "possession",
+    "man-united": "wing-play",
+    "newcastle": "high-press",
+    "nottingham-forest": "counter",
+    "sunderland": "park-the-bus",
+    "tottenham": "high-press",
+}
+
+
 def build(squads_path):
     squads = parse_squads(squads_path)
     clubs = []
@@ -432,7 +458,7 @@ def build(squads_path):
             "colours": {"primary": k["home"]["primary"], "secondary": k["home"]["shortsColor"],
                         "away": k["away"]["primary"]},
             "stadium": {"name": stadium, "capacity": cap},
-            "formation": formation, "reputation": rep,
+            "formation": formation, "reputation": rep, "style": STYLES[cid],
             "kits": kits,
             "players": players,
         })
