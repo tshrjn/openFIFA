@@ -154,7 +154,24 @@ namespace OpenFifa.Core
             var ai = humanTeam == SimTeam.Home ? s.Away : s.Home;
             Keeper(ai[0], profile.OpponentKeeperReflexDelta);
             Keeper(human[0], profile.HumanKeeperReflexDelta);
+            if (profile.OpponentOutfieldDelta != 0)
+                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+                    if (!ai[i].IsGoalkeeper) Outfield(ai[i], profile.OpponentOutfieldDelta);
             return s;
+        }
+
+        /// <summary>Shifts an outfield player's outfield ratings (not the keeper ones, height or foot) by delta.</summary>
+        private static void Outfield(SimPlayerAttributes a, int d)
+        {
+            a.Pace = Clamp99(a.Pace + d); a.Acceleration = Clamp99(a.Acceleration + d); a.Agility = Clamp99(a.Agility + d);
+            a.Balance = Clamp99(a.Balance + d); a.Stamina = Clamp99(a.Stamina + d); a.Strength = Clamp99(a.Strength + d);
+            a.Reactions = Clamp99(a.Reactions + d); a.Dribbling = Clamp99(a.Dribbling + d);
+            a.BallControl = Clamp99(a.BallControl + d); a.ShortPassing = Clamp99(a.ShortPassing + d);
+            a.LongPassing = Clamp99(a.LongPassing + d); a.Crossing = Clamp99(a.Crossing + d); a.Vision = Clamp99(a.Vision + d);
+            a.Finishing = Clamp99(a.Finishing + d); a.ShotPower = Clamp99(a.ShotPower + d); a.LongShots = Clamp99(a.LongShots + d);
+            a.Curve = Clamp99(a.Curve + d); a.Heading = Clamp99(a.Heading + d); a.Composure = Clamp99(a.Composure + d);
+            a.StandingTackle = Clamp99(a.StandingTackle + d); a.SlidingTackle = Clamp99(a.SlidingTackle + d);
+            a.Aggression = Clamp99(a.Aggression + d);
         }
 
         private static void Keeper(SimPlayerAttributes gk, int delta)

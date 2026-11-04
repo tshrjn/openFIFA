@@ -49,7 +49,7 @@ namespace OpenFifa.Tests.Editor.Integration
             float.IsNaN(v.X) || float.IsNaN(v.Y) || float.IsNaN(v.Z) || float.IsInfinity(v.X) || float.IsInfinity(v.Z);
 
         [Test]
-        public void DifficultyProfile_EveryLevel_UsesLadderThetasAndOrderedAssists()
+        public void DifficultyProfile_EveryLevel_UsesLadderThetasAndEveryKnobIsMonotonic()
         {
             for (int i = 0; i < TeamAIDifficultyLadder.LevelCount; i++)
             {
@@ -61,7 +61,13 @@ namespace OpenFifa.Tests.Editor.Integration
                 if (i > 0)
                 {
                     var prev = SinglePlayerDifficulty.For((TeamAIDifficultyLevel)(i - 1));
+                    // Every knob moves one way up the ladder (harder for the user), so no lever can undo another.
+                    Assert.Greater(p.OpponentTheta, prev.OpponentTheta, level + " opponent theta");
+                    Assert.LessOrEqual(p.TeammateTheta, prev.TeammateTheta, level + " teammate theta");
+                    Assert.GreaterOrEqual(p.Ladder.OpponentReactionBonus, prev.Ladder.OpponentReactionBonus, level + " reaction bonus");
+                    Assert.GreaterOrEqual(p.OpponentOutfieldDelta, prev.OpponentOutfieldDelta, level + " opponent outfield");
                     Assert.GreaterOrEqual(p.OpponentKeeperReflexDelta, prev.OpponentKeeperReflexDelta);
+                    Assert.LessOrEqual(p.HumanKeeperReflexDelta, prev.HumanKeeperReflexDelta, level + " human keeper");
                     Assert.LessOrEqual(p.PassAssist, prev.PassAssist);
                     Assert.LessOrEqual(p.ShotAssist, prev.ShotAssist);
                 }
@@ -79,6 +85,14 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreEqual(before, src.Away[0].GkReflexes);
             Assert.AreEqual(before + prof.OpponentKeeperReflexDelta, s.Away[0].GkReflexes);
             Assert.AreEqual(src.Home[0].GkReflexes + prof.HumanKeeperReflexDelta, s.Home[0].GkReflexes);
+            // Beginner weakens the AI's outfielders (not its keeper's ratings) and leaves the user's side alone.
+            Assert.Less(prof.OpponentOutfieldDelta, 0);
+            Assert.AreEqual(src.Away[5].Pace + prof.OpponentOutfieldDelta, s.Away[5].Pace);
+            Assert.AreEqual(src.Away[5].Finishing + prof.OpponentOutfieldDelta, s.Away[5].Finishing);
+            Assert.AreEqual(src.Away[0].GkHandling, s.Away[0].GkHandling);
+            Assert.AreEqual(src.Home[5].Pace, s.Home[5].Pace);
+            Assert.AreEqual(before, src.Away[0].GkReflexes);
+            Assert.AreEqual(src.Away[5].Pace, MatchSetup.CreateDefault(4).Away[5].Pace, "caller setup untouched");
         }
 
         [Test]
@@ -165,77 +179,129 @@ namespace OpenFifa.Tests.Editor.Integration
             public float AIPassRate => AIPasses > 0 ? AIPassesCompleted / (float)AIPasses : 0f;
         }
 
-        private static LevelStats PlaySeeds(TeamAIDifficultyLevel level, int seeds, float half = 360f)
+        /// <summary>One full match against the scripted user; <c>finite</c> is false if the sim ever went NaN.</summary>
+        private static LevelStats PlayOne(TeamAIDifficultyLevel level, ulong seed, float half, out bool finite)
         {
             var st = new LevelStats();
-            for (int seed = 1; seed <= seeds; seed++)
+            var s = NewSession(level, seed, half);
+            var bot = new ScriptedGamepadBot();
+            finite = true;
+            int guard = 0;
+            while (!s.IsFinished)
             {
-                var s = NewSession(level, (ulong)seed, half);
-                var bot = new ScriptedGamepadBot();
-                while (!s.IsFinished)
+                var ev = s.StepOnce(bot);
+                for (int i = 0; i < ev.Count; i++)
                 {
-                    var ev = s.StepOnce(bot);
-                    for (int i = 0; i < ev.Count; i++)
-                    {
-                        if (ev[i].Team != SimTeam.Away) continue;
-                        if (ev[i].Type == MatchEventType.Pass) st.AIPasses++;
-                        else if (ev[i].Type == MatchEventType.PassCompleted) st.AIPassesCompleted++;
-                    }
+                    if (ev[i].Team != SimTeam.Away) continue;
+                    if (ev[i].Type == MatchEventType.Pass) st.AIPasses++;
+                    else if (ev[i].Type == MatchEventType.PassCompleted) st.AIPassesCompleted++;
                 }
-                AssertFinite(s);
-                var r = s.Result;
-                st.HumanGoals += r.HumanGoals;
-                st.AIGoals += r.AIGoals;
-                st.AIShots += r.AwayShots;
-                st.HumanShots += r.HomeShots;
-                st.AIPossession += (1f - r.HomePossession) / seeds;
+                if ((++guard & 255) == 0 && !IsFinite(s)) { finite = false; break; }
             }
+            if (!IsFinite(s)) finite = false;
+            var r = s.Result;
+            st.HumanGoals = r.HumanGoals;
+            st.AIGoals = r.AIGoals;
+            st.AIShots = r.AwayShots;
+            st.HumanShots = r.HomeShots;
+            st.AIPossession = 1f - r.HomePossession;
             return st;
         }
 
+        private static bool IsFinite(SinglePlayerMatchSession s)
+        {
+            var st = s.Sim.State;
+            if (Bad(st.Ball.Position) || Bad(st.Ball.Velocity)) return false;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+                if (Bad(st.Players[i].Position) || Bad(st.Players[i].Velocity)) return false;
+            return true;
+        }
+
         /// <summary>
-        /// Behaviour-level difficulty check: the AI's threat must rise with the level and the user's scoring fall, over
-        /// seeds, against the same scripted user. Counts are totals over <c>seeds</c> matches of two 4-minute halves;
-        /// thresholds sit well inside the 10-seed full-length numbers (AI shots per match 3.3 / 13.0 / 20.8, AI goals
-        /// 0.4 / 2.2 / 2.4, user goals 2.1 / 1.0 / 0.6 for Beginner / Professional / Ultimate, after the moving-target
-        /// and Beginner retune of Nov 2026) so they hold across seeds and tuning noise. This 5-seed, 4-minute-half run
-        /// gave balances -12.0 / 12.4 / 21.0. Pass completion and possession are logged, not asserted: a stronger AI plays more
-        /// forward passes, so its completion rate is not a measure of threat.
+        /// Plays seeds 1..<paramref name="seeds"/> for every level. Matches are independent sessions with no shared
+        /// mutable state, so they run in parallel; each result lands in its own slot and the totals are summed in a fixed
+        /// order, so the outcome is identical to a sequential run (checked against single-process runs of each seed).
+        /// </summary>
+        private static LevelStats[] PlayLadder(int seeds, float half)
+        {
+            int levels = TeamAIDifficultyLadder.LevelCount;
+            var games = new LevelStats[levels * seeds];
+            var finite = new bool[levels * seeds];
+            System.Threading.Tasks.Parallel.For(0, games.Length,
+                new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) },
+                k => games[k] = PlayOne((TeamAIDifficultyLevel)(k / seeds), (ulong)(k % seeds + 1), half, out finite[k]));
+            var totals = new LevelStats[levels];
+            for (int k = 0; k < games.Length; k++)
+            {
+                Assert.IsTrue(finite[k], $"level {k / seeds} seed {k % seeds + 1}: sim went NaN");
+                ref var t = ref totals[k / seeds];
+                var g = games[k];
+                t.HumanGoals += g.HumanGoals;
+                t.AIGoals += g.AIGoals;
+                t.AIShots += g.AIShots;
+                t.HumanShots += g.HumanShots;
+                t.AIPasses += g.AIPasses;
+                t.AIPassesCompleted += g.AIPassesCompleted;
+                t.AIPossession += g.AIPossession / seeds;
+            }
+            return totals;
+        }
+
+        /// <summary>
+        /// Behaviour-level difficulty check over the whole seven-level ladder: against the same scripted user, every level
+        /// must go clearly better for the AI than the one below, in goal difference (AI minus user) and in balance (goal
+        /// difference plus 0.2 per shot of shot difference). Any inversion fails.
         /// </summary>
         /// <remarks>
-        /// Fifteen 8-minute matches: about 5.5 minutes under Mono and far longer in the Unity editor, so it is tagged
-        /// Slow (skip it in the fast suite with a category filter) and given a 30-minute timeout instead of Unity's
-        /// default 180 s. Fewer seeds or shorter halves would make the ordering assertions flaky.
+        /// <para>
+        /// Fixed, representative seed set: seeds 1..24, full-length 2 x 6-minute halves, all seven levels (168 matches).
+        /// Outcomes are chaotic in the seed (any parameter change reshuffles every match), so fewer seeds or shorter halves
+        /// are not representative: with 4-minute halves World Class and Legendary tie on goal difference, and with seeds
+        /// 1..16 the World Class to Legendary step is only +5 goals. Measured on this set (Nov 2026 ladder retune), totals
+        /// over 24 matches: goal difference -68 / -39 / -12 / 19 / 52 / 65 / 106 (steps 29 27 31 33 13 41) and balance
+        /// -93.6 / -41.0 / 0.2 / 49.8 / 102.4 / 145.2 / 203.0 (steps 52.6 41.2 49.6 52.6 42.8 57.8). Over 48 seeds every
+        /// step is at least 3 standard errors of the paired difference in goal difference and 3.7 in balance.
+        /// The thresholds (each step at least 0.25 goals and 1.0 balance per match) sit at half the smallest measured step.
+        /// </para>
+        /// <para>
+        /// The matches run in parallel on all cores: 3.2 minutes on 12 cores under Mono (26 CPU-minutes, so about half an hour on one
+        /// core). Tagged Slow (skip it in the fast suite with a category filter) with a 60-minute timeout.
+        /// </para>
         /// </remarks>
         [Test]
         [Category("Slow")]
-        [Timeout(1800000)]
-        public void Difficulty_BeginnerProfessionalUltimate_AIThreatRisesAndUserScoringFallsOverSeeds()
+        [Timeout(3600000)]
+        public void Difficulty_AllSevenLevels_EachStepGoesClearlyBetterForTheAI()
         {
-            const int seeds = 5;
-            const float half = 240f;
-            var b = PlaySeeds(TeamAIDifficultyLevel.Beginner, seeds, half);
-            var p = PlaySeeds(TeamAIDifficultyLevel.Professional, seeds, half);
-            var u = PlaySeeds(TeamAIDifficultyLevel.Ultimate, seeds, half);
-            Log(Describe("Beginner", b));
-            Log(Describe("Professional", p));
-            Log(Describe("Ultimate", u));
+            const int seeds = 24;
+            const float half = 360f;
+            var t = PlayLadder(seeds, half);
+            for (int i = 0; i < t.Length; i++)
+                Log(Describe(TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i), t[i]));
 
-            // The match swings toward the AI level by level: the balance (goal difference plus 0.2 per shot of shot
-            // difference, AI minus user) is strictly ordered. Over four sets of five seeds it ran -9.8..-3.4
-            // (Beginner), -1.2..6 (Professional) and 15..22 (Ultimate); the closest step was 2.2 apart.
-            Assert.Less(Balance(b), Balance(p), "Professional should go better for the AI than Beginner");
-            Assert.Less(Balance(p), Balance(u), "Ultimate should go better for the AI than Professional");
-            // Shots: Ultimate well clear of both.
-            Assert.Greater(u.AIShots, p.AIShots + 10, "Ultimate AI should shoot clearly more than Professional");
-            Assert.GreaterOrEqual(u.AIShots, 2 * b.AIShots + 5, "Ultimate AI should be far more threatening than Beginner");
-            // Goals: the top level outscores the bottom one, and Beginner still lets the user win.
-            Assert.Greater(u.AIGoals, b.AIGoals, "Ultimate AI should score more than Beginner");
-            Assert.Greater(b.HumanGoals, b.AIGoals, "the user should outscore the Beginner AI");
-            // The user's scoring falls with the level.
-            Assert.Greater(b.HumanGoals, u.HumanGoals + 2, "the user should score clearly more against Beginner than Ultimate");
-            Assert.GreaterOrEqual(b.HumanShots, u.HumanShots, "the user should get at least as many shots against Beginner");
+            for (int i = 1; i < t.Length; i++)
+            {
+                string step = TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)(i - 1)) + " -> " +
+                              TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i);
+                int gdStep = GoalDifference(t[i]) - GoalDifference(t[i - 1]);
+                float balStep = Balance(t[i]) - Balance(t[i - 1]);
+                Assert.GreaterOrEqual(gdStep, (int)Math.Ceiling(0.25f * seeds),
+                    $"{step}: AI goal difference should rise by at least 0.25 per match (got {gdStep} over {seeds})");
+                Assert.GreaterOrEqual(balStep, 1.0f * seeds,
+                    $"{step}: balance should rise by at least 1.0 per match (got {balStep:F1} over {seeds})");
+            }
+
+            var beg = t[(int)TeamAIDifficultyLevel.Beginner];
+            var ult = t[(int)TeamAIDifficultyLevel.Ultimate];
+            // Beginner: the user clearly wins (measured 73 goals to 5); Ultimate: the AI clearly does (measured 114 to 8).
+            Assert.Greater(beg.HumanGoals, 2 * beg.AIGoals + seeds / 2, "the user should clearly outscore the Beginner AI");
+            Assert.Greater(ult.AIGoals, 2 * ult.HumanGoals + seeds, "the Ultimate AI should clearly outscore the user");
+            // Threat and the user's chances move the right way end to end.
+            Assert.GreaterOrEqual(ult.AIShots, 4 * beg.AIShots, "Ultimate AI should be far more threatening than Beginner");
+            Assert.Greater(beg.HumanShots, 2 * ult.HumanShots, "the user should get far more shots against Beginner");
         }
+
+        private static int GoalDifference(in LevelStats s) => s.AIGoals - s.HumanGoals;
 
         private static float Balance(in LevelStats s) =>
             s.AIGoals - s.HumanGoals + 0.2f * (s.AIShots - s.HumanShots);
