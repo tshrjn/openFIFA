@@ -1,0 +1,19 @@
+{
+    "name": "OpenFifa.SinglePlayer.Editor",
+    "rootNamespace": "OpenFifa.Gameplay.SinglePlayer.Editor",
+    "references": [
+        "OpenFifa.Core",
+        "OpenFifa.Gameplay",
+        "OpenFifa.Editor",
+        "OpenFifa.Animations.Editor"
+    ],
+    "includePlatforms": ["Editor"],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
