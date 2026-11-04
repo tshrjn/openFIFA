@@ -1055,3 +1055,11 @@ Possible next steps:
 **Known Issues**: None (empty project)
 
 **Next**: US-001 — Unity project scaffold with macOS/iPad build pipeline and test framework
+
+## Offside (Law 11)
+
+- **Rules** — `Scripts/Core/OffsideLogic.cs` (pure C#, implements `IOffsideDecisionSource`). Snapshot on every touch: team-mates of the toucher whose foremost point (centre + `BodyRadius`, arms ignored) is in the opponents' half (halfway line excluded) and beyond both the ball and the second-last opponent (keeper counts) by more than `LevelTolerance` are flagged. Offence when a flagged player is next to touch the ball, or challenges an opponent within `InterferenceRadius` of the ball. Deliberate opponent play resets; deflections/saves don't. Goal kicks, throw-ins and corners are exempt. Tests: `Tests/Editor/OffsideLogicTests.cs` (`[Category("Offside")]`).
+- **Wiring** — `BallTouchTracker` (on the ball) emits team-aware touches from `BallOwnership` changes and collisions; `OffsideController` (attached by `MatchOrchestrator.Start`) runs the logic, enters `MatchState.Stoppage`, plays the presentation and awards an indirect free kick at the offence position. Any other rules engine can drive it via `OffsideController.UseDecisionSource(IOffsideDecisionSource)`.
+- **Config** — `OffsideConfig` (rules; on for 11v11, `_enabledSmallSided` toggle for Rush, default on) and `OffsidePresentationConfig` (timing, colours, camera, banner). Both optional on `MatchOrchestrator`; runtime defaults are used when empty.
+- **Presentation** — `OffsidePresentation` sequences `OffsidePresentationTimeline` cues (~2.5 s, skippable with Enter / gamepad B or Start): whistle (`OffsidePresentation.OnWhistle`, played by `SoundManager`), `AssistantRefereeFlag` placeholder (events for a future animated official), slow motion into freeze, `OffsideCameraCut`, `OffsideLineOverlay` (lines at the snapshot positions, i.e. when the ball was played) and the `OffsideBanner` lower third.
+- **Known gaps** — not compiled or play-tested yet (no Unity licence on the build box). The line material is built at runtime from `Universal Render Pipeline/Particles/Unlit`; if that shader is stripped from a player build, assign `Line Material Override` in `OffsidePresentationConfig`. The game has no throw-ins/corners/goal kicks yet, so the exemption is only reachable via `BallTouchTracker.SetPendingRestart`.
