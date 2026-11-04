@@ -1083,3 +1083,9 @@ Possible next steps:
 - **Config** — `OffsideConfig` (rules; on for 11v11, `_enabledSmallSided` toggle for Rush, default on) and `OffsidePresentationConfig` (timing, colours, camera, banner). Both optional on `MatchOrchestrator`; runtime defaults are used when empty.
 - **Presentation** — `OffsidePresentation` sequences `OffsidePresentationTimeline` cues (~2.5 s, skippable with Enter / gamepad B or Start): whistle (`OffsidePresentation.OnWhistle`, played by `SoundManager`), `AssistantRefereeFlag` placeholder (events for a future animated official), slow motion into freeze, `OffsideCameraCut`, `OffsideLineOverlay` (lines at the snapshot positions, i.e. when the ball was played) and the `OffsideBanner` lower third.
 - **Known gaps** — not compiled or play-tested yet (no Unity licence on the build box). The line material is built at runtime from `Universal Render Pipeline/Particles/Unlit`; if that shader is stripped from a player build, assign `Line Material Override` in `OffsidePresentationConfig`. The game has no throw-ins/corners/goal kicks yet, so the exemption is only reachable via `BallTouchTracker.SetPendingRestart`.
+
+## Match weather and pitch condition (single player)
+
+- `SinglePlayerMatchOptions.Weather` (`WeatherType`, default `Clear`) picks the pitch condition through `PitchSurfaces.ForWeather` (rain = Wet, snow = Heavy, else Normal); `Options.Surface` overrides it (e.g. `Dry`). The session applies it with `MatchSimConfig.ForSurface` (a copy whose ball is `BallSimConfig.WithSurface(...)`) before building the `MatchSim` and the `TeamAIBallModel`, so the AI predicts with the ball it plays. The caller's config is not changed.
+- `SinglePlayerMatchController`: inspector `Weather` / `SurfaceOverride`, or `-spWeather dry|normal|wet|rain|heavy|clear|lightrain|heavyrain|snow|fog|overcast` (`MatchWeatherOption`). No visual weather is driven from it yet.
+- Tests: `Tests/Editor/Integration/SinglePlayerWeatherTests.cs`.

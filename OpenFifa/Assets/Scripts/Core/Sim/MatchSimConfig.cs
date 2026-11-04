@@ -37,5 +37,17 @@ namespace OpenFifa.Core
         public float BallDt => 1f / (TickRate * BallSubsteps);
 
         public int SecondsToTicks(float seconds) => (int)(seconds * TickRate + 0.5f);
+
+        /// <summary>
+        /// A copy of this config whose ball is set up for <paramref name="surface"/> (<see cref="BallSimConfig.WithSurface"/>).
+        /// Normal, or a ball already made for a surface, returns this config unchanged. The other sub-configs are shared.
+        /// </summary>
+        public MatchSimConfig ForSurface(PitchSurface surface)
+        {
+            if (surface == PitchSurface.Normal || Ball.Surface != PitchSurface.Normal) return this;
+            var c = (MatchSimConfig)MemberwiseClone();
+            c.Ball = Ball.WithSurface(surface);
+            return c;
+        }
     }
 }

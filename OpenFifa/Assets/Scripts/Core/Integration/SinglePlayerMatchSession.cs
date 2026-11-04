@@ -50,6 +50,11 @@ namespace OpenFifa.Core
         /// <summary>Null = <see cref="MatchSetup.CreateDefault"/>(Seed). The session copies attributes before changing them.</summary>
         public MatchSetup Setup;
         public MatchSimConfig Config;
+        /// <summary>Match weather. Sets the pitch condition (<see cref="PitchSurfaces.ForWeather"/>) unless <see cref="Surface"/> is set.</summary>
+        public WeatherType Weather = WeatherType.Clear;
+        /// <summary>Explicit pitch condition (e.g. Dry for a firm summer pitch); null = from <see cref="Weather"/>.</summary>
+        public PitchSurface? Surface;
+        public PitchSurface EffectiveSurface => Surface ?? PitchSurfaces.ForWeather(Weather);
         /// <summary>Null = fitted to the setup's kick-off shape.</summary>
         public TeamAITactics HomeTactics;
         public TeamAITactics AwayTactics;
@@ -120,7 +125,9 @@ namespace OpenFifa.Core
             Options = options ?? new SinglePlayerMatchOptions();
             if (Options.HumanTeam == SimTeam.None) throw new ArgumentException("HumanTeam must be Home or Away");
             Profile = SinglePlayerDifficulty.For(Options.Level);
-            var cfg = Options.Config ?? new MatchSimConfig();
+            // The pitch condition goes into the ball config before the sim AND the AI ball model are built from it,
+            // so the AI's flight and roll predictions match the ball it plays. Options.Config itself is not changed.
+            var cfg = (Options.Config ?? new MatchSimConfig()).ForSurface(Options.EffectiveSurface);
             var setup = PrepareSetup(Options.Setup ?? MatchSetup.CreateDefault(Options.Seed), Options.Seed, Options.HumanTeam, Profile);
 
             Sim = new MatchSim(cfg, setup);

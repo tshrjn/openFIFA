@@ -33,6 +33,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public ulong Seed = 1;
         [Tooltip("Sim seconds per half (360 = a 12-minute match).")]
         public float HalfSeconds = 360f;
+        [Tooltip("Match weather; sets the pitch condition for ball roll and bounce (rain = wet, snow = heavy).")]
+        public WeatherType Weather = WeatherType.Clear;
+        [Tooltip("Force a pitch condition instead of the weather's (Normal = use the weather's).")]
+        public PitchSurface SurfaceOverride = PitchSurface.Normal;
         [Tooltip("Skip the difficulty picker.")]
         public bool AutoStart;
         [Tooltip("Attract mode: the team AI also controls the user's player.")]
@@ -132,6 +136,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 if (a == "-spLevel" && int.TryParse(next, out int lv)) Level = (TeamAIDifficultyLevel)Mathf.Clamp(lv, 0, 6);
                 else if (a == "-spSeed" && ulong.TryParse(next, out ulong sd)) Seed = sd;
                 else if (a == "-spHalf" && float.TryParse(next, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out float h)) HalfSeconds = h;
+                else if (a == "-spWeather")
+                {
+                    if (MatchWeatherOption.TryParse(next, out var w, out var surface))
+                    {
+                        Weather = w;
+                        SurfaceOverride = surface ?? PitchSurface.Normal;
+                    }
+                    else Debug.LogWarning("[" + ProductName + "] -spWeather expects " + MatchWeatherOption.Values + ", got '" + next + "'");
+                }
                 else if (a == "-spAutoStart") AutoStart = true;
                 else if (a == "-spAiVsAi") AiVsAi = true;
                 else if (a == "-spBot") ScriptedHuman = true;
@@ -530,6 +543,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 Seed = Seed,
                 HumanTeam = HumanTeam,
                 Config = new MatchSimConfig { HalfDurationSeconds = HalfSeconds },
+                Weather = Weather,
+                Surface = SurfaceOverride != PitchSurface.Normal ? SurfaceOverride : (PitchSurface?)null,
                 CameraYaw = BroadcastCamera != null ? BroadcastCamera.YawRadians : -Mathf.PI * 0.5f,
             };
             homeColor = new Color(0.75f, 0.1f, 0.15f);
