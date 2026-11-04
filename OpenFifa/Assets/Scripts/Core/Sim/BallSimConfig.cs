@@ -90,6 +90,9 @@ namespace OpenFifa.Core
         /// <summary>Lazily built ground-roll lookup for <see cref="BallFlight"/> (validated against the fields above).</summary>
         [System.NonSerialized] internal BallFlight.RollTable CachedRollTable;
 
+        /// <summary>Lazily built lofted-launch lookups for <see cref="KickSolver.LoftTable"/> (validated against the fields above).</summary>
+        [System.NonSerialized] internal KickSolver.LoftTable[] CachedLoftTables;
+
         public BallSimConfig Clone() => (BallSimConfig)MemberwiseClone();
     }
 }

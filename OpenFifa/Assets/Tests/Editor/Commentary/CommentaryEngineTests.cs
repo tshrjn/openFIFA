@@ -267,5 +267,49 @@ namespace OpenFifa.Tests.Editor
             }
             Assert.AreEqual(Run(), Run());
         }
+
+        // ---- Review round 3 #10: no per-call garbage in steady state. ----
+
+        [Test]
+        public void Tick_SteadyState_AllocatesNothing()
+        {
+            var e = new CommentaryEngine(Shipped(), new CommentaryConfig { AnalystChance = 0.5 }, 7);
+            var lead = Started(e.Push(Ev(CommentaryEventType.Foul, 0, "Vance")), CommentaryVoice.PlayByPlay);
+            Assert.IsNotNull(lead);
+            for (int i = 0; i < 20; i++) e.Tick(i * 0.01); // warm up
+            long before = System.GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 0; i < 2000; i++) e.Tick(0.2 + i * 0.001);       // the lead line keeps talking
+            for (int i = 0; i < 2000; i++) e.Tick(1000.0 + i * (1.0 / 60)); // long silence, nothing pending
+            long after = System.GC.GetAllocatedBytesForCurrentThread();
+            Assert.AreEqual(0L, after - before);
+        }
+
+        [Test]
+        public void Push_GatedOrQueuedEvent_AllocatesNothing()
+        {
+            var e = new CommentaryEngine(Shipped(), NoAnalyst(), 7);
+            var goal = Started(e.Push(Goal(0, 0, 1, 0)), CommentaryVoice.PlayByPlay);
+            Assert.IsNotNull(goal);
+            // Events are built up front: the game creates them; the engine must not add garbage per event.
+            var evs = new CommentaryEvent[400];
+            for (int i = 0; i < evs.Length; i++)
+                evs[i] = Ev(i % 2 == 0 ? CommentaryEventType.PassSequence : CommentaryEventType.Tackle, 0.001 * (i + 1), "Okafor");
+            for (int i = 0; i < 20; i++) e.Push(evs[i]); // warm up (queue, cooldown dictionaries)
+            long before = System.GC.GetAllocatedBytesForCurrentThread();
+            for (int i = 20; i < evs.Length; i++) e.Push(evs[i]);
+            long after = System.GC.GetAllocatedBytesForCurrentThread();
+            Assert.AreEqual(0L, after - before, "queued or gated events while the goal call plays");
+        }
+
+        [Test]
+        public void TickAndPush_ReturnedLists_StayValidUntilNextCallOfTheSameMethod()
+        {
+            var e = new CommentaryEngine(Shipped(), NoAnalyst(), 7);
+            var pushed = e.Push(Ev(CommentaryEventType.Foul, 0, "Vance"));
+            var lead = Started(pushed, CommentaryVoice.PlayByPlay);
+            Assert.IsNotNull(lead);
+            e.Tick(0.1); // a Tick does not clear what Push returned
+            Assert.AreSame(lead, Started(pushed, CommentaryVoice.PlayByPlay));
+        }
     }
 }

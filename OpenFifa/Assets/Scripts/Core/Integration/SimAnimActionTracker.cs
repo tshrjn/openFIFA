@@ -17,13 +17,33 @@ namespace OpenFifa.Core
         public float YawAtContact;
         public bool HasRootAtContact;
 
+        /// <summary>
+        /// A dribble touch (Kind is <see cref="AnimActionKind.FirstTouch"/>): presentation should play it as a running
+        /// touch (foot IK to <see cref="BallAtContact"/> at <see cref="ContactTime"/>, or an additive touch layer) without
+        /// leaving locomotion.
+        /// </summary>
+        public bool IsDribbleTouch;
+
         public bool IsNone => Id == 0 || Kind == AnimActionKind.None;
     }
 
     /// <summary>
     /// Watches the sim's event stream and keeps, per player, the current or upcoming contact-synchronised action for
     /// the animation layer: kicks and tackles (from KickWindup, which carries the contact tick), keeper saves, first
-    /// touches, falls after fouls and goal celebrations. Call <see cref="Update"/> once per sim step.
+    /// touches, dribble touches, falls after fouls and goal celebrations. Call <see cref="Update"/> once per sim step.
+    ///
+    /// Contacts the sim resolves without a wind-up are predicted so the clip can start ahead of them and its contact
+    /// frame lands on the tick the sim resolves the contact:
+    /// <list type="bullet">
+    /// <item>Dribble touches: the owner's next touch is due at <see cref="SimPlayer.NextTouchTick"/>.</item>
+    /// <item>First touches: the loose ball's path (the sim's own integrator, <see cref="PredictSeconds"/> ahead) against
+    /// each player's extrapolated position and control radius; the earliest eligible player gets the action.</item>
+    /// <item>Keeper saves: the substep where the ball reaches the keeper's plane (the sim's closest-approach rule), for a
+    /// keeper with a save attempt pending and the ball near his reach. Beaten keepers still dive.</item>
+    /// </list>
+    /// Predictions are refreshed every update with a stable <see cref="SimAnimAction.Id"/>; when the sim resolves the
+    /// contact (DribbleTouch / FirstTouch / Save event) the same action snaps to the resolved tick. A prediction that
+    /// disappears before its contact (someone else got there first) is withdrawn.
     /// </summary>
     public sealed class SimAnimActionTracker
     {
@@ -32,8 +52,17 @@ namespace OpenFifa.Core
         public const float HoldAfterContact = 0.6f;
         /// <summary>Celebrations and falls last longer.</summary>
         public const float LongHold = 2.5f;
+        /// <summary>A resolved touch (dribble or first touch) yields to the next predicted dribble touch after this (s).</summary>
+        public const float TouchHold = 0.1f;
+        /// <summary>How far ahead loose-ball contacts (first touches, saves) are predicted (s).</summary>
+        public const float PredictSeconds = 1.0f;
 
         private readonly SimAnimAction[] _actions = new SimAnimAction[MatchSimState.PlayerCount];
+        /// <summary>_actions[i] is an unconfirmed prediction.</summary>
+        private readonly bool[] _predicted = new bool[MatchSimState.PlayerCount];
+        private readonly bool[] _refreshed = new bool[MatchSimState.PlayerCount];
+        private SimVec3[] _path = new SimVec3[1];
+        private SimVec3[] _pathVel = new SimVec3[1];
         private int _nextId = 1;
 
         /// <summary>Monotonic sim time of the last update (s).</summary>
@@ -43,9 +72,11 @@ namespace OpenFifa.Core
         {
             var a = _actions[playerId];
             if (a.IsNone) return a;
-            float hold = a.Kind == AnimActionKind.Celebrate || a.Kind == AnimActionKind.Fall ? LongHold : HoldAfterContact;
-            return SimTime > a.ContactTime + hold ? default : a;
+            return SimTime > a.ContactTime + HoldOf(a) ? default : a;
         }
+
+        private static float HoldOf(in SimAnimAction a) =>
+            a.Kind == AnimActionKind.Celebrate || a.Kind == AnimActionKind.Fall ? LongHold : HoldAfterContact;
 
         public void Update(MatchSim sim, System.Collections.Generic.IReadOnlyList<MatchEvent> events)
         {
@@ -61,10 +92,15 @@ namespace OpenFifa.Core
                         if (e.PlayerId >= 0) StartKick(sim, e.PlayerId, e.Action, e.Detail);
                         break;
                     case MatchEventType.Save:
-                        if (e.PlayerId >= 0) StartNow(sim, e.PlayerId, AnimActionKind.GoalkeeperDive, e.Position, e.Position - s.Players[e.PlayerId].Position);
+                        if (e.PlayerId >= 0)
+                            Resolve(sim, e.PlayerId, AnimActionKind.GoalkeeperDive, false, e.Tick, e.Position,
+                                e.Position - s.Players[e.PlayerId].Position);
                         break;
                     case MatchEventType.FirstTouch:
-                        if (e.PlayerId >= 0) StartNow(sim, e.PlayerId, AnimActionKind.FirstTouch, s.Ball.Position, s.Ball.Velocity);
+                        if (e.PlayerId >= 0) Resolve(sim, e.PlayerId, AnimActionKind.FirstTouch, false, e.Tick, s.Ball.Position, s.Ball.Velocity);
+                        break;
+                    case MatchEventType.DribbleTouch:
+                        if (e.PlayerId >= 0) Resolve(sim, e.PlayerId, AnimActionKind.FirstTouch, true, e.Tick, e.Position, s.Ball.Velocity);
                         break;
                     case MatchEventType.Foul:
                         if (e.OtherPlayerId >= 0) StartNow(sim, e.OtherPlayerId, AnimActionKind.Fall, s.Ball.Position, SimVec3.Zero);
@@ -74,6 +110,8 @@ namespace OpenFifa.Core
                         break;
                 }
             }
+
+            Predict(sim);
         }
 
         public static AnimActionKind KindOf(IntentAction a, float ballHeight)
@@ -124,6 +162,37 @@ namespace OpenFifa.Core
                 HasRootAtContact = true,
             };
             _actions[id] = action;
+            _predicted[id] = false;
+        }
+
+        /// <summary>The sim resolved a contact: snap the matching prediction to it (same id), or start it now.</summary>
+        private void Resolve(MatchSim sim, int id, AnimActionKind kind, bool dribble, int tick, SimVec3 ball, SimVec3 dir)
+        {
+            ref SimAnimAction a = ref _actions[id];
+            if (_predicted[id] && a.Kind == kind && a.IsDribbleTouch == dribble)
+            {
+                ref readonly var p = ref sim.State.Players[id];
+                SimVec3 flat = dir.Flat;
+                a.ContactTick = tick;
+                a.ContactTime = tick * sim.Dt;
+                a.BallAtContact = ball;
+                if (flat.SqrMagnitude > 1e-6f) a.Direction = flat.Normalized;
+                a.RootAtContact = p.Position.Flat;
+                a.YawAtContact = p.Facing;
+                if (kind == AnimActionKind.GoalkeeperDive) a.Side = DiveSide(p, ball);
+                _predicted[id] = false;
+                return;
+            }
+
+            StartNow(sim, id, kind, ball, dir);
+            _actions[id].IsDribbleTouch = dribble;
+        }
+
+        private static ActionSide DiveSide(in SimPlayer p, SimVec3 ball)
+        {
+            // Dive side: which side of the keeper's facing the ball is on.
+            SimVec3 right = SimMath.FromYaw(p.Facing + SimMath.Pi * 0.5f);
+            return SimVec3.Dot((ball - p.Position).Flat, right) >= 0f ? ActionSide.Right : ActionSide.Left;
         }
 
         private void StartNow(MatchSim sim, int id, AnimActionKind kind, SimVec3 ball, SimVec3 dir)
@@ -131,13 +200,7 @@ namespace OpenFifa.Core
             var s = sim.State;
             ref readonly var p = ref s.Players[id];
             SimVec3 flat = dir.Flat;
-            ActionSide side = ActionSide.Right;
-            if (kind == AnimActionKind.GoalkeeperDive)
-            {
-                // Dive side: which side of the keeper's facing the ball is on.
-                SimVec3 right = SimMath.FromYaw(p.Facing + SimMath.Pi * 0.5f);
-                side = SimVec3.Dot((ball - p.Position).Flat, right) >= 0f ? ActionSide.Right : ActionSide.Left;
-            }
+            ActionSide side = kind == AnimActionKind.GoalkeeperDive ? DiveSide(p, ball) : ActionSide.Right;
             _actions[id] = new SimAnimAction
             {
                 Id = _nextId++,
@@ -151,6 +214,208 @@ namespace OpenFifa.Core
                 YawAtContact = p.Facing,
                 HasRootAtContact = true,
             };
+            _predicted[id] = false;
+        }
+
+        // ---------------------------------------------------------------- prediction
+
+        /// <summary>
+        /// A confirmed action that a new prediction must not replace yet: anything still pending or within its hold,
+        /// except touches, which yield after <see cref="TouchHold"/>.
+        /// </summary>
+        private bool Busy(int id)
+        {
+            ref readonly var a = ref _actions[id];
+            if (a.IsNone || _predicted[id]) return false;
+            float hold = a.Kind == AnimActionKind.FirstTouch ? TouchHold : HoldOf(a);
+            return SimTime <= a.ContactTime + hold;
+        }
+
+        private void SetPredicted(MatchSim sim, int id, AnimActionKind kind, bool dribble, int tick, SimVec3 ball, SimVec3 dir)
+        {
+            _refreshed[id] = true;
+            ref SimAnimAction a = ref _actions[id];
+            ref readonly var p = ref sim.State.Players[id];
+            float lead = (tick - sim.State.Tick) * sim.Dt;
+            SimVec3 flat = dir.Flat;
+            bool same = _predicted[id] && a.Kind == kind && a.IsDribbleTouch == dribble;
+            if (!same)
+            {
+                a = new SimAnimAction { Id = _nextId++, Kind = kind, IsDribbleTouch = dribble, HasRootAtContact = true };
+                _predicted[id] = true;
+            }
+
+            a.ContactTick = tick;
+            a.ContactTime = tick * sim.Dt;
+            a.BallAtContact = ball;
+            a.Direction = flat.SqrMagnitude > 1e-6f ? flat.Normalized : SimVec3.Zero;
+            a.RootAtContact = (p.Position + p.Velocity.Flat * lead).Flat;
+            a.YawAtContact = p.Facing;
+            if (kind == AnimActionKind.GoalkeeperDive) a.Side = DiveSide(p, ball);
+            else
+            {
+                var attr = sim.AttributesOf(id);
+                a.Side = attr.PreferredFoot == SimFoot.Left ? ActionSide.Left : ActionSide.Right;
+            }
+        }
+
+        private void Predict(MatchSim sim)
+        {
+            var s = sim.State;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++) _refreshed[i] = false;
+
+            if (s.Phase == SimMatchPhase.InPlay)
+            {
+                if (s.Owner >= 0 && !s.KeeperHolding) PredictDribbleTouch(sim, s.Owner);
+                else if (s.Owner < 0 && s.Ball.InNet == 0) PredictLooseBall(sim);
+            }
+
+            // Withdraw predictions that were not refreshed: before their contact they did not happen (someone else got
+            // the ball, play stopped); at or after it they are kept as played (a beaten keeper still dived).
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+            {
+                if (!_predicted[i] || _refreshed[i]) continue;
+                _predicted[i] = false;
+                if (_actions[i].ContactTick > s.Tick + 1) _actions[i] = default;
+            }
+        }
+
+        private void PredictDribbleTouch(MatchSim sim, int id)
+        {
+            var s = sim.State;
+            ref readonly var p = ref s.Players[id];
+            if (p.SentOff || (!p.IsFree && p.ActionState != SimPlayerActionState.Recovery) || Busy(id)) return;
+            int tick = p.NextTouchTick > s.Tick ? p.NextTouchTick : s.Tick + 1;
+            float lead = (tick - s.Tick) * sim.Dt;
+            SimBall b = sim.PredictBall(lead);
+            SimVec3 dir = p.Speed > 0.5f ? p.Velocity.Flat : p.FacingDir;
+            SetPredicted(sim, id, AnimActionKind.FirstTouch, true, tick, b.Position, dir);
+        }
+
+        private void PredictLooseBall(MatchSim sim)
+        {
+            var s = sim.State;
+            var cfg = sim.Config;
+            var ac = cfg.Actions;
+            float dt = sim.Dt;
+            float bdt = cfg.BallDt;
+            int n = cfg.SecondsToTicks(PredictSeconds);
+            if (_path.Length < n + 1)
+            {
+                _path = new SimVec3[n + 1];
+                _pathVel = new SimVec3[n + 1];
+            }
+
+            // Keepers with a save attempt to come for this kick (the sim's own rule).
+            int homeGk = MatchSim.KeeperId(SimTeam.Home), awayGk = MatchSim.KeeperId(SimTeam.Away);
+            bool homeSave = SaveCandidate(sim, homeGk), awaySave = SaveCandidate(sim, awayGk);
+            int saveTick = int.MaxValue;
+            int saver = -1;
+            SimVec3 saveBall = SimVec3.Zero;
+
+            SimBall b = s.Ball;
+            int steps = 0;
+            _path[0] = b.Position;
+            _pathVel[0] = b.Velocity;
+            for (int k = 1; k <= n; k++)
+            {
+                for (int sub = 0; sub < cfg.BallSubsteps; sub++)
+                {
+                    BallIntegrator.Step(ref b, cfg.Ball, cfg.Pitch, bdt);
+                    if (saver < 0 && (homeSave || awaySave))
+                    {
+                        if (homeSave && SaveContact(sim, homeGk, b, out SimVec3 ca, ref homeSave)) { saver = homeGk; saveTick = s.Tick + k; saveBall = ca; }
+                        else if (awaySave && SaveContact(sim, awayGk, b, out ca, ref awaySave)) { saver = awayGk; saveTick = s.Tick + k; saveBall = ca; }
+                    }
+                }
+
+                _path[k] = b.Position;
+                _pathVel[k] = b.Velocity;
+                steps = k;
+                if (b.InNet != 0 || saver >= 0) break;
+            }
+
+            if (saver >= 0)
+            {
+                if (!Busy(saver))
+                    SetPredicted(sim, saver, AnimActionKind.GoalkeeperDive, false, saveTick, saveBall,
+                        saveBall - s.Players[saver].Position);
+                // The save resolves before any pickup at or after that tick.
+                steps = saveTick - s.Tick - 1;
+            }
+
+            // First touch: the earliest player whose control radius the ball enters (UpdatePossession's rule).
+            int best = -1, bestK = int.MaxValue;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+            {
+                ref readonly var p = ref s.Players[i];
+                if (p.SentOff || i == saver) continue;
+                if (p.ActionState == SimPlayerActionState.Grounded || p.ActionState == SimPlayerActionState.Sliding) continue;
+                if (Busy(i) || (p.ActionState == SimPlayerActionState.WindUp)) continue;
+                bool keeperHands = sim.AttributesOf(i).IsGoalkeeper && sim.IsInOwnPenaltyArea(p.Team, p.Position);
+                if (keeperHands && sim.IsSavePending(i)) continue;
+                float radius = keeperHands ? ac.ControlRadius * 1.5f : ac.ControlRadius;
+                float maxH = keeperHands ? ac.GkMaxReachHeight : ac.ControlMaxHeight;
+                float r2 = radius * radius;
+                SimVec3 v = p.Velocity.Flat;
+                int last = bestK - 1 < steps ? bestK - 1 : steps;
+                for (int k = 1; k <= last; k++)
+                {
+                    if (s.Tick + k < p.ControlBlockedUntilTick) continue;
+                    SimVec3 ball = _path[k];
+                    if (ball.Y > maxH) continue;
+                    SimVec3 at = p.Position + v * (k * dt);
+                    float dx = ball.X - at.X, dz = ball.Z - at.Z;
+                    if (dx * dx + dz * dz <= r2)
+                    {
+                        best = i;
+                        bestK = k;
+                        break;
+                    }
+                }
+            }
+
+            if (best >= 0)
+                SetPredicted(sim, best, AnimActionKind.FirstTouch, false, s.Tick + bestK, _path[bestK], _pathVel[bestK]);
+        }
+
+        private static bool SaveCandidate(MatchSim sim, int gk)
+        {
+            ref readonly var k = ref sim.State.Players[gk];
+            if (k.SentOff || k.ActionState == SimPlayerActionState.Grounded) return false;
+            if (!sim.AttributesOf(gk).IsGoalkeeper || !sim.IsInOwnPenaltyArea(k.Team, k.Position)) return false;
+            return sim.IsSavePending(gk);
+        }
+
+        /// <summary>
+        /// The sim's closest-approach test for one ball substep (see MatchSim.TrySaves): true when the keeper's save is
+        /// resolved on this substep and the ball is near enough his reach to be worth a dive. Clears
+        /// <paramref name="pending"/> once the ball is past him or no longer heading at goal.
+        /// </summary>
+        private static bool SaveContact(MatchSim sim, int gk, SimBall b, out SimVec3 ca, ref bool pending)
+        {
+            ca = SimVec3.Zero;
+            ref readonly var k = ref sim.State.Players[gk];
+            if (!sim.IsBallHeadingAtGoal(k.Team, b)) return false;
+            var cfg = sim.Config;
+            float bdt = cfg.BallDt;
+            SimVec3 flatV = b.Velocity.Flat;
+            float flatSpeed = flatV.Magnitude;
+            if (flatSpeed < 1e-4f) return false;
+            SimVec3 dir = flatV / flatSpeed;
+            SimVec3 rel = (k.Position - b.Position).Flat;
+            float along = SimVec3.Dot(rel, dir);
+            if (along > flatSpeed * bdt) return false;
+            pending = false; // the keeper's one chance is on this substep
+            if (along < -0.5f) return false;
+            float tCa = SimMath.Max(0f, along) / flatSpeed;
+            ca = b.Position + b.Velocity * tCa + new SimVec3(0f, -0.5f * cfg.Ball.Gravity * tCa * tCa, 0f);
+            var ka = sim.AttributesOf(gk);
+            var ac = cfg.Actions;
+            float reach = ac.GkStandingReach + ac.GkDiveReachRange * SimPlayerAttributes.N(ka.GkDiving);
+            float lateral = SimMath.Abs(dir.X * rel.Z - dir.Z * rel.X) + SimMath.Max(0f, ca.Y - 2.0f);
+            // Dive for anything in reach (saved or beaten) and for near misses; let wide balls go.
+            return ca.Y <= ac.GkMaxReachHeight + 0.5f && lateral <= reach + 1.0f;
         }
     }
 }

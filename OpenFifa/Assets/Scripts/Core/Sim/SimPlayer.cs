@@ -24,6 +24,7 @@ namespace OpenFifa.Core
         public float PendingPower;
         public SimVec3 PendingAim;
         public int PendingTarget;
+        public KickStyle PendingStyle;
 
         /// <summary>Tick on which the pending action resolves (the contact frame).</summary>
         public int ContactTick;

@@ -33,7 +33,27 @@ namespace OpenFifa.Core
 
         public CommentaryCategory Find(string id) => _byId.TryGetValue(id, out var c) ? c : null;
 
-        /// <summary>Categories for an event and voice, in bank order.</summary>
+        private List<CommentaryCategory>[] _forCache;
+
+        /// <summary>
+        /// <see cref="For"/> without the allocation: a cached list per (event, voice), built on first use. The engine
+        /// calls this on every event. Do not modify the returned list.
+        /// </summary>
+        internal List<CommentaryCategory> ForCached(CommentaryEventType evt, CommentaryVoice voice)
+        {
+            int key = (int)evt * 2 + (voice == CommentaryVoice.Analyst ? 1 : 0);
+            if (key < 0) return For(evt, voice);
+            if (_forCache == null || key >= _forCache.Length)
+            {
+                var grown = new List<CommentaryCategory>[System.Math.Max(key + 1, 64)];
+                if (_forCache != null) Array.Copy(_forCache, grown, _forCache.Length);
+                _forCache = grown;
+            }
+
+            return _forCache[key] ?? (_forCache[key] = For(evt, voice));
+        }
+
+        /// <summary>Categories for an event and voice, in bank order (a new list each call).</summary>
         public List<CommentaryCategory> For(CommentaryEventType evt, CommentaryVoice voice)
         {
             var list = new List<CommentaryCategory>();

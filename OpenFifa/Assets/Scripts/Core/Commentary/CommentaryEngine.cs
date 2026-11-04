@@ -23,19 +23,52 @@ namespace OpenFifa.Core
     ///
     /// Usage: call <see cref="Push"/> for each event and <see cref="Tick"/> every frame; play Start cues and fade
     /// out Stop cues. Times are seconds on one monotonic clock.
+    ///
+    /// Allocation: <see cref="Tick"/> and <see cref="Push"/> return lists owned by the engine and reused (copy the cues
+    /// if you need them past the next call of the same method). In steady state (nothing new to say, or an event that is
+    /// gated or queued) neither call allocates; starting a line allocates its utterance and clips.
     /// </summary>
     public sealed class CommentaryEngine
     {
         /// <summary>Contexts the engine derives, in precedence order. Bank "context" values must be one of these.</summary>
         public static readonly string[] Contexts = { "late_winner", "comeback", "equaliser", "after_goal", "second_half" };
 
-        private sealed class Pending
+        private struct Pending
         {
             public CommentaryCategory Category;
             public CommentaryEvent Event;
             public double QueuedAt;
             public float Crowd;
+
+            public bool IsSet => Category != null;
         }
+
+        private static readonly string[] SituationNames = BuildSituationNames();
+
+        private static string[] BuildSituationNames()
+        {
+            var values = (GoalSituation[])Enum.GetValues(typeof(GoalSituation));
+            int max = 0;
+            foreach (var v in values) if ((int)v > max) max = (int)v;
+            var names = new string[max + 1];
+            foreach (var v in values) names[(int)v] = CommentaryLineBank.SnakeCase(v.ToString());
+            return names;
+        }
+
+        private static string SituationName(GoalSituation g)
+        {
+            int i = (int)g;
+            return i >= 0 && i < SituationNames.Length && SituationNames[i] != null
+                ? SituationNames[i]
+                : CommentaryLineBank.SnakeCase(g.ToString());
+        }
+
+        // Reused scratch and output lists (see the allocation note above).
+        private readonly List<CommentaryCue> _tickCues = new List<CommentaryCue>(4);
+        private readonly List<CommentaryCue> _pushCues = new List<CommentaryCue>(4);
+        private readonly List<string> _contexts = new List<string>(Contexts.Length);
+        private readonly List<CommentaryLine> _fits = new List<CommentaryLine>(16);
+        private readonly List<CommentaryLine> _fresh = new List<CommentaryLine>(16);
 
         private readonly CommentaryLineBank _bank;
         private readonly CommentaryConfig _config;
@@ -105,12 +138,16 @@ namespace OpenFifa.Core
             }
         }
 
-        /// <summary>Feeds one event (at e.Time). Returns cues to act on immediately.</summary>
+        /// <summary>
+        /// Feeds one event (at e.Time). Returns cues to act on immediately, in a list owned by the engine that is reused
+        /// by the next <see cref="Push"/> (a <see cref="Tick"/> does not touch it).
+        /// </summary>
         public List<CommentaryCue> Push(CommentaryEvent e)
         {
             if (e == null) throw new ArgumentNullException(nameof(e));
             double now = e.Time;
-            var cues = new List<CommentaryCue>();
+            var cues = _pushCues;
+            cues.Clear();
             Settle(now);
             if (e.CrowdIntensity >= 0f) CrowdIntensity = Clamp01(e.CrowdIntensity);
 
@@ -120,7 +157,7 @@ namespace OpenFifa.Core
             if (IsLivePlayEvent(e.Type))
             {
                 IsStoppage = false;
-                _pendingAnalyst = null;
+                _pendingAnalyst = default;
                 if (_analyst != null) StopAnalyst(now, cues);
             }
             else if (IsStoppageEvent(e.Type)) IsStoppage = true;
@@ -132,7 +169,7 @@ namespace OpenFifa.Core
                 var p = new Pending { Category = cat, Event = e, QueuedAt = now, Crowd = CrowdIntensity };
                 if (_pbp == null)
                 {
-                    _pendingPbp = null;
+                    _pendingPbp = default;
                     StartPbp(p, now, cues);
                 }
                 else if (_pbp.Interruptible && cat.Priority > _pbp.Priority)
@@ -142,7 +179,7 @@ namespace OpenFifa.Core
                     _pbp = null;
                     StartPbp(p, now, cues);
                 }
-                else if (_pendingPbp == null || cat.Priority >= _pendingPbp.Category.Priority)
+                else if (!_pendingPbp.IsSet || cat.Priority >= _pendingPbp.Category.Priority)
                 {
                     _pendingPbp = p;
                 }
@@ -154,44 +191,54 @@ namespace OpenFifa.Core
                 var acat = ChooseCategory(e, CommentaryVoice.Analyst, contexts, now, CrowdIntensity);
                 if (acat != null && now - _lastAnalystEnd >= _config.AnalystMinGap &&
                     _rng.NextDouble() < _config.AnalystChance &&
-                    (_pendingAnalyst == null || acat.Priority >= _pendingAnalyst.Category.Priority))
+                    (!_pendingAnalyst.IsSet || acat.Priority >= _pendingAnalyst.Category.Priority))
                 {
                     _pendingAnalyst = new Pending { Category = acat, Event = e, QueuedAt = now, Crowd = CrowdIntensity };
                 }
             }
 
             UpdateMatchState(e);
-            cues.AddRange(Tick(now));
+            Advance(now, cues);
             return cues;
         }
 
-        /// <summary>Advances the scheduler; call every frame. Returns cues to act on.</summary>
+        /// <summary>
+        /// Advances the scheduler; call every frame. Returns cues to act on, in a list owned by the engine that is
+        /// reused by the next <see cref="Tick"/> (a <see cref="Push"/> does not touch it). Allocation-free when nothing starts.
+        /// </summary>
         public List<CommentaryCue> Tick(double now)
         {
-            var cues = new List<CommentaryCue>();
+            var cues = _tickCues;
+            cues.Clear();
+            Advance(now, cues);
+            return cues;
+        }
+
+        private void Advance(double now, List<CommentaryCue> cues)
+        {
             Settle(now);
 
-            if (_pendingPbp != null)
+            if (_pendingPbp.IsSet)
             {
                 bool deadBall = _pendingPbp.Category.Resolution || IsStoppageEvent(_pendingPbp.Event.Type);
                 double maxDelay = deadBall ? _config.MaxResolutionQueueDelay : _config.MaxQueueDelay;
-                if (now - _pendingPbp.QueuedAt > maxDelay) _pendingPbp = null;
+                if (now - _pendingPbp.QueuedAt > maxDelay) _pendingPbp = default;
                 else if (_pbp == null)
                 {
                     var p = _pendingPbp;
-                    _pendingPbp = null;
+                    _pendingPbp = default;
                     StartPbp(p, now, cues);
                 }
             }
 
-            if (_pendingAnalyst != null)
+            if (_pendingAnalyst.IsSet)
             {
-                if (!IsStoppage || now - _pendingAnalyst.QueuedAt > _config.MaxAnalystDelay) _pendingAnalyst = null;
-                else if (_pbp == null && _pendingPbp == null && _analyst == null &&
+                if (!IsStoppage || now - _pendingAnalyst.QueuedAt > _config.MaxAnalystDelay) _pendingAnalyst = default;
+                else if (_pbp == null && !_pendingPbp.IsSet && _analyst == null &&
                          now >= _pbpIdleSince + _config.AnalystLeadIn)
                 {
                     var p = _pendingAnalyst;
-                    _pendingAnalyst = null;
+                    _pendingAnalyst = default;
                     var u = Build(p, now);
                     if (u != null)
                     {
@@ -200,7 +247,6 @@ namespace OpenFifa.Core
                     }
                 }
             }
-            return cues;
         }
 
         /// <summary>The audio layer reports that a voice finished (or was skipped) at <paramref name="now"/>.</summary>
@@ -277,12 +323,15 @@ namespace OpenFifa.Core
 
         private CommentaryLine PickLine(CommentaryCategory cat, CommentaryEvent e, float crowd, double now)
         {
-            var fits = new List<CommentaryLine>();
-            foreach (var l in cat.Lines)
-                if (l.Fits(e, crowd)) fits.Add(l);
+            var fits = _fits;
+            fits.Clear();
+            var lines = cat.Lines;
+            for (int i = 0; i < lines.Count; i++)
+                if (lines[i].Fits(e, crowd)) fits.Add(lines[i]);
             if (fits.Count == 0) return null;
 
-            var fresh = new List<CommentaryLine>();
+            var fresh = _fresh;
+            fresh.Clear();
             foreach (var l in fits)
                 if (!_lineLastUsed.TryGetValue(l.Id, out double t) || now - t >= _config.LineRepeatWindow) fresh.Add(l);
             if (fresh.Count > 0) return fresh[_rng.Next(fresh.Count)];
@@ -301,9 +350,9 @@ namespace OpenFifa.Core
         private CommentaryCategory ChooseCategory(CommentaryEvent e, CommentaryVoice voice, List<string> contexts,
             double now, float crowd)
         {
-            var all = _bank.For(e.Type, voice);
+            var all = _bank.ForCached(e.Type, voice);
             if (all.Count == 0) return null;
-            string situation = e.Type == CommentaryEventType.Goal ? CommentaryLineBank.SnakeCase(e.Situation.ToString()) : null;
+            string situation = e.Type == CommentaryEventType.Goal ? SituationName(e.Situation) : null;
 
             foreach (var ctx in contexts)
                 foreach (var c in all)
@@ -320,14 +369,15 @@ namespace OpenFifa.Core
         {
             if (!c.Resolution && crowd > c.MaxCrowd) return false;
             if (c.Cooldown > 0 && _categoryLastUsed.TryGetValue(c.Id, out double t) && now - t < c.Cooldown) return false;
-            foreach (var l in c.Lines)
-                if (l.Fits(e, crowd)) return true;
+            var lines = c.Lines;
+            for (int i = 0; i < lines.Count; i++)
+                if (lines[i].Fits(e, crowd)) return true;
             return false;
         }
 
         private List<string> DeriveContexts(CommentaryEvent e)
         {
-            var set = new List<string>();
+            bool lateWinner = false, comeback = false, equaliser = false, afterGoal = false, secondHalf = false;
             switch (e.Type)
             {
                 case CommentaryEventType.Goal:
@@ -336,30 +386,34 @@ namespace OpenFifa.Core
                     int ownAfter = t == 0 ? e.HomeScore : e.AwayScore;
                     int opp = t == 0 ? e.AwayScore : e.HomeScore;
                     int ownBefore = ownAfter - 1;
-                    if (e.Minute >= _config.LateWinnerMinute && ownBefore == opp) set.Add("late_winner");
+                    if (e.Minute >= _config.LateWinnerMinute && ownBefore == opp) lateWinner = true;
                     if ((_maxDeficit[t] >= 2 && ownAfter >= opp) || (_maxDeficit[t] >= 1 && ownBefore == opp))
-                        set.Add("comeback");
-                    if (ownAfter == opp) set.Add("equaliser");
+                        comeback = true;
+                    if (ownAfter == opp) equaliser = true;
                     break;
                 }
                 case CommentaryEventType.KickOff:
-                    if (_lastType == CommentaryEventType.Goal) set.Add("after_goal");
-                    else if (_halfTimeSeen && !_secondHalfStarted) set.Add("second_half");
+                    if (_lastType == CommentaryEventType.Goal) afterGoal = true;
+                    else if (_halfTimeSeen && !_secondHalfStarted) secondHalf = true;
                     break;
                 case CommentaryEventType.FullTime:
                 {
                     if (e.HomeScore != e.AwayScore)
                     {
                         int winner = e.HomeScore > e.AwayScore ? 0 : 1;
-                        if (_maxDeficit[winner] >= 1) set.Add("comeback");
+                        if (_maxDeficit[winner] >= 1) comeback = true;
                     }
                     break;
                 }
             }
-            // Keep the documented precedence order.
-            var ordered = new List<string>();
-            foreach (var c in Contexts)
-                if (set.Contains(c)) ordered.Add(c);
+            // Keep the documented precedence order (Contexts).
+            var ordered = _contexts;
+            ordered.Clear();
+            if (lateWinner) ordered.Add(Contexts[0]);
+            if (comeback) ordered.Add(Contexts[1]);
+            if (equaliser) ordered.Add(Contexts[2]);
+            if (afterGoal) ordered.Add(Contexts[3]);
+            if (secondHalf) ordered.Add(Contexts[4]);
             return ordered;
         }
 

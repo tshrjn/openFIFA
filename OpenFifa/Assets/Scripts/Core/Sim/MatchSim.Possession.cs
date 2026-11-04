@@ -160,6 +160,18 @@ namespace OpenFifa.Core
             }
         }
 
+        // ---- Read-only queries for presentation-side prediction (animation timing). They mirror the save and pickup
+        // rules above exactly, so a predicted contact lands on the tick the sim resolves it. ----
+
+        /// <summary>The keeper still has a save attempt to come for the current kick (resolved at closest approach).</summary>
+        public bool IsSavePending(int keeperId) => keeperId >= 0 && keeperId < MatchSimState.PlayerCount && SavePending(keeperId);
+
+        /// <summary>Whether <paramref name="b"/> is moving toward <paramref name="team"/>'s goal at 3 m/s or more, roughly on target.</summary>
+        public bool IsBallHeadingAtGoal(SimTeam team, SimBall b) => HeadingAtGoal(team, b);
+
+        /// <summary>Whether <paramref name="pos"/> is inside <paramref name="team"/>'s own penalty area (keeper hands allowed).</summary>
+        public bool IsInOwnPenaltyArea(SimTeam team, SimVec3 pos) => InOwnPenaltyArea(team, pos);
+
         /// <summary>The ball is moving toward <paramref name="team"/>'s goal at 3 m/s or more, roughly on target.</summary>
         private bool HeadingAtGoal(SimTeam team, SimBall b)
         {

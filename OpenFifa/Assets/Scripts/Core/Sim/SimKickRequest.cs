@@ -4,6 +4,9 @@ namespace OpenFifa.Core
     public struct SimKickRequest
     {
         public IntentAction Action;
+
+        /// <summary>Kick variant (chip, low shot, driven pass, lobbed through). Default = the plain action.</summary>
+        public KickStyle Style;
         public float Power;
 
         /// <summary>Flat world aim direction (normalised by the solver; zero = facing).</summary>

@@ -110,7 +110,7 @@ namespace OpenFifa.Core
                     default: windup = ac.PassWindup + ac.PassWindupPerPower * power; break;
                 }
 
-                BeginWindUp(ref p, act, power, intent.Aim, intent.TargetPlayerId, windup);
+                BeginWindUp(ref p, act, power, intent.Aim, intent.TargetPlayerId, windup, intent.Style);
                 return;
             }
 
@@ -135,16 +135,19 @@ namespace OpenFifa.Core
             }
         }
 
-        private void BeginWindUp(ref SimPlayer p, IntentAction act, float power, SimVec3 aim, int target, float windup)
+        private void BeginWindUp(ref SimPlayer p, IntentAction act, float power, SimVec3 aim, int target, float windup,
+            KickStyle style = KickStyle.Default)
         {
             p.ActionState = SimPlayerActionState.WindUp;
             p.PendingAction = act;
+            p.PendingStyle = PlayerIntent.IsKickAction(act) ? style : KickStyle.Default;
             p.PendingPower = power;
             p.PendingAim = aim.Flat;
             p.PendingTarget = target;
             p.ContactTick = _s.Tick + SimMath.Clamp(_cfg.SecondsToTicks(windup), 1, 1000);
             if (aim.Flat.SqrMagnitude > 1e-4f) p.Facing = SimMath.Yaw(aim.Flat);
-            Emit(MatchEventType.KickWindup, p.Id, target, p.Team, p.Position, detail: p.ContactTick, action: act);
+            Emit(MatchEventType.KickWindup, p.Id, target, p.Team, p.Position, detail: p.ContactTick, action: act,
+                style: p.PendingStyle);
         }
 
         /// <summary>
@@ -173,11 +176,13 @@ namespace OpenFifa.Core
                 if (p.ActionState == SimPlayerActionState.WindUp)
                 {
                     IntentAction act = p.PendingAction;
+                    KickStyle style = p.PendingStyle;
                     p.PendingAction = IntentAction.None;
+                    p.PendingStyle = KickStyle.Default;
                     p.ActionState = SimPlayerActionState.Recovery;
                     p.StateEndTick = _s.Tick + _cfg.SecondsToTicks(_cfg.Actions.KickRecovery);
                     if (act == IntentAction.Tackle) ResolveTackle(i, false);
-                    else ResolveKick(i, act);
+                    else ResolveKick(i, act, style);
                 }
                 else
                 {
@@ -213,7 +218,7 @@ namespace OpenFifa.Core
             return SimMath.Clamp01((r - best) / (r - 0.5f));
         }
 
-        private void ResolveKick(int id, IntentAction act)
+        private void ResolveKick(int id, IntentAction act, KickStyle style = KickStyle.Default)
         {
             ref SimPlayer p = ref _s.Players[id];
             var ac = _cfg.Actions;
@@ -240,12 +245,14 @@ namespace OpenFifa.Core
             RestartType restart = taker ? _s.PendingRestart : RestartType.None;
             bool throwIn = restart == RestartType.ThrowIn;
             if (throwIn && PlayerIntent.IsShotAction(act)) act = IntentAction.Pass;
+            if (throwIn || header) style = KickStyle.Default;
 
             int sign = AttackSign(p.Team);
             SimVec3 aim = p.PendingAim.SqrMagnitude > 1e-4f ? p.PendingAim.Normalized : p.FacingDir;
             var req = new SimKickRequest
             {
                 Action = act,
+                Style = style,
                 Power = p.PendingPower,
                 Aim = aim,
                 KickerPosition = p.Position,
@@ -264,7 +271,7 @@ namespace OpenFifa.Core
                 receiver = ChoosePassTarget(id, aim, p.PendingTarget);
                 if (receiver >= 0)
                 {
-                    req.TargetPoint = PassLeadPoint(id, receiver, act, req.Power, throwIn);
+                    req.TargetPoint = PassLeadPoint(id, receiver, act, style, req.Power, throwIn);
                     req.HasTarget = true;
                 }
             }
@@ -297,6 +304,7 @@ namespace OpenFifa.Core
             _s.LastTouchTeam = p.Team;
             _s.KickSerial++;
             p.ControlBlockedUntilTick = _s.Tick + _cfg.SecondsToTicks(ac.KickerControlCooldown);
+            if (holding) ProtectKeeperRelease(p.Team, bp);
 
             if (taker)
             {
@@ -321,7 +329,7 @@ namespace OpenFifa.Core
                 _s.Shooter = id;
                 _s.PassLive = false;
                 if (p.Team == SimTeam.Home) _s.HomeShots++; else _s.AwayShots++;
-                Emit(MatchEventType.Shot, id, -1, p.Team, bp, speed, xg, header ? 1 : 0, act);
+                Emit(MatchEventType.Shot, id, -1, p.Team, bp, speed, xg, header ? 1 : 0, act, style);
             }
             else
             {
@@ -330,7 +338,7 @@ namespace OpenFifa.Core
                 _s.PassFrom = id;
                 _s.PassTarget = receiver;
                 _s.PassTeam = p.Team;
-                Emit(MatchEventType.Pass, id, receiver, p.Team, bp, speed, 0f, header ? 1 : 0, act);
+                Emit(MatchEventType.Pass, id, receiver, p.Team, bp, speed, 0f, header ? 1 : 0, act, style);
             }
         }
 
@@ -364,33 +372,33 @@ namespace OpenFifa.Core
         /// <summary>
         /// Where to play the pass so it meets the receiver: his position after the ball's real flight time, from
         /// <see cref="KickSolver.PassFlightTime"/> (the same launch speed the solver will use), plus the through-ball
-        /// lead into his path. The meeting time t solves flightTime(|lead(t) - ball|) = t, found with a bracketed
+        /// lead into his path (also for a lobbed through ball). The meeting time t solves flightTime(|lead(t) - ball|) = t, found with a bracketed
         /// secant (regula falsi, Illinois) so it also converges when the receiver runs away as fast as the ball
         /// slows down. A receiver the ball cannot catch is led by the longest search time.
         /// </summary>
-        private SimVec3 PassLeadPoint(int passer, int receiver, IntentAction act, float power, bool throwIn)
+        private SimVec3 PassLeadPoint(int passer, int receiver, IntentAction act, KickStyle style, float power, bool throwIn)
         {
             SimPlayer r = _s.Players[receiver];
             SimVec3 vel = r.Velocity.Flat;
             SimVec3 extra = SimVec3.Zero;
-            if (act == IntentAction.ThroughPass)
+            if (act == IntentAction.ThroughPass || (act == IntentAction.Lob && style == KickStyle.LobbedThrough))
             {
                 SimVec3 dir = r.Speed > 1f ? vel.Normalized : new SimVec3(0f, 0f, AttackSign(r.Team));
                 extra = dir * _cfg.Actions.ThroughLeadDistance;
             }
 
             const float maxT = 6f;
-            float lo = 0f, glo = LeadResidual(r.Position, vel, extra, 0f, act, power, throwIn, out SimVec3 lead);
+            float lo = 0f, glo = LeadResidual(r.Position, vel, extra, 0f, act, style, power, throwIn, out SimVec3 lead);
             if (glo <= 0f || vel.SqrMagnitude < 1e-4f) return lead; // static receiver: the first point is exact
 
             // Fixed-point guess, then bracket.
             float hi = SimMath.Min(maxT, glo);
-            float ghi = LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+            float ghi = LeadResidual(r.Position, vel, extra, hi, act, style, power, throwIn, out lead);
             while (ghi > 0f && hi < maxT)
             {
                 lo = hi; glo = ghi;
                 hi = SimMath.Min(maxT, hi + SimMath.Max(ghi, 0.5f));
-                ghi = LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+                ghi = LeadResidual(r.Position, vel, extra, hi, act, style, power, throwIn, out lead);
             }
 
             if (ghi > 0f) return lead; // cannot catch him inside the search window
@@ -399,7 +407,7 @@ namespace OpenFifa.Core
             for (int i = 0; i < 8 && hi - lo > 0.01f; i++)
             {
                 float t = (lo * ghi - hi * glo) / (ghi - glo);
-                float g = LeadResidual(r.Position, vel, extra, t, act, power, throwIn, out lead);
+                float g = LeadResidual(r.Position, vel, extra, t, act, style, power, throwIn, out lead);
                 if (SimMath.Abs(g) < 0.005f) return lead;
                 if (g > 0f)
                 {
@@ -415,20 +423,20 @@ namespace OpenFifa.Core
                 }
             }
 
-            LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+            LeadResidual(r.Position, vel, extra, hi, act, style, power, throwIn, out lead);
             return lead;
         }
 
         /// <summary>Flight time to the receiver's lead point at time t, minus t (positive: the ball is late).</summary>
-        private float LeadResidual(SimVec3 pos, SimVec3 vel, SimVec3 extra, float t, IntentAction act, float power,
-            bool throwIn, out SimVec3 lead)
+        private float LeadResidual(SimVec3 pos, SimVec3 vel, SimVec3 extra, float t, IntentAction act, KickStyle style,
+            float power, bool throwIn, out SimVec3 lead)
         {
             SimVec3 p = pos + vel * t + extra;
             float mx = _cfg.Pitch.HalfWidth - 1f;
             float mz = _cfg.Pitch.HalfLength - 1f;
             lead = new SimVec3(SimMath.Clamp(p.X, -mx, mx), 0f, SimMath.Clamp(p.Z, -mz, mz));
             float d = SimMath.FlatDistance(lead, _s.Ball.Position);
-            return KickSolver.PassFlightTime(act, power, d, throwIn, _cfg.Actions, _cfg.Ball) - t;
+            return KickSolver.PassFlightTime(act, style, power, d, throwIn, _cfg.Actions, _cfg.Ball) - t;
         }
 
         private void StepSlide(ref SimPlayer p, float dt)
@@ -491,6 +499,24 @@ namespace OpenFifa.Core
         {
             SimVec3 rel = (_s.Players[tackler].Position - _s.Players[carrier].Position).Flat.Normalized;
             return SimVec3.Dot(_s.Players[carrier].FacingDir, rel) < -0.35f;
+        }
+
+        /// <summary>
+        /// Law 12: opponents standing on the keeper cannot take a ball he releases from his hands (without this, a
+        /// player at his elbow picks up every throw, punt and drop-kick at the release point).
+        /// </summary>
+        private void ProtectKeeperRelease(SimTeam keeperTeam, SimVec3 releasePoint)
+        {
+            var ac = _cfg.Actions;
+            int until = _s.Tick + _cfg.SecondsToTicks(ac.GkReleaseProtectSeconds);
+            SimTeam opp = Opponent(keeperTeam);
+            int first = FirstId(opp);
+            for (int j = first; j < first + MatchSetup.PlayersPerTeam; j++)
+            {
+                ref SimPlayer o = ref _s.Players[j];
+                if (o.SentOff || SimMath.FlatDistance(o.Position, releasePoint) > ac.GkReleaseProtectRadius) continue;
+                if (o.ControlBlockedUntilTick < until) o.ControlBlockedUntilTick = until;
+            }
         }
 
         /// <summary>Standing or sliding tackle resolution against the current carrier.</summary>

@@ -154,7 +154,7 @@ namespace OpenFifa.Core
             {
                 ref SimPlayer p = ref _s.Players[i];
                 h.Add(p.Position); h.Add(p.Velocity); h.Add(p.Facing); h.Add(p.Stamina); h.Add((int)p.ActionState);
-                h.Add((int)p.PendingAction); h.Add(p.PendingPower); h.Add(p.PendingAim); h.Add(p.PendingTarget);
+                h.Add((int)p.PendingAction); h.Add(p.PendingPower); h.Add(p.PendingAim); h.Add(p.PendingTarget); h.Add((int)p.PendingStyle);
                 h.Add(p.ContactTick); h.Add(p.StateEndTick); h.Add(p.ControlBlockedUntilTick); h.Add(p.NextTouchTick);
                 h.Add(p.LastTouchTick); h.Add(p.LastTouchYaw); h.Add(p.Jockeying ? 1 : 0); h.Add(p.Shielding ? 1 : 0); h.Add(p.Sprinting ? 1 : 0);
                 h.Add(p.YellowCards); h.Add(p.SentOff ? 1 : 0);
@@ -165,7 +165,8 @@ namespace OpenFifa.Core
         }
 
         private void Emit(MatchEventType type, int player, int other, SimTeam team, SimVec3 pos,
-            float speed = 0f, float value = 0f, int detail = 0, IntentAction action = IntentAction.None)
+            float speed = 0f, float value = 0f, int detail = 0, IntentAction action = IntentAction.None,
+            KickStyle style = KickStyle.Default)
         {
             _events.Add(new MatchEvent
             {
@@ -181,6 +182,7 @@ namespace OpenFifa.Core
                 Value = value,
                 Detail = detail,
                 Action = action,
+                Style = style,
             });
         }
 

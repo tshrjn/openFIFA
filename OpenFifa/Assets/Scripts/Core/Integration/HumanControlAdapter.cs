@@ -88,8 +88,25 @@ namespace OpenFifa.Core
             }
         }
 
+        /// <summary>Kick variant for a control action (the sim action itself comes from <see cref="MapAction"/>).</summary>
+        public static KickStyle MapStyle(ControlAction a)
+        {
+            switch (a)
+            {
+                case ControlAction.DrivenPass:
+                case ControlAction.DrivenThrough:
+                case ControlAction.DrivenLob: return KickStyle.Driven;
+                case ControlAction.LobbedThrough: return KickStyle.LobbedThrough;
+                case ControlAction.ChipShot: return KickStyle.Chip;
+                case ControlAction.LowShot: return KickStyle.Low;
+                default: return KickStyle.Default;
+            }
+        }
+
         /// <summary>
-        /// Translates the control layer's output for the controlled player into a sim intent.
+        /// Translates the control layer's output for the controlled player into a sim intent. Variants keep their base
+        /// action (<see cref="MapAction"/>) and carry the difference in <see cref="PlayerIntent.Style"/>
+        /// (<see cref="MapStyle"/>): chip and low shots, driven passes, through balls and lobs, lobbed through balls.
         /// Passes use <see cref="AimAssist.PassDirection"/> over <paramref name="teammates"/>; shots aim at a point on
         /// the opponents' goal line from <see cref="AimAssist.ShotTarget"/>.
         /// </summary>
@@ -107,6 +124,7 @@ namespace OpenFifa.Core
             IntentAction act = MapAction(ci.Action);
             if (act == IntentAction.None) return intent;
             intent.Action = act;
+            if (PlayerIntent.IsKickAction(act)) intent.Style = MapStyle(ci.Action);
             intent.Power = SimMath.Clamp01(ci.Power);
 
             SimVec3 stick = StickToPitch(ci.Aim, cameraYaw).Flat;

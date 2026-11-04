@@ -25,6 +25,12 @@ namespace OpenFifa.Core
         /// </summary>
         public int TargetPlayerId;
 
+        /// <summary>
+        /// Kick variant (chip, low shot, driven pass, lobbed through...). <see cref="KickStyle.Default"/> (the zero value)
+        /// keeps the plain action, so intents built without it behave as before.
+        /// </summary>
+        public KickStyle Style;
+
         public static PlayerIntent Idle => new PlayerIntent { TargetPlayerId = -1 };
 
         public static PlayerIntent MoveOnly(SimVec3 move, bool sprint = false) =>
@@ -32,6 +38,9 @@ namespace OpenFifa.Core
 
         public static PlayerIntent Kick(IntentAction action, float power, SimVec3 aim, int target = -1) =>
             new PlayerIntent { Action = action, Power = power, Aim = aim, TargetPlayerId = target };
+
+        public static PlayerIntent Kick(IntentAction action, float power, SimVec3 aim, int target, KickStyle style) =>
+            new PlayerIntent { Action = action, Power = power, Aim = aim, TargetPlayerId = target, Style = style };
 
         public bool IsKick => IsKickAction(Action);
 

@@ -72,6 +72,22 @@ namespace OpenFifa.Core
         public float DrivenTopSpin = 35f;
         public float HeaderSpeedFactor = 0.55f;
 
+        // ---- Kick variants (KickStyle). ----
+        /// <summary>Driven ground pass: extra arrival speed (m/s) over the plain pass, and its own speed cap.</summary>
+        public float DrivenPassArrivalBonus = 6f;
+        public float DrivenPassMaxSpeed = 30f;
+        /// <summary>Driven lob: a flatter lofted ball.</summary>
+        public float DrivenLobElevationDeg = 20f;
+        /// <summary>Lobbed through ball: lofted into the receiver's run (led by ThroughLeadDistance).</summary>
+        public float LobbedThroughElevationDeg = 32f;
+        /// <summary>Chip shot: high arc with backspin, solved to drop on the target point on the goal line.</summary>
+        public float ChipElevationDeg = 38f;
+        public float ChipBackSpin = 12f;
+        public float ChipMaxSpeed = 24f;
+        /// <summary>Low shot: launch angle (no power-dependent rise) and pace relative to a normal shot.</summary>
+        public float LowShotElevationDeg = 0.5f;
+        public float LowShotSpeedFactor = 0.92f;
+
         /// <summary>Kick reach: ball centre within this flat distance and height at the contact frame.</summary>
         public float KickReach = 1.1f;
         public float KickMaxHeight = 0.9f;
@@ -139,6 +155,13 @@ namespace OpenFifa.Core
         public float GkDiveReachRange = 1.6f;
         public float GkMaxReachHeight = 2.5f;
         public float GkParrySpeedFactor = 0.35f;
+        /// <summary>
+        /// Law 12: an opponent may not prevent the keeper releasing the ball from his hands. Opponents within this
+        /// radius (m) of the ball when it leaves the keeper's hands cannot take it for <see cref="GkReleaseProtectSeconds"/>
+        /// (it still bounces off their bodies).
+        /// </summary>
+        public float GkReleaseProtectRadius = 2f;
+        public float GkReleaseProtectSeconds = 0.25f;
 
         // ---- Bodies (ball-vs-player deflection and player-player separation). ----
         /// <summary>Radius (m) of a player's body capsule; two players are kept 2x this apart.</summary>

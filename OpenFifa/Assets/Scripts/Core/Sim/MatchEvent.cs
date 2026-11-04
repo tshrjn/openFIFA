@@ -31,6 +31,9 @@ namespace OpenFifa.Core
 
         public IntentAction Action;
 
+        /// <summary>Kick variant for KickWindup, Pass and Shot events (Default otherwise).</summary>
+        public KickStyle Style;
+
         public override string ToString() =>
             $"[{Tick}] {Type} p{PlayerId} o{OtherPlayerId} {Team} {Position} v={Value:F2} d={Detail}";
     }
