@@ -308,16 +308,21 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
         /// <summary>For the iOS export pipeline: -executeMethod ...SinglePlayerSceneBootstrap.ExportIOSWithSinglePlayer.</summary>
         public static void ExportIOSWithSinglePlayer() => WithSinglePlayerScene(OpenFifa.Editor.IosBuild.ExportFromCommandLine);
 
-        /// <summary>Creates the scene, makes it the first build scene for one build, then restores the original list.</summary>
+        /// <summary>
+        /// Creates the scene, makes it the first build scene (LocalMultiplayerMatch second) for one build, then restores
+        /// the original list.
+        /// </summary>
         public static void WithSinglePlayerScene(Action build)
         {
             var original = EditorBuildSettings.scenes;
             try
             {
                 CreateScene();
-                var list = original.Where(s => s.path != ScenePath).ToList();
-                list.Insert(0, new EditorBuildSettingsScene(ScenePath, true));
-                EditorBuildSettings.scenes = list.ToArray();
+                // SinglePlayerMatch first, LocalMultiplayerMatch second, then the rest (BuildSceneOrder); disabled
+                // entries are dropped for the build and come back with the original list.
+                EditorBuildSettings.scenes = BuildSceneOrder.For(
+                        original.Where(s => s.enabled).Select(s => s.path), p => File.Exists(p))
+                    .Select(p => new EditorBuildSettingsScene(p, true)).ToArray();
                 build();
             }
             finally

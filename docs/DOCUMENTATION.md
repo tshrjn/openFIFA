@@ -111,6 +111,7 @@ Possible next steps:
 **Changes**:
 - OpenFifa/Assets/Scripts/Gameplay/MatchOrchestrator.cs — full runtime bootstrapper (pitch, players, ball, goals, camera, HUD, AI)
 - OpenFifa/Assets/Scenes/Match.unity — minimal scene with MatchOrchestrator auto-bootstrap
+- Build scene order: every player build (BuildScript.BuildIOS/BuildMacOSDev, IosBuild exports, the SinglePlayerSceneBootstrap wrappers) uses `BuildSceneOrder.For`: SinglePlayerMatch.unity first (the scene the app boots into), LocalMultiplayerMatch.unity second, then the other enabled EditorBuildSettings scenes (Match.unity). The committed EditorBuildSettings.asset is unchanged; the order is applied at build time.
 - OpenFifa/Assets/Scripts/Core/FormationLayoutData.cs — added CreateRush4v4() factory (4 slots: 2 Def, CM, Fwd)
 - OpenFifa/Assets/Tests/Editor/RushFormationTests.cs — 9 EditMode tests
 - OpenFifa/Assets/Editor/ScreenshotCapture.cs — updated for Rush 4v4 formation

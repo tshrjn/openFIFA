@@ -180,10 +180,11 @@ namespace OpenFifa.Editor
             }
             Directory.CreateDirectory(Path.GetDirectoryName(ctx.OutputPath) ?? ".");
 
-            var scenes = EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path).ToArray();
+            // SinglePlayerMatch, LocalMultiplayerMatch, then the other enabled EditorBuildSettings scenes.
+            var scenes = BuildScript.PlayerScenes();
             if (scenes.Length == 0)
             {
-                Fail("no enabled scenes in EditorBuildSettings");
+                Fail("no scenes to build (no SinglePlayerMatch/LocalMultiplayerMatch and none enabled in EditorBuildSettings)");
             }
 
             Debug.Log($"[IosBuild] exporting {ctx.Kind} Xcode project: bundle {ctx.BundleId}, build {ctx.BuildNumber}, " +
