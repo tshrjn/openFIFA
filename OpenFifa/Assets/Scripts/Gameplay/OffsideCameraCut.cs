@@ -34,6 +34,9 @@ namespace OpenFifa.Gameplay
         private Quaternion _cutRotation;
 
         public bool IsCut => _isCut;
+
+        /// <summary>Fired after the cut back (e.g. so a live camera driver can restart its follow from rest).</summary>
+        public event System.Action OnRestored;
         public OffsidePitchFrame Frame => _frame;
 
         /// <summary>4v4 scene: pitch length along X; suspends <paramref name="broadcast"/> during the cut.</summary>
@@ -106,6 +109,7 @@ namespace OpenFifa.Gameplay
                 // only set it on mode changes.
                 _camera.fieldOfView = _savedFov;
             }
+            OnRestored?.Invoke();
         }
 
         private void LateUpdate()
