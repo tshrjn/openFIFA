@@ -28,7 +28,8 @@ namespace OpenFifa.Tests.Editor
             return new CommentaryEvent
             {
                 Type = CommentaryEventType.Goal, Time = time, Minute = minute, Team = team, HomeScore = home,
-                AwayScore = away, PlayerName = name, ShotQuality = 0.4f, DistanceMetres = 11, CrowdIntensity = 0.9f
+                // A distinct scorer per goal unless a test says otherwise (the engine counts braces by player id).
+                AwayScore = away, PlayerName = name, PlayerId = name + "#" + time, ShotQuality = 0.4f, DistanceMetres = 11, CrowdIntensity = 0.9f
             };
         }
 
@@ -96,7 +97,9 @@ namespace OpenFifa.Tests.Editor
             var seen = new HashSet<string>();
             for (int i = 0; i < count; i++)
             {
-                var u = Started(e.Push(Ev(CommentaryEventType.Corner, i * 10.0)), CommentaryVoice.PlayByPlay);
+                var ev = Ev(CommentaryEventType.Corner, i * 10.0);
+                ev.TeamName = "Kingsmere United"; // "{team}" lines fit too
+                var u = Started(e.Push(ev), CommentaryVoice.PlayByPlay);
                 Assert.IsNotNull(u, "corner " + i);
                 Assert.IsTrue(seen.Add(u.Line.Id), "repeated " + u.Line.Id + " after " + i);
             }

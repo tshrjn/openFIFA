@@ -15,7 +15,7 @@ namespace OpenFifa.Core
         private static readonly HashSet<string> RootKeys = Set("format", "schemaVersion", "league", "provenance", "clubs");
         private static readonly HashSet<string> LeagueKeys = Set("id", "name", "shortName", "country", "season");
         private static readonly HashSet<string> ProvenanceKeys = Set("source", "fictional", "generator", "seed", "notes", "license");
-        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players", "kits");
+        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players", "kits", "style");
         private static readonly HashSet<string> KitKeys = Set("primary", "secondary", "tertiary", "pattern", "shortsColor",
             "socksColor", "numberColor", "numberOutline");
         private static readonly HashSet<string> AppearanceKeys = Set("skinTone", "hairStyle", "hairColor", "facialHair",
@@ -229,6 +229,10 @@ namespace OpenFifa.Core
 
             RequireInt(club, "reputation", path, RosterSchema.StarMin, RosterSchema.StarMax);
             ValidateKits(club.Get("kits"), Join(path, "kits"));
+
+            var style = club.Get("style");
+            if (style != null && (style.Kind != JsonNodeKind.String || !TeamAITactics.TryParseStyle(style.StringValue, out _)))
+                Error(Join(path, "style"), "must be one of \"balanced\", \"possession\", \"high-press\", \"counter\", \"long-ball\", \"wing-play\", \"park-the-bus\"", style);
 
             var players = club.Get("players");
             string pp = Join(path, "players");

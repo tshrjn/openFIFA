@@ -21,6 +21,12 @@ namespace OpenFifa.Core
         HalfTime,
         FullTime,
         /// <summary>Restart after a stoppage (throw-in, free kick, goal kick taken). Ends analyst windows; has no lines.</summary>
-        PlayResumed
+        PlayResumed,
+        /// <summary>A shot is struck (before the outcome is known): "{name} shoots!". Cut or followed by the resolution.</summary>
+        ShotTaken,
+        /// <summary>A player receives the ball in open play: short name calls that carry the build-up.</summary>
+        OnTheBall,
+        /// <summary>Synthesised by the engine after a quiet spell in live play: colour and match-situation chatter.</summary>
+        Lull
     }
 }

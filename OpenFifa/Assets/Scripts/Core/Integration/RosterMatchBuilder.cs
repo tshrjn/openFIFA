@@ -37,14 +37,37 @@ namespace OpenFifa.Core
                 case "4-4-2":
                 case "4-4-1-1": return TeamAIFormation.F442;
                 case "3-5-2":
-                case "3-4-3":
-                case "5-3-2":
                 case "3-4-1-2": return TeamAIFormation.F352;
-                case "4-3-3":
+                case "3-4-3":
+                case "3-4-2-1": return TeamAIFormation.F343;
+                case "5-3-2":
+                case "5-4-1": return TeamAIFormation.F532;
                 case "4-1-4-1":
-                case "4-5-1":
+                case "4-5-1": return TeamAIFormation.F4141;
+                case "4-1-2-1-2":
+                case "4-3-1-2": return TeamAIFormation.F41212;
+                case "4-3-3":
                 default: return TeamAIFormation.F433;
             }
+        }
+
+        /// <summary>
+        /// Team instructions for a club: its roster style when it names one, shifted by reputation (a 5-star side presses
+        /// 0.1 harder and holds its line 0.06 higher than a 3-star side with the same style, a 1-star side as much lower),
+        /// so two clubs with one style still differ. Without a style (or "balanced"): sliders from reputation alone.
+        /// </summary>
+        public static TeamAITactics TacticsFor(RosterClub club, TeamAIFormation formation)
+        {
+            if (TeamAITactics.TryParseStyle(club.Style, out var style) && style != TeamAIStyle.Balanced)
+            {
+                var t = TeamAITactics.FromStyle(style, formation);
+                int rep = club.Reputation - 3;
+                t.PressingIntensity = TeamAIMath.Clamp01(t.PressingIntensity + 0.05f * rep);
+                t.Depth = TeamAIMath.Clamp01(t.Depth + 0.03f * rep);
+                return t;
+            }
+            float press = 0.35f + 0.1f * club.Reputation;
+            return new TeamAITactics(formation, 0.5f, 0.4f + 0.04f * club.Reputation, press);
         }
 
         public static SimPlayerAttributes ToSimAttributes(RosterPlayer p)
@@ -114,8 +137,7 @@ namespace OpenFifa.Core
             pitch = pitch ?? PitchSpec.Standard;
             var sheet = new RosterTeamSheet { Club = club };
             var formation = ParseFormation(club.Formation);
-            float press = 0.35f + 0.1f * club.Reputation;
-            sheet.Tactics = new TeamAITactics(formation, 0.5f, 0.4f + 0.04f * club.Reputation, press);
+            sheet.Tactics = TacticsFor(club, formation);
 
             var used = new bool[club.Players.Count];
             int strikerSlot = -1;

@@ -126,8 +126,30 @@ namespace OpenFifa.Tests.Editor.TeamAI
             }
             Assert.Greater(traj.HeightAt(1f), 3f, "a lofted ball is over head height mid-flight");
             // The old flat model treated a lofted ball as rolling and decayed it; the static helper now flies it.
+            // The static helper has no spin input: it must fly the ball exactly as the integrator flies a spinless one,
+            // and the spin it ignores (8 rad/s of backspin here) only moves the ball a little.
             var flat = TeamAIMath.PredictBall(w.Ball.Position, w.Ball.Velocity, 1.5f);
-            Assert.AreEqual(BallIntegrator.PredictBall(b, cfg, w.Pitch, 1.5f).Position.Z, flat.Z, 0.3f);
+            var spinless = new SimBall { Position = b.Position, Velocity = b.Velocity };
+            float spinlessZ = BallIntegrator.PredictBall(spinless, cfg, w.Pitch, 1.5f).Position.Z;
+            Assert.AreEqual(spinlessZ, flat.Z, 0.01f, "spinless helper matches the spinless integrator");
+            Assert.AreEqual(BallIntegrator.PredictBall(b, cfg, w.Pitch, 1.5f).Position.Z, spinlessZ, 0.6f, "spin effect stays small");
+        }
+
+        [Test]
+        public void Trajectory_KnuckleShot_IncludesTheWobble()
+        {
+            var cfg = new BallSimConfig();
+            var w = new TeamAIWorld(PitchSpec.Standard);
+            w.Ball.Position = new SimVec3(0f, cfg.Radius, -20f);
+            w.Ball.Velocity = new SimVec3(0f, 3.5f, 29f);
+            w.Ball.KnuckleSeed = 0.55f;
+            w.Ball.KnuckleOrigin = w.Ball.Position;
+            var traj = new TeamAIBallTrajectory();
+            traj.Build(w, TeamAIBallModel.Default);
+            var b = new SimBall { Position = w.Ball.Position, Velocity = w.Ball.Velocity, KnuckleSeed = 0.55f, KnuckleOrigin = w.Ball.Position };
+            var truth = BallIntegrator.PredictBall(b, cfg, w.Pitch, 0.8f);
+            Assert.AreEqual(truth.Position.X, traj.At(0.8f).X, 0.02f, "the AI sees the knuckle wobble");
+            Assert.Greater(System.Math.Abs(truth.Position.X), 0.05f, "and there is a wobble to see");
         }
 
         [Test]

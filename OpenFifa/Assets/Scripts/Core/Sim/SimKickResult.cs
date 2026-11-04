@@ -13,5 +13,8 @@ namespace OpenFifa.Core
 
         /// <summary>Signed horizontal error actually applied (radians).</summary>
         public float HorizontalError;
+
+        /// <summary>The strike is a knuckle shot (<see cref="KickStyle.Knuckle"/>): the sim seeds its wobble.</summary>
+        public bool Knuckle;
     }
 }

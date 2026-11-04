@@ -35,7 +35,7 @@ namespace OpenFifa.Core
                 SimVec3 at = p.Position + v * (k * dt);
                 float d = SimMath.FlatDistance(at, b.Position);
                 if (d > ac.LooseRadius) return false; // possession is lost before any touch
-                if (tick >= p.NextTouchTick && b.Position.Y <= 0.5f && d <= reach)
+                if (tick >= p.NextTouchTick && DribbleBallLowEnough(b.Position.Y) && d <= reach)
                 {
                     touchTick = tick;
                     ballAtTouch = new SimVec3(b.Position.X, _cfg.Ball.Radius, b.Position.Z);

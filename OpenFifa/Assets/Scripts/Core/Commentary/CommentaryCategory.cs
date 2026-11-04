@@ -27,13 +27,19 @@ namespace OpenFifa.Core
         public float Cooldown { get; }
         /// <summary>Non-resolution lines are skipped when crowd intensity is above this (the crowd drowns them).</summary>
         public float MaxCrowd { get; }
+        /// <summary>
+        /// Analyst only: may speak in live play (after a save, during a lull) once the lead voice has been quiet for
+        /// <see cref="CommentaryConfig.AnalystLiveQuiet"/>; any live event cuts it. Other analyst lines wait for stoppages.
+        /// </summary>
+        public bool Live { get; }
 
         public IReadOnlyList<CommentaryLine> Lines => _lines;
 
         public CommentaryCategory(string id, CommentaryEventType evt, CommentaryVoice voice, string context,
             string situation, int priority, bool interruptible, bool resolution, float cooldown, float maxCrowd,
-            CommentaryLine[] lines)
+            CommentaryLine[] lines, bool live = false)
         {
+            Live = live;
             Id = id;
             Event = evt;
             Voice = voice;

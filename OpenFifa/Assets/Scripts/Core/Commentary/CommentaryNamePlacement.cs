@@ -7,4 +7,11 @@ namespace OpenFifa.Core
         Before = 1,
         After = 2
     }
+
+    /// <summary>What the stitched name clip says: the event's player ("{name}") or club ("{team}").</summary>
+    public enum CommentaryNameKind
+    {
+        Player = 0,
+        Team = 1
+    }
 }

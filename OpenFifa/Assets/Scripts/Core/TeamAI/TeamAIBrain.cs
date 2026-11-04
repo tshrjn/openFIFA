@@ -31,7 +31,45 @@ namespace OpenFifa.Core
         public const float SupportLanePenalty = 0.4f;
 
         public readonly int Team;
+        /// <summary>The team's instructions (user or roster). The brain plays <see cref="Effective"/>: these plus the manager's mentality.</summary>
         public TeamAITactics Tactics;
+        /// <summary>Tactics in force this tick: <see cref="Tactics"/> shifted by the manager's mentality.</summary>
+        public readonly TeamAITactics Effective = new TeamAITactics();
+        /// <summary>In-match mentality changes from score and clock (off unless the session enables it).</summary>
+        public readonly TeamAIManager Manager = new TeamAIManager();
+        /// <summary>Seconds a counter-attack lasts after winning the ball (scaled by <see cref="TeamAITactics.CounterBoost"/>).</summary>
+        public const float CounterWindow = 6f;
+        /// <summary>The side won the ball recently and is breaking (see <see cref="TeamAITactics.CounterAttack"/>).</summary>
+        public bool CounterActive { get; private set; }
+        private float _regainTime = -100f;
+        private bool _hadBall;
+        /// <summary>Ball depth below which a counter-attack can start, and up to which a running one carries on.</summary>
+        public const float CounterStartDepth = 0.78f;
+        public const float CounterEndDepth = 0.82f;
+        /// <summary>
+        /// Rest defence: outfielders who stay behind the ball. A late midfield run, or an early overlap by a
+        /// commit-everyone side, only goes if at least this many team-mates are still behind the ball.
+        /// </summary>
+        public const int RestDefenders = 3;
+        private int _restBehind;
+
+        /// <summary>
+        /// 0..1: how hard a pressing side (PressingIntensity above 0.5) squeezes while it is in its high press or
+        /// counter-press; 0 in every other phase and for neutral or passive sides. Drives tighter cover shadows on the
+        /// nearest passing options (to intercept), a closer second presser and earlier tackles.
+        /// </summary>
+        public float PressSqueeze =>
+            Phase == TeamAIPhase.HighPress || Phase == TeamAIPhase.CounterPress
+                ? TeamAIMath.Clamp01((Effective.PressingIntensity - 0.5f) * 2f)
+                : 0f;
+        /// <summary>Cover-shadow point: this far from the ball toward the receiver (0.4), up to 0.75 at full squeeze.</summary>
+        public const float ShadowFraction = 0.4f;
+        public const float SqueezeShadowFraction = 0.75f;
+        /// <summary>
+        /// How much lower a win chance a squeezing presser accepts before tackling (at full squeeze). 0.12 gave the
+        /// lowest PPDA but 1.8x the fouls of a balanced side; 0.05 keeps fouls at 1.4x and PPDA at 0.7x Balanced.
+        /// </summary>
+        public const float SqueezeTackleShift = 0.05f;
         public TeamAIDifficulty Difficulty { get; private set; }
         public readonly TeamAIRandom Rng;
         public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
@@ -133,14 +171,32 @@ namespace OpenFifa.Core
                 _ownerSince = world.Time;
             }
 
+            // ---- Layer 0: manager (mentality from score and clock) ----
+            Manager.Update(world, Team);
+            TeamAIManager.Apply(Tactics, Manager.Current, Manager.Enabled ? Manager.StyleExecution : 1f, Effective);
+
             // ---- Layer 1: team phase ----
             float nearest = NearestTeammateDistance(world, ball);
-            PhaseMachine.Update(dt, Tactics, hasPossession, ballDepth, nearest, world.MatchPhase, world.RestartTeam, Team);
+            PhaseMachine.Update(dt, Effective, hasPossession, ballDepth, nearest, world.MatchPhase, world.RestartTeam, Team);
             var phase = PhaseMachine.Phase;
             bool inPossession = TeamAIFormationShape.InPossession(phase);
 
+            // ---- Transition: break at once after winning the ball in open play ----
+            bool openPlay = world.MatchPhase == TeamAIMatchPhase.InPlay;
+            if (hasPossession && !_hadBall && openPlay) _regainTime = world.Time;
+            // A restart ends any break (our own free kick is a set piece, not a counter).
+            if (!openPlay) _regainTime = -100f;
+            _hadBall = hasPossession;
+            float boost = Effective.CounterBoost;
+            // Hysteresis on the depth limit: a break that reached 0.78 runs on to 0.82 instead of flickering at the edge.
+            CounterActive = hasPossession && openPlay && boost > 0f && world.Time - _regainTime < CounterWindow * boost &&
+                            ballDepth < (CounterActive ? CounterEndDepth : CounterStartDepth);
+            _restBehind = CountBehindBall(world, ballDepth, ownerIndex, sign);
+            OnBall.Directness = TeamAIMath.Clamp01(Effective.Directness + (CounterActive ? 0.4f * boost : 0f));
+            OnBall.CrossBias = 0.3f * TeamAIMath.Clamp01((Effective.Width - 0.6f) * 2.5f);
+
             // ---- Layer 2: formation anchors ----
-            float line = TeamAIFormationShape.ComputeAnchors(phase, Tactics, ball, sign, pitch, Anchors);
+            float line = TeamAIFormationShape.ComputeAnchors(phase, Effective, ball, sign, pitch, Anchors);
             if (!inPossession && ownerIndex >= 0 && ownerTeam != Team)
             {
                 // Ball pressure rule: drop the line when the carrier is unpressured and facing our goal.
@@ -358,7 +414,7 @@ namespace OpenFifa.Core
             ref var p = ref world.Players[i];
             var pitch = world.Pitch;
             float onsideDepth = OffsideDepth - 0.008f;
-            bool attacking = phase == TeamAIPhase.Progression || phase == TeamAIPhase.FinalThird;
+            bool attacking = phase == TeamAIPhase.Progression || phase == TeamAIPhase.FinalThird || CounterActive;
             bool ownerOurs = ownerIndex >= 0 && world.Players[ownerIndex].Team == Team;
             float myDepth = TeamAIMath.Depth(p.Position.Z, sign, pitch);
 
@@ -386,8 +442,12 @@ namespace OpenFifa.Core
             }
 
             // Run in behind, timed against the offside line.
-            if (ownerOurs && attacking && runners < 2 &&
-                (p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM))
+            // Late runs from midfield join in when the team commits players forward (high ForwardRuns) in the final third.
+            bool behindBall = myDepth < TeamAIMath.Depth(world.Ball.Position.Z, sign, pitch) - 0.02f;
+            bool lateRunner = p.Role == TeamAIRole.CM && Effective.ForwardRuns >= 0.7f && phase == TeamAIPhase.FinalThird &&
+                              (_running[i] || _restBehind - (behindBall ? 1 : 0) >= RestDefenders);
+            if (ownerOurs && attacking && runners < Effective.MaxRunners &&
+                (p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM || lateRunner))
             {
                 var owner = world.Players[ownerIndex];
                 float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
@@ -396,13 +456,16 @@ namespace OpenFifa.Core
                 // waiting for a free carrier means a team pressed by one man never runs in behind.
                 bool ownerHasTime = ownerPressure > TeamAIOnBall.BlockSafe + 0.6f && SimVec3.Dot(owner.Facing, new SimVec3(0f, 0f, sign)) > 0.2f;
                 bool continuing = _running[i] && world.Time - _runStart[i] < 3f && myDepth < 0.96f;
-                bool nearLine = myDepth >= OffsideDepth - 0.035f && myDepth <= OffsideDepth + 0.002f;
+                // On a counter the forwards go from deeper: anyone within reach of the line breaks.
+                bool nearLine = myDepth >= OffsideDepth - (CounterActive ? 0.12f : 0.035f) && myDepth <= OffsideDepth + 0.002f;
+                if (CounterActive && !ownerHasTime) ownerHasTime = ownerPressure > TeamAIOnBall.BlockSafe;
                 bool spaceBehind = OffsideDepth < 0.9f;
                 bool start = !continuing && ownerHasTime && nearLine && spaceBehind && ownerDepth < OffsideDepth &&
                              Rng.NextFloat() >= Difficulty.LapseChance;
                 if (continuing || start)
                 {
                     if (start) { _running[i] = true; _runStart[i] = world.Time; }
+                    if (start && behindBall) _restBehind--;
                     runners++;
                     float targetDepth = Math.Min(OffsideDepth + 0.12f, 0.95f);
                     float x = TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
@@ -428,15 +491,17 @@ namespace OpenFifa.Core
             }
 
             // Overlap: ball-side full-back runs outside a wide carrier in the opponent half.
-            if (ownerOurs && p.Role == TeamAIRole.FB && overlappers == 0 && attacking)
+            bool restOk = Effective.ForwardRuns < 0.75f || _restBehind - (behindBall ? 1 : 0) >= RestDefenders;
+            if (ownerOurs && p.Role == TeamAIRole.FB && overlappers == 0 && attacking && Effective.ForwardRuns >= 0.25f && restOk)
             {
                 var owner = world.Players[ownerIndex];
                 float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
                 bool sameSide = owner.Position.X * anchor.X > 0f && TeamAIMath.Abs(owner.Position.X) > 6f;
                 bool carrierRole = owner.Role == TeamAIRole.W || owner.Role == TeamAIRole.CM || owner.Role == TeamAIRole.AM;
-                if (sameSide && carrierRole && ownerDepth > 0.5f)
+                if (sameSide && carrierRole && ownerDepth > (Effective.ForwardRuns >= 0.75f ? 0.4f : 0.5f))
                 {
                     overlappers++;
+                    if (behindBall) _restBehind--;
                     float side = anchor.X > 0f ? 1f : -1f;
                     float depth = Math.Min(ownerDepth + 0.1f, onsideDepth);
                     var target = new SimVec3(side * (pitch.HalfWidth - 3f), 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
@@ -602,9 +667,10 @@ namespace OpenFifa.Core
                 {
                     _oppTaken[opp] = true;
                     var op = world.Players[opp].Position;
-                    var shadow = ball + (op - ball) * 0.4f;
+                    float squeeze = PressSqueeze;
+                    var shadow = ball + (op - ball) * TeamAIMath.Lerp(ShadowFraction, SqueezeShadowFraction, squeeze);
                     shadow = new SimVec3(shadow.X, 0f, shadow.Z);
-                    if (TeamAIMath.FlatDistance(shadow, anchor) < 12f)
+                    if (TeamAIMath.FlatDistance(shadow, anchor) < 12f + 10f * squeeze)
                     {
                         cmd.TargetPlayerId = world.Players[opp].Id;
                         // The shadow point sits 40% of the way from the ball to the runner and moves with both.
@@ -683,7 +749,7 @@ namespace OpenFifa.Core
             if (dist > 2.4f)
             {
                 // Close down on a goal-side curve.
-                var approach = ball + toGoal * (second ? 3f : 1.0f);
+                var approach = ball + toGoal * (second ? 3f - 1.5f * PressSqueeze : 1.0f);
                 SetMoveTracking(ref cmd, p, approach, owner.Velocity, true, TeamAIIntent.Press);
                 // Slide: last-ditch, chasing a carrier who is getting away near our box.
                 bool goalSideNow = SimVec3.Dot(p.Position - ball, toGoal) > 0f;
@@ -705,7 +771,7 @@ namespace OpenFifa.Core
             float success = TackleWinChance(p, owner, TeamAIMath.FlatDistance(p.Position, ball)) +
                             (exposed ? 0.1f : 0f) + (facingAway ? 0.05f : 0f);
             success += Rng.NextSigned() * Difficulty.DecisionNoise;
-            if (goalSide && success > TackleThreshold(Difficulty.Theta))
+            if (goalSide && success > TackleThreshold(Difficulty.Theta) - SqueezeTackleShift * PressSqueeze)
             {
                 SetMoveTracking(ref cmd, p, ball, owner.Velocity, false, TeamAIIntent.Tackle);
                 cmd.Action = TeamAIAction.Tackle;
@@ -733,6 +799,19 @@ namespace OpenFifa.Core
         /// reads the touch and goes in (a missed tackle costs half a second, and the second presser covers).
         /// </summary>
         public static float TackleThreshold(float theta) => TeamAIMath.Lerp(0.5f, 0.36f, theta);
+
+        /// <summary>Our active outfielders (not the carrier) more than 0.02 of the pitch behind the ball.</summary>
+        private int CountBehindBall(TeamAIWorld world, float ballDepth, int ownerIndex, int sign)
+        {
+            int n = 0;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                ref readonly var o = ref world.Players[j];
+                if (j == ownerIndex || !o.Active || o.Team != Team || o.Role == TeamAIRole.GK) continue;
+                if (TeamAIMath.Depth(o.Position.Z, sign, world.Pitch) < ballDepth - 0.02f) n++;
+            }
+            return n;
+        }
 
         private int FindMarkTarget(TeamAIWorld world, SimVec3 anchor, int sign, float radius, float maxDepth)
         {
@@ -764,7 +843,7 @@ namespace OpenFifa.Core
                 if (!o.Active || o.Team == Team || j == ownerIndex || o.Role == TeamAIRole.GK || _oppTaken[j]) continue;
                 float dBall = TeamAIMath.FlatDistance(o.Position, ball);
                 float dAnchor = TeamAIMath.FlatDistance(o.Position, anchor);
-                if (dBall > 30f || dAnchor > 16f) continue;
+                if (dBall > 30f || dAnchor > 16f + 10f * PressSqueeze) continue;
                 // Danger: closer to our goal is worse.
                 float danger = 1f - TeamAIMath.Depth(o.Position.Z, sign, world.Pitch);
                 float score = danger - 0.03f * dAnchor;
@@ -895,8 +974,8 @@ namespace OpenFifa.Core
                 else if (t < b2) { b2 = t; SecondPresserIndex = j; }
             }
             bool twoPressers = PressTriggerActive || Phase == TeamAIPhase.CounterPress ||
-                               (Phase == TeamAIPhase.HighPress && Tactics.PressingIntensity >= 0.6f);
-            if (!twoPressers || Tactics.PressingIntensity < 0.3f) SecondPresserIndex = -1;
+                               (Phase == TeamAIPhase.HighPress && Effective.PressingIntensity >= 0.6f);
+            if (!twoPressers || Effective.PressingIntensity < 0.3f) SecondPresserIndex = -1;
         }
 
         /// <summary>Teammate press: the AI outfielder who gets to the ball first presses it, as a second man when

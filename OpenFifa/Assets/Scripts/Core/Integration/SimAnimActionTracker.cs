@@ -425,7 +425,8 @@ namespace OpenFifa.Core
         /// <summary>Bit-exact ball state comparison (floats compared by bits, so -0 and NaN never match loosely).</summary>
         private static bool SameBall(in SimBall a, in SimBall b) =>
             Same(a.Position, b.Position) && Same(a.Velocity, b.Velocity) && Same(a.Spin, b.Spin) &&
-            a.InNet == b.InNet && a.Grounded == b.Grounded;
+            a.InNet == b.InNet && a.Grounded == b.Grounded &&
+            Bits(a.KnuckleSeed) == Bits(b.KnuckleSeed) && Same(a.KnuckleOrigin, b.KnuckleOrigin);
 
         private static bool Same(SimVec3 a, SimVec3 b) =>
             Bits(a.X) == Bits(b.X) && Bits(a.Y) == Bits(b.Y) && Bits(a.Z) == Bits(b.Z);

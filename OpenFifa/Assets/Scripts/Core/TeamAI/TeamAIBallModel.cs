@@ -328,7 +328,8 @@ namespace OpenFifa.Core
         /// <summary>Height of the ball at each sample.</summary>
         private readonly float[] _height = new float[Samples];
         private float _builtTime = float.NaN;
-        private SimVec3 _builtPos, _builtVel, _builtSpin;
+        private SimVec3 _builtPos, _builtVel, _builtSpin, _builtKnuckleOrigin;
+        private float _builtKnuckleSeed;
         private TeamAIBallModel _builtModel;
 
         /// <summary>Integrate the world ball forward (no players). Cached per (time, ball state).</summary>
@@ -336,7 +337,10 @@ namespace OpenFifa.Core
         {
             var ball = world.Ball;
             if (world.Time == _builtTime && ball.Position.Equals(_builtPos) && ball.Velocity.Equals(_builtVel) &&
-                ReferenceEquals(model, _builtModel) && ball.Spin.Equals(_builtSpin)) return;
+                ReferenceEquals(model, _builtModel) && ball.Spin.Equals(_builtSpin) && ball.KnuckleSeed == _builtKnuckleSeed
+                && ball.KnuckleOrigin.Equals(_builtKnuckleOrigin)) return;
+            _builtKnuckleSeed = ball.KnuckleSeed;
+            _builtKnuckleOrigin = ball.KnuckleOrigin;
             _builtTime = world.Time;
             _builtModel = model;
             _builtSpin = ball.Spin;
@@ -344,6 +348,11 @@ namespace OpenFifa.Core
             _builtVel = ball.Velocity;
 
             var b = model.MakeBall(ball.Position, ball.Velocity, ball.Spin);
+            if (!b.Grounded)
+            {
+                b.KnuckleSeed = ball.KnuckleSeed;
+                b.KnuckleOrigin = ball.KnuckleOrigin;
+            }
             var pitch = world.Pitch;
             int sub = (int)(SampleDt / model.Dt + 0.5f);
             if (sub < 1) sub = 1;
