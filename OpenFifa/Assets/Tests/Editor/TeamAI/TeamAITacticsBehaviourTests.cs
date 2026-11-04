@@ -329,5 +329,83 @@ namespace OpenFifa.Tests.Editor.TeamAI
             System.Console.WriteLine($"Beginner HighPress {beginnerPress:F1}, Ultimate ParkTheBus {ultimateBus:F1}");
             Assert.Less(beginnerPress, ultimateBus);
         }
+    
+        // ------------------------------------------------------------------ pressing (PPDA)
+
+        /// <summary>
+        /// PPDA of the home side over AI-vs-AI matches (home = <paramref name="style"/>, away = a balanced 4-3-3, both on
+        /// Professional, no human input): opponent passes made in their own defensive 60% of the pitch per home defensive
+        /// action (tackle, interception, foul) in that zone. Lower = a more intense press.
+        /// </summary>
+        public static float Ppda(TeamAIStyle style, int seeds, float half)
+        {
+            int passes = 0, actions = 0;
+            for (int seed = 1; seed <= seeds; seed++)
+            {
+                var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+                {
+                    Level = TeamAIDifficultyLevel.Professional, Seed = (ulong)seed,
+                    Config = new MatchSimConfig { HalfDurationSeconds = half },
+                    HomeTactics = TeamAITactics.FromStyle(style), AwayTactics = new TeamAITactics()
+                });
+                s.HumanSlots[0].Input = null;
+                s.Director.Brains[1].Manager.Enabled = false;
+                float hl = s.Sim.Config.Pitch.HalfLength;
+                while (!s.IsFinished)
+                {
+                    var ev = s.StepOnce(null);
+                    int sign = s.Sim.AttackSign(SimTeam.Home);
+                    for (int i = 0; i < ev.Count; i++)
+                    {
+                        var e = ev[i];
+                        float depthFromHomeGoal = (e.Position.Z * sign + hl) / (2f * hl);
+                        if (depthFromHomeGoal <= 0.4f) continue;
+                        if (e.Type == MatchEventType.Pass && e.Team == SimTeam.Away) passes++;
+                        else if (e.Team == SimTeam.Home && (e.Type == MatchEventType.Tackle ||
+                                 e.Type == MatchEventType.Interception || e.Type == MatchEventType.Foul)) actions++;
+                    }
+                }
+            }
+            return passes / (float)System.Math.Max(1, actions);
+        }
+
+        /// <summary>
+        /// The press is visible in the numbers: HighPress allows the fewest passes per defensive action, ParkTheBus the
+        /// most. Measured (8 seeds, 4-minute halves, after the ball-physics retune): HighPress 2.0, Balanced 3.5,
+        /// ParkTheBus 9.5.
+        /// </summary>
+        [Test]
+        [Category("Slow")]
+        [Timeout(1800000)]
+        public void Ppda_HighPress_Below_Balanced_Below_ParkTheBus()
+        {
+            float press = Ppda(TeamAIStyle.HighPress, 4, 180f);
+            float bal = Ppda(TeamAIStyle.Balanced, 4, 180f);
+            float bus = Ppda(TeamAIStyle.ParkTheBus, 4, 180f);
+            System.Console.WriteLine($"PPDA HighPress {press:F2}, Balanced {bal:F2}, ParkTheBus {bus:F2}");
+            Assert.Less(press, bal * 0.8f, "high press should allow clearly fewer passes per defensive action");
+            Assert.Less(bal, bus, "park the bus should press least");
+        }
+
+        [Test]
+        public void PressSqueeze_OnlyForPressingSides_InPressingPhases()
+        {
+            var w = TeamAITestWorlds.FullMatch(new TeamAITactics(), new TeamAITactics());
+            var press = TeamAITactics.FromStyle(TeamAIStyle.HighPress);
+            var dir = new TeamAIDirector(Pitch, press, new TeamAITactics(), 0.7f, 0.7f, 9);
+            // Team 1 builds up deep in its own half: team 0 is in its high press.
+            int carrier = 18;
+            w.Players[carrier].Position = new SimVec3(0f, 0f, Z(0.85f));
+            TeamAITestWorlds.GiveBall(w, carrier);
+            w.Time = 5f;
+            dir.DecideNow(w, 0.1f);
+            Assert.AreEqual(TeamAIPhase.HighPress, dir.Brains[0].Phase);
+            Assert.Greater(dir.Brains[0].PressSqueeze, 0.8f);
+            Assert.AreEqual(0f, dir.Brains[1].PressSqueeze, "the side on the ball does not squeeze");
+
+            var neutral = new TeamAIDirector(Pitch, new TeamAITactics(), new TeamAITactics(), 0.7f, 0.7f, 9);
+            neutral.DecideNow(w, 0.1f);
+            Assert.AreEqual(0f, neutral.Brains[0].PressSqueeze, "neutral pressing intensity: unchanged behaviour");
+        }
     }
 }
