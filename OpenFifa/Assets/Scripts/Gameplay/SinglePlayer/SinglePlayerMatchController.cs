@@ -247,7 +247,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     l.intensity *= look.SunScale;
                     l.shadowStrength *= look.ShadowScale;
                 }
-            RenderSettings.ambientIntensity = look.AmbientScale;
+            BroadcastLighting.ApplyAmbient(look.AmbientScale); // trilight colours scaled (ambientIntensity is ignored under Trilight)
             var cloud = new Color(0.42f, 0.45f, 0.5f);
             cam.backgroundColor = Color.Lerp(cam.backgroundColor, cloud, look.SkyGrey);
 
@@ -256,13 +256,41 @@ namespace OpenFifa.Gameplay.SinglePlayer
             WeatherVisuals = go.AddComponent<WeatherSystem>(); // Awake builds the rain and snow emitters
             WeatherVisuals.FollowCamera = cam.transform;
             WeatherVisuals.EmissionScale = 4f; // the preset rates are tuned for a close camera
-            WeatherVisuals.ConfigureForBroadcast(CreateWeatherParticleMaterial());
+            // Fog solved for the far touchline (near ~34 m, far ~98 m from the camera) instead of the close-camera
+            // presets; precipitation reaches past the far touchline even at the camera's widest yaw.
+            float pitchWidth = 2f * BroadcastCamera.HalfWidth;
+            WeatherVisuals.FogReferenceDistance = BroadcastFog.FarTouchlineDistance(BroadcastCamera.BroadcastHeight,
+                BroadcastCamera.BroadcastSetback, pitchWidth);
+            WeatherVisuals.FarReach = (BroadcastCamera.BroadcastSetback + pitchWidth)
+                                      / Mathf.Cos(Mathf.Clamp(BroadcastCamera.MaxYawDegrees, 0f, 60f) * Mathf.Deg2Rad);
+            var q = BroadcastLighting.Quality;
+            _weatherParticleMaterial = CreateWeatherParticleMaterial();
+            WeatherVisuals.ConfigureForBroadcast(_weatherParticleMaterial, q.MaxRainParticles, q.MaxSnowParticles);
+            var builder = _pitchRoot != null ? _pitchRoot.GetComponent<PitchBuilder>() : null;
+            if (builder != null) WeatherVisuals.PitchRenderer = builder.SurfaceRenderer; // wet turf look
             WeatherVisuals.SetWeatherImmediate(Weather);
             Debug.Log("[" + ProductName + "] weather visuals: " + Weather + " (sun x" + look.SunScale + ", sky grey " + look.SkyGrey + ")");
         }
 
+        /// <summary>Template for the rain/snow material: keeps URP Particles/Unlit (alpha blended) in player builds.</summary>
+        public const string WeatherParticleTemplateResource = "OpenFootball/ShaderKeep/KeepParticlesUnlit";
+
+        private Material _weatherParticleMaterial;
+
+        private void OnDestroy()
+        {
+            if (_weatherParticleMaterial != null) Destroy(_weatherParticleMaterial);
+            _weatherParticleMaterial = null;
+        }
+
+        /// <summary>
+        /// Rain/snow material: a copy of the Resources template (always in the build, so the shader and its transparent
+        /// variant are too), else Shader.Find in the editor. The caller owns (and destroys) the copy.
+        /// </summary>
         private static Material CreateWeatherParticleMaterial()
         {
+            var template = Resources.Load<Material>(WeatherParticleTemplateResource);
+            if (template != null) return new Material(template) { name = "WeatherParticleMaterial" };
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
             bool urp = shader != null;
             if (!urp) shader = Shader.Find("Sprites/Default");

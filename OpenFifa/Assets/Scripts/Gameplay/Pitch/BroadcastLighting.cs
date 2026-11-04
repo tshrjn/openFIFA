@@ -123,17 +123,23 @@ namespace OpenFifa.Gameplay
 
         /// <summary>
         /// Trilight ambient plus an explicit ambient probe built from the same colours (no baked lighting data exists at
-        /// runtime, so the skybox probe cannot be relied on).
+        /// runtime, so the skybox probe cannot be relied on). <paramref name="scale"/> multiplies the three linear
+        /// colours (weather dims the fill: <see cref="WeatherLook.AmbientScale"/>); ambientIntensity does nothing under
+        /// Trilight, so the colours themselves are scaled.
         /// </summary>
-        public static void ApplyAmbient()
+        public static void ApplyAmbient(float scale = 1f)
         {
+            scale = Mathf.Max(0f, scale);
+            Color sky = Scale(AmbientSkyLinear, scale), equator = Scale(AmbientEquatorLinear, scale), ground = Scale(AmbientGroundLinear, scale);
             RenderSettings.ambientMode = AmbientMode.Trilight;
             RenderSettings.ambientIntensity = 1f;
-            RenderSettings.ambientSkyColor = AmbientSkyLinear.gamma;
-            RenderSettings.ambientEquatorColor = AmbientEquatorLinear.gamma;
-            RenderSettings.ambientGroundColor = AmbientGroundLinear.gamma;
-            RenderSettings.ambientProbe = BuildTrilightProbe(AmbientSkyLinear, AmbientEquatorLinear, AmbientGroundLinear);
+            RenderSettings.ambientSkyColor = sky.gamma;
+            RenderSettings.ambientEquatorColor = equator.gamma;
+            RenderSettings.ambientGroundColor = ground.gamma;
+            RenderSettings.ambientProbe = BuildTrilightProbe(sky, equator, ground);
         }
+
+        private static Color Scale(Color c, float s) => new Color(c.r * s, c.g * s, c.b * s, c.a);
 
         /// <summary>SH probe: equator everywhere, plus up and down lobes towards sky and ground colours.</summary>
         public static SphericalHarmonicsL2 BuildTrilightProbe(Color sky, Color equator, Color ground)

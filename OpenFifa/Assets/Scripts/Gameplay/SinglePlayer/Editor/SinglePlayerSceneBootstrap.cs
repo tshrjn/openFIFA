@@ -217,8 +217,8 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
 
         /// <summary>
         /// Player builds only ship shaders (and keyword variants) that some included asset uses. The stadium's LED
-        /// boards, lamps and halos use URP/Unlit created at runtime, so keep two materials under Resources (always in
-        /// the build): opaque Unlit and transparent additive Unlit. Idempotent; no ProjectSettings edits.
+        /// boards, lamps and halos use URP/Unlit created at runtime, so keep materials under Resources (always in
+        /// the build): opaque Unlit, transparent additive Unlit and alpha-blended Particles/Unlit (rain, snow). Idempotent; no ProjectSettings edits.
         /// </summary>
         public static void EnsureShaderKeepMaterials()
         {
@@ -241,6 +241,22 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
                 m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
                 m.renderQueue = (int)RenderQueue.Transparent;
                 AssetDatabase.CreateAsset(m, addPath);
+            }
+            // Rain/snow: URP Particles/Unlit, alpha blended (SinglePlayerMatchController clones it at runtime).
+            string particlesPath = ShaderKeepFolder + "/KeepParticlesUnlit.mat";
+            var particles = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (particles != null && AssetDatabase.LoadAssetAtPath<Material>(particlesPath) == null)
+            {
+                var m = new Material(particles) { name = "KeepParticlesUnlit" };
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_Blend", 0f);
+                m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+                m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+                m.SetFloat("_ZWrite", 0f);
+                m.SetOverrideTag("RenderType", "Transparent");
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.renderQueue = (int)RenderQueue.Transparent;
+                AssetDatabase.CreateAsset(m, particlesPath);
             }
             AssetDatabase.SaveAssets();
         }

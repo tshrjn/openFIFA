@@ -75,6 +75,15 @@ namespace OpenFifa.Core
             UpdateMudLevel(weather, deltaTime);
         }
 
+        /// <summary>
+        /// Sets the tracked wetness (clamped 0..1), e.g. a match that kicks off in rain starts on a pitch that has
+        /// already been rained on.
+        /// </summary>
+        public void SetWetness(float wetness)
+        {
+            _wetness = Clamp(wetness, 0f, 1f);
+        }
+
         /// <summary>Reset all pitch conditions to dry/clean state.</summary>
         public void Reset()
         {

@@ -37,6 +37,8 @@ namespace OpenFifa.Core
         public int TurfBaseWidth, TurfBaseHeight, TurfNormalWidth, TurfNormalHeight, TurfDetailSize;
         public int TurfBaseAniso, TurfDetailAniso;
         public bool CompressTurf;
+        /// <summary>Live particle budget of the rain and snow emitters (caps maxParticles and the emission rate).</summary>
+        public int MaxRainParticles, MaxSnowParticles;
     }
 
     /// <summary>
@@ -102,6 +104,8 @@ namespace OpenFifa.Core
                     TurfDetailSize = 256,
                     TurfBaseAniso = 2, TurfDetailAniso = 2,
                     CompressTurf = false, // no runtime ASTC on iOS: stay small instead
+                    // Thin alpha-blended streaks; iPad fill rate at 2732 x 2048 wants under half the desktop count.
+                    MaxRainParticles = 2500, MaxSnowParticles = 2000,
                 };
             }
             return new RenderQualityProfile
@@ -119,6 +123,7 @@ namespace OpenFifa.Core
                 TurfDetailSize = 512,
                 TurfBaseAniso = 4, TurfDetailAniso = 2,
                 CompressTurf = true,
+                MaxRainParticles = 6000, MaxSnowParticles = 5000,
             };
         }
 
