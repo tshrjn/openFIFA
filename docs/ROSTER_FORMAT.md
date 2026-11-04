@@ -122,11 +122,11 @@ Player:
 | Field | Type | Rule |
 | --- | --- | --- |
 | `squadNumber` | int | Same number as `shirtNumber`. Either may be given; when both are, they must match. |
-| `shirtName` | string | Name as printed on the back, up to 24 characters. Defaults to `knownAs` in capitals. |
+| `shirtName` | string | Name as printed on the back, up to 24 characters. Defaults to `knownAs` in capitals. The Premier League pack folds it to ASCII for the shirt font; `knownAs` keeps the original spelling for HUD and commentary. |
 | `appearance.skinTone` | number | 0 (light) to 1 (dark) |
-| `appearance.hairStyle` | string | `buzz` `short` `curly` `afro` `long_tied` `bald` `braids` |
+| `appearance.hairStyle` | string | `buzz` `short` `curly` `afro` `long_tied` `bald` `braids`. Leave it out when unknown; the appearance pipeline then picks a seeded style. |
 | `appearance.hairColor`, `bootColor` | string | `#RRGGBB` |
-| `appearance.facialHair` | string | `none` `stubble` `beard` `moustache` |
+| `appearance.facialHair` | string | `none` `stubble` `beard` `moustache`. Leave it out when unknown, as for `hairStyle`. |
 | `appearance.heightCm` | int | 150 to 215; defaults to the player's `heightCm` |
 | `appearance.build` | string | `slim` `average` `stocky` |
 
