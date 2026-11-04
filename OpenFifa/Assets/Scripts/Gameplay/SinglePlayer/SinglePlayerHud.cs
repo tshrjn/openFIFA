@@ -7,6 +7,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// Minimal IMGUI front end for single player: difficulty picker (seven levels) with club selection, score and clock
     /// bug, commentary subtitles, power bar, pause and full-time screens, and the iPad touch overlay (shown only when no
     /// gamepad is connected). Placeholder UI until the real menu/HUD art lands.
+    ///
+    /// Steady-state OnGUI allocates nothing: every composed string (score, clock, status line, picker stats, full-time
+    /// summary) is cached and rebuilt only when its inputs change (score, clock second, controlled player, pick).
     /// </summary>
     [RequireComponent(typeof(SinglePlayerMatchController))]
     public sealed class SinglePlayerHud : MonoBehaviour
@@ -15,6 +18,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private GUIStyle _title, _big, _label, _small, _button, _sub;
         private Texture2D _white;
         private TeamAIDifficultyLevel _pick = TeamAIDifficultyLevel.Professional;
+        private readonly MenuRect[] _levelRects = new MenuRect[TeamAIDifficultyLadder.LevelCount];
+
+        // Cached HUD strings and the keys they were built from.
+        private string _scoreText = string.Empty, _clockText = string.Empty, _statusText = string.Empty, _statsText = string.Empty;
+        private string _ftScore = string.Empty, _ftVerdict = string.Empty, _ftStats = string.Empty;
+        private long _scoreKey = long.MinValue, _statusKey = long.MinValue;
+        private int _clockKey = int.MinValue, _statsKey = int.MinValue;
+        private SinglePlayerMatchSession _ftSession, _statusSession;
 
         /// <summary>Force the touch overlay on (screenshots, desktop testing).</summary>
         public bool ForceTouchOverlay;
@@ -53,6 +64,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
             if (!_c.Started)
             {
+                _ftSession = null;
                 DrawPicker(w, h);
                 return;
             }
@@ -97,22 +109,26 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 y += 40;
             }
 
-            float bw = 150, bh = 64, gap = 10;
-            float total = TeamAIDifficultyLadder.LevelCount * bw + (TeamAIDifficultyLadder.LevelCount - 1) * gap;
-            float x0 = (w - total) * 0.5f;
+            // Fits the width (one row down to ~950 units, e.g. 4:3 iPads at 961-1031), else wraps to 4 + 3.
+            const float bh = 64f;
+            int rows = MenuGridLayout.Layout(TeamAIDifficultyLadder.LevelCount, w, y, _levelRects, bh);
             for (int i = 0; i < TeamAIDifficultyLadder.LevelCount; i++)
             {
                 var level = (TeamAIDifficultyLevel)i;
-                var r = new Rect(x0 + i * (bw + gap), y, bw, bh);
+                var m = _levelRects[i];
+                var r = new Rect(m.X, m.Y, m.Width, m.Height);
                 if (level == _pick) Panel(new Rect(r.x - 3, r.y - 3, r.width + 6, r.height + 6), new Color(1f, 0.8f, 0.1f));
                 if (GUI.Button(r, TeamAIDifficultyLadder.DisplayName(level), _button)) _pick = level;
             }
-            y += bh + 18;
+            y += MenuGridLayout.BlockHeight(rows, bh) + 18;
 
-            var prof = SinglePlayerDifficulty.For(_pick);
-            GUI.Label(new Rect(0, y, w, 26),
-                $"Opponent AI {prof.OpponentTheta:P0}   Teammate AI {prof.TeammateTheta:P0}   Pass assist {prof.PassAssist:P0}   Opponent keeper {Signed(prof.OpponentKeeperReflexDelta)}",
-                _label);
+            if (_statsKey != (int)_pick)
+            {
+                _statsKey = (int)_pick;
+                var prof = SinglePlayerDifficulty.For(_pick);
+                _statsText = $"Opponent AI {prof.OpponentTheta:P0}   Teammate AI {prof.TeammateTheta:P0}   Pass assist {prof.PassAssist:P0}   Opponent keeper {Signed(prof.OpponentKeeperReflexDelta)}";
+            }
+            GUI.Label(new Rect(0, y, w, 26), _statsText, _label);
             y += 44;
             if (GUI.Button(new Rect(w * 0.5f - 120, y, 240, 56), "Kick Off", _button)) _c.StartMatch(_pick);
             GUI.Label(new Rect(20, h - 34, w - 40, 26),
@@ -138,14 +154,33 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Panel(r, new Color(0.04f, 0.06f, 0.1f, 0.85f));
             Panel(new Rect(r.x, r.y, 6, r.height), new Color(1f, 0.8f, 0.1f));
             GUI.Label(new Rect(r.x + 10, r.y, 70, r.height), _c.HomeShort, _label);
-            GUI.Label(new Rect(r.x + 80, r.y, 90, r.height), $"{st.HomeScore} - {st.AwayScore}", _big);
+            long scoreKey = ((long)st.HomeScore << 32) | (uint)st.AwayScore;
+            if (scoreKey != _scoreKey)
+            {
+                _scoreKey = scoreKey;
+                _scoreText = $"{st.HomeScore} - {st.AwayScore}";
+            }
+            int clock = _c.ClockSeconds();
+            if (clock != _clockKey)
+            {
+                _clockKey = clock;
+                _clockText = $"{clock / 60:00}:{clock % 60:00}";
+            }
+            GUI.Label(new Rect(r.x + 80, r.y, 90, r.height), _scoreText, _big);
             GUI.Label(new Rect(r.x + 170, r.y, 70, r.height), _c.AwayShort, _label);
-            GUI.Label(new Rect(r.x + 250, r.y, 100, r.height), _c.ClockText(), _label);
-            string who = _c.AiVsAi ? "AI vs AI" : "You: " + (_c.HumanTeam == SimTeam.Home ? _c.HomeShort : _c.AwayShort);
+            GUI.Label(new Rect(r.x + 250, r.y, 100, r.height), _clockText, _label);
+
             int id = _c.AiVsAi ? -1 : _c.Session.ControlledId;
-            string name = id >= 0 && _c.Names != null ? "  |  " + _c.Names[id] : string.Empty;
-            GUI.Label(new Rect(r.x, r.yMax + 2, 520, 22),
-                $"{SinglePlayerMatchController.ProductName}  {TeamAIDifficultyLadder.DisplayName(_c.Level)}  |  {who}{name}", _small);
+            long statusKey = ((long)(id + 1) << 16) | ((long)_c.Level << 8) | ((long)_c.HumanTeam << 1) | (_c.AiVsAi ? 1L : 0L);
+            if (statusKey != _statusKey || !ReferenceEquals(_statusSession, _c.Session))
+            {
+                _statusKey = statusKey;
+                _statusSession = _c.Session;
+                string who = _c.AiVsAi ? "AI vs AI" : "You: " + (_c.HumanTeam == SimTeam.Home ? _c.HomeShort : _c.AwayShort);
+                string name = id >= 0 && _c.Names != null ? "  |  " + _c.Names[id] : string.Empty;
+                _statusText = $"{SinglePlayerMatchController.ProductName}  {TeamAIDifficultyLadder.DisplayName(_c.Level)}  |  {who}{name}";
+            }
+            GUI.Label(new Rect(r.x, r.yMax + 2, 520, 22), _statusText, _small);
         }
 
         private void DrawSubtitle(float w, float h)
@@ -197,16 +232,43 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (GUI.Button(new Rect(w * 0.5f - 110, h * 0.45f, 220, 50), "Resume", _button)) _c.Session.Resume();
         }
 
+        /// <summary>Result plus the way out: Rematch (same clubs and level, new seed), change teams/difficulty, quit to menu.</summary>
         private void DrawFullTime(float w, float h)
         {
-            var r = _c.Session.Result;
-            Panel(new Rect(w * 0.25f, h * 0.25f, w * 0.5f, h * 0.45f), new Color(0.03f, 0.05f, 0.09f, 0.92f));
-            GUI.Label(new Rect(0, h * 0.28f, w, 50), "Full Time", _title);
-            GUI.Label(new Rect(0, h * 0.36f, w, 40), $"{_c.HomeShort} {r.HomeScore} - {r.AwayScore} {_c.AwayShort}", _big);
-            string verdict = _c.AiVsAi ? "" : (r.Outcome > 0 ? "You win" : r.Outcome < 0 ? "You lose" : "Draw");
-            GUI.Label(new Rect(0, h * 0.43f, w, 30), verdict, _label);
-            GUI.Label(new Rect(0, h * 0.48f, w, 30),
-                $"Shots {r.HomeShots} - {r.AwayShots}    Possession {r.HomePossession:P0} - {1f - r.HomePossession:P0}    {TeamAIDifficultyLadder.DisplayName(r.Level)}", _label);
+            if (!ReferenceEquals(_ftSession, _c.Session))
+            {
+                _ftSession = _c.Session;
+                var r = _c.Session.Result;
+                _ftScore = $"{_c.HomeShort} {r.HomeScore} - {r.AwayScore} {_c.AwayShort}";
+                _ftVerdict = _c.AiVsAi ? "" : (r.Outcome > 0 ? "You win" : r.Outcome < 0 ? "You lose" : "Draw");
+                _ftStats = $"Shots {r.HomeShots} - {r.AwayShots}    Possession {r.HomePossession:P0} - {1f - r.HomePossession:P0}    {TeamAIDifficultyLadder.DisplayName(r.Level)}";
+            }
+            float pw = Mathf.Min(w - 32f, Mathf.Max(w * 0.5f, 640f));
+            float px = (w - pw) * 0.5f;
+            Panel(new Rect(px, h * 0.22f, pw, h * 0.56f), new Color(0.03f, 0.05f, 0.09f, 0.92f));
+            GUI.Label(new Rect(0, h * 0.25f, w, 50), "Full Time", _title);
+            GUI.Label(new Rect(0, h * 0.33f, w, 40), _ftScore, _big);
+            GUI.Label(new Rect(0, h * 0.40f, w, 30), _ftVerdict, _label);
+            GUI.Label(new Rect(px, h * 0.45f, pw, 30), _ftStats, _label);
+
+            float bw = Mathf.Min(200f, (pw - 40f) / 3f), bh = 50f, gap = 10f;
+            float x0 = (w - (3f * bw + 2f * gap)) * 0.5f, y = h * 0.56f;
+            if (GUI.Button(new Rect(x0, y, bw, bh), "Rematch", _button))
+            {
+                _c.Rematch();
+                return;
+            }
+            if (GUI.Button(new Rect(x0 + bw + gap, y, bw, bh), "Teams / Difficulty", _button))
+            {
+                _pick = _c.Level;
+                _c.EndMatch();
+                return;
+            }
+            if (GUI.Button(new Rect(x0 + 2f * (bw + gap), y, bw, bh), "Quit to Menu", _button))
+            {
+                _c.QuitToMenu();
+                _pick = _c.Level;
+            }
         }
     }
 }

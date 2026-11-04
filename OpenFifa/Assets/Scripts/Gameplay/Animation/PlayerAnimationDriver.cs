@@ -80,6 +80,9 @@ namespace OpenFifa.Gameplay
         private float _yawRate;
         private bool _hasPrev;
 
+        private bool _poseFrozen;
+        private float _speedBeforeFreeze = 1f;
+
         private readonly Vector3[] _extIkPos = new Vector3[4];
         private readonly float[] _extIkWeight = new float[4];
 
@@ -136,6 +139,15 @@ namespace OpenFifa.Gameplay
         }
 
         public Animator Animator => animator;
+
+        /// <summary>
+        /// The sim is not advancing (paused, frozen, half time, full time): locomotion gets zero speed, so players
+        /// stand instead of running on the spot with the last sim velocity. Set by the match controller every frame.
+        /// </summary>
+        public bool Halted { get; set; }
+
+        /// <summary>Hold the current pose (Animator.speed 0) while set, e.g. on the pause menu; restored when cleared.</summary>
+        public bool FreezePose { get; set; }
         public ActionSyncPlan CurrentPlan => _plan;
         public bool IsActionActive => _plan != null;
         /// <summary>Last measured contact error (s): positive = the animation reached contact late.</summary>
@@ -199,13 +211,19 @@ namespace OpenFifa.Gameplay
                 pos = rawPos;
                 yaw = SimYawToDegrees(rawYawRad);
             }
-            Vector3 vel = _source.Velocity;
+            ApplyPoseFreeze();
+            Vector3 vel = Halted ? Vector3.zero : _source.Velocity;
             vel.y = 0f;
 
             if (followSimTransform)
                 transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
 
-            if (_hasPrev)
+            if (Halted)
+            {
+                _acceleration = Vector3.zero;
+                _yawRate = 0f;
+            }
+            else if (_hasPrev)
             {
                 Vector3 rawAcc = (vel - _prevVelocity) / dt;
                 float k = accelerationSmoothing > 0f ? 1f - Mathf.Exp(-dt / accelerationSmoothing) : 1f;
@@ -220,6 +238,21 @@ namespace OpenFifa.Gameplay
             DriveLocomotion(dt, pos, vel, yaw);
             UpdateActionPlayback();
             ApplyWarp();
+        }
+
+        private void ApplyPoseFreeze()
+        {
+            if (FreezePose == _poseFrozen) return;
+            if (FreezePose)
+            {
+                _speedBeforeFreeze = animator.speed;
+                animator.speed = 0f;
+            }
+            else
+            {
+                animator.speed = _speedBeforeFreeze;
+            }
+            _poseFrozen = FreezePose;
         }
 
         // ------------------------------------------------------------------ actions
@@ -315,10 +348,10 @@ namespace OpenFifa.Gameplay
         {
             float speed = vel.magnitude;
             float rate = _rateSolver.RateFor(speed);
-            if (_plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
+            if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
                 rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
 
-            Vector3 desired = _source.DesiredVelocity;
+            Vector3 desired = Halted ? Vector3.zero : _source.DesiredVelocity;
             desired.y = 0f;
             var frame = new LocomotionFrame(_simTime, dt, pos, vel, _acceleration, desired, yaw, _yawRate,
                 _source.IsSprinting, rate);
@@ -326,6 +359,17 @@ namespace OpenFifa.Gameplay
             if (_backend != null && _backend.IsActive)
             {
                 _backend.DriveLocomotion(frame);
+                return;
+            }
+
+            if (Halted)
+            {
+                // Stopped clock: snap to idle instead of damping down from a sprint over several frames.
+                animator.SetFloat(SpeedHash, 0f);
+                animator.SetFloat(ForwardHash, 0f);
+                animator.SetFloat(StrafeHash, 0f);
+                animator.SetFloat(TurnRateHash, 0f);
+                animator.SetFloat(LocoRateHash, 1f);
                 return;
             }
 

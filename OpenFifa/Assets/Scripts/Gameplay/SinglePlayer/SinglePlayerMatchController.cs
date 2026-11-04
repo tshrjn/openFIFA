@@ -58,7 +58,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public string Subtitle { get; private set; } = string.Empty;
         public float SubtitleUntil { get; private set; }
 
+        private CommentaryLineBank _commentaryBank;
         private CommentaryEngine _commentary;
+        private Transform _playersRoot;
+        private float _ballRadius = 0.11f;
+        private TeamAIDifficultyLevel _defaultLevel;
+        /// <summary>Capture: keep Session.CameraYaw at the value the session was built with (matches the headless probe).</summary>
+        public bool PinCameraYaw { get; set; }
         private readonly Transform[] _players = new Transform[MatchSimState.PlayerCount];
         private readonly PlayerAnimationDriver[] _drivers = new PlayerAnimationDriver[MatchSimState.PlayerCount];
         private Transform _ball;
@@ -68,6 +74,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         private void Awake()
         {
+            _defaultLevel = Level;
             ParseCommandLine();
             BuildEnvironment();
             LoadRosters();
@@ -138,9 +145,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
             _ball = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             _ball.name = "Ball";
-            _ball.localScale = Vector3.one * 0.44f; // slightly oversized for readability at broadcast distance
+            SetBallRadius(new BallSimConfig().Radius);
             Destroy(_ball.GetComponent<Collider>());
             Tint(_ball.gameObject, Color.white);
+            ApplyBallPattern(_ball.gameObject);
             BroadcastCamera.Ball = _ball;
 
             _marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder).transform;
@@ -150,6 +158,57 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Tint(_marker.gameObject, new Color(1f, 0.85f, 0.1f));
             _marker.gameObject.SetActive(false);
             BroadcastCamera.Snap();
+        }
+
+        /// <summary>Visual ball = sim ball (Unity's sphere primitive is 1 m across), so it sits on the grass at y = r.</summary>
+        private void SetBallRadius(float r)
+        {
+            _ballRadius = r;
+            _ball.localScale = Vector3.one * (2f * r);
+        }
+
+        private static readonly int BaseMapId = Shader.PropertyToID("_BaseMap");
+        private static readonly int MainTexId = Shader.PropertyToID("_MainTex");
+
+        /// <summary>
+        /// Procedural panel pattern (dark patches at the 12 icosahedron vertices) so the ball's spin is visible.
+        /// Generated at runtime, no asset.
+        /// </summary>
+        private static void ApplyBallPattern(GameObject go)
+        {
+            var r = go.GetComponent<Renderer>();
+            if (r == null || r.sharedMaterial == null) return;
+            const int W = 128, H = 64;
+            float phi = (1f + Mathf.Sqrt(5f)) * 0.5f;
+            var verts = new Vector3[12];
+            int n = 0;
+            for (int a = -1; a <= 1; a += 2)
+            for (int b = -1; b <= 1; b += 2)
+            {
+                verts[n++] = new Vector3(0f, a, b * phi).normalized;
+                verts[n++] = new Vector3(a, b * phi, 0f).normalized;
+                verts[n++] = new Vector3(b * phi, 0f, a).normalized;
+            }
+            float cosR = Mathf.Cos(0.33f);
+            var px = new Color32[W * H];
+            for (int y = 0; y < H; y++)
+            {
+                float lat = ((y + 0.5f) / H - 0.5f) * Mathf.PI;
+                for (int x = 0; x < W; x++)
+                {
+                    float lon = (x + 0.5f) / W * 2f * Mathf.PI;
+                    var d = new Vector3(Mathf.Cos(lat) * Mathf.Cos(lon), Mathf.Sin(lat), Mathf.Cos(lat) * Mathf.Sin(lon));
+                    bool dark = false;
+                    for (int k = 0; k < 12 && !dark; k++) dark = Vector3.Dot(d, verts[k]) > cosR;
+                    px[y * W + x] = dark ? new Color32(30, 32, 40, 255) : new Color32(245, 245, 245, 255);
+                }
+            }
+            var tex = new Texture2D(W, H, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Bilinear, name = "BallPanels" };
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            var m = r.sharedMaterial;
+            if (m.HasProperty(BaseMapId)) m.SetTexture(BaseMapId, tex);
+            if (m.HasProperty(MainTexId)) m.SetTexture(MainTexId, tex);
         }
 
         private void BuildGoal(int side, PitchSpec pitch)
@@ -249,7 +308,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     Debug.LogWarning("[" + ProductName + "] commentary bank rejected: " + string.Join("; ", errors));
                     return;
                 }
-                _commentary = new CommentaryEngine(bank, null, (uint)(Seed & 0xffffffff) | 1u);
+                _commentaryBank = bank; // a fresh engine is made per match (StartMatch), seeded from the match seed
             }
             catch (Exception e)
             {
@@ -309,7 +368,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Session = new SinglePlayerMatchSession(options);
             Input = new SinglePlayerInput(Session.Profile.PassAssist);
             Session.HumanSlots[0].Input = CreateHumanInput();
+            _commentary = _commentaryBank != null ? new CommentaryEngine(_commentaryBank, null, (uint)(Seed & 0xffffffff) | 1u) : null;
             if (_commentary != null) Session.AttachCommentaryEngine(_commentary);
+            SetBallRadius(Session.Sim.Config.Ball.Radius);
+            _ball.rotation = Quaternion.identity;
 
             SpawnPlayers(homeColor, awayColor);
             BroadcastCamera.Snap();
@@ -318,12 +380,52 @@ namespace OpenFifa.Gameplay.SinglePlayer
                       $"{(AiVsAi ? "AI vs AI" : ScriptedHuman ? "scripted human" : "user = " + HumanTeam)}");
         }
 
+        /// <summary>Tears the match down and returns to the picker (selections kept). No-op without a match.</summary>
+        public void EndMatch()
+        {
+            if (Session == null) return;
+            if (_playersRoot != null) Destroy(_playersRoot.gameObject);
+            _playersRoot = null;
+            Array.Clear(_players, 0, _players.Length);
+            Array.Clear(_drivers, 0, _drivers.Length);
+            Session = null;
+            Input = null;
+            _commentary = null;
+            Frozen = false;
+            PinCameraYaw = false;
+            Subtitle = string.Empty;
+            SubtitleUntil = 0f;
+            _marker.gameObject.SetActive(false);
+            BroadcastCamera.Player = null;
+        }
+
+        /// <summary>Same clubs and level, next seed (deterministic: an LCG step of the current seed).</summary>
+        public void Rematch()
+        {
+            var level = Level;
+            EndMatch();
+            Seed = NextSeed(Seed);
+            StartMatch(level);
+        }
+
+        /// <summary>Back to the picker with the launch defaults (level, first two clubs).</summary>
+        public void QuitToMenu()
+        {
+            EndMatch();
+            Level = _defaultLevel;
+            HomeClubIndex = 0;
+            AwayClubIndex = 1;
+        }
+
+        public static ulong NextSeed(ulong seed) => seed * 6364136223846793005UL + 1442695040888963407UL;
+
         /// <summary>Runs the match without rendering up to <paramref name="tick"/> (captures, skipping ahead).</summary>
         public void FastForwardTo(int tick)
         {
             if (Session == null) return;
             while (Session.Sim.Tick < tick && !Session.IsFinished) Session.StepOnce(null);
             SyncVisuals();
+            UpdateControlledMarker();
             BroadcastCamera.Snap();
         }
 
@@ -338,6 +440,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var prefab = PlayerModelPrefab != null ? PlayerModelPrefab : Resources.Load<GameObject>("OpenFootball/PlayerModel");
             var root = new GameObject("Players").transform;
             root.SetParent(transform, false);
+            _playersRoot = root;
             for (int id = 0; id < MatchSimState.PlayerCount; id++)
             {
                 bool homeTeam = id < MatchSetup.PlayersPerTeam;
@@ -386,24 +489,87 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 }
             }
             SyncVisuals();
+            UpdateControlledMarker();
         }
+
+        /// <summary>
+        /// False while the match clock is held: paused, frozen for a capture still, half time or full time.
+        /// Drivers get zero speed then, and touches are cancelled.
+        /// </summary>
+        public bool SimAdvancing =>
+            Session != null && !Frozen && !Session.Paused
+            && Session.Sim.Phase != SimMatchPhase.HalfTime && Session.Sim.Phase != SimMatchPhase.FullTime;
 
         private void Update()
         {
             if (Session == null) return;
             _realClock += Time.unscaledDeltaTime;
-            if (PausePressed()) Session.TogglePause();
-            if (Frozen) { SyncVisuals(); return; }
-            Session.CameraYaw = BroadcastCamera.YawRadians;
-            Session.Advance(Time.deltaTime, null, _realClock);
-
-            foreach (var cue in Session.FrameCues)
+            if (PausePressed() && !Session.IsFinished) Session.TogglePause();
+            // Touch edges are queued every frame and drained per sim tick (SinglePlayerInput.Read).
+            Input?.PollFrame(SimAdvancing);
+            if (!Frozen)
             {
-                if (cue.Kind != CommentaryCueKind.Start || cue.Utterance == null) continue;
-                Subtitle = cue.Utterance.Transcript.Replace(" | ", " ");
-                SubtitleUntil = Time.unscaledTime + 4.5f;
+                if (!PinCameraYaw) Session.CameraYaw = BroadcastCamera.YawRadians;
+                Session.Advance(Time.deltaTime, null, _realClock);
+
+                var cues = Session.FrameCues;
+                for (int i = 0; i < cues.Count; i++)
+                {
+                    var cue = cues[i];
+                    if (cue.Kind != CommentaryCueKind.Start || cue.Utterance == null) continue;
+                    Subtitle = cue.Utterance.Transcript.Replace(" | ", " ");
+                    SubtitleUntil = Time.unscaledTime + 4.5f;
+                }
+            }
+            // After Advance, so a whistle this frame already stops the legs; drivers run later (order 100).
+            bool advancing = SimAdvancing;
+            bool freezePose = Frozen || Session.Paused;
+            for (int id = 0; id < _drivers.Length; id++)
+            {
+                if (_drivers[id] == null) continue;
+                _drivers[id].Halted = !advancing;
+                _drivers[id].FreezePose = freezePose;
             }
             SyncVisuals();
+            RotateBall(advancing ? Time.deltaTime : 0f);
+        }
+
+        /// <summary>
+        /// Spins the ball mesh: rolling (v / r about Up x v, plus the sim's side spin) on the ground, the sim's
+        /// angular velocity in flight. The sim's spin vector maps one-to-one onto Unity's AngleAxis convention.
+        /// </summary>
+        private void RotateBall(float dt)
+        {
+            if (dt <= 0f) return;
+            var b = Session.Sim.State.Ball;
+            SimVec3 w = b.Grounded ? BallIntegrator.RollingSpin(b.Velocity, _ballRadius, b.Spin.Y) : b.Spin;
+            float mag = w.Magnitude;
+            if (mag < 1e-3f) return;
+            var axis = new Vector3(w.X / mag, w.Y / mag, w.Z / mag);
+            _ball.rotation = Quaternion.AngleAxis(mag * dt * Mathf.Rad2Deg, axis) * _ball.rotation;
+        }
+
+        /// <summary>The controlled-player ring follows the player after the animation drivers (order 100) moved it.</summary>
+        private void LateUpdate()
+        {
+            if (Session == null) return;
+            UpdateControlledMarker();
+        }
+
+        private void UpdateControlledMarker()
+        {
+            int controlled = AiVsAi ? -1 : Session.ControlledId;
+            bool show = controlled >= 0 && _players[controlled] != null && _players[controlled].gameObject.activeSelf;
+            _marker.gameObject.SetActive(show);
+            if (show)
+            {
+                _marker.position = _players[controlled].position + new Vector3(0f, 0.03f, 0f);
+                BroadcastCamera.Player = _players[controlled];
+            }
+            else
+            {
+                BroadcastCamera.Player = null;
+            }
         }
 
         private static bool PausePressed()
@@ -437,19 +603,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
             var pb = Session.PreviousBall;
             var b = s.Ball.Position;
-            _ball.position = new Vector3(Mathf.Lerp(pb.X, b.X, alpha), Mathf.Max(0.11f, Mathf.Lerp(pb.Y, b.Y, alpha)), Mathf.Lerp(pb.Z, b.Z, alpha));
-
-            int controlled = AiVsAi ? -1 : Session.ControlledId;
-            _marker.gameObject.SetActive(controlled >= 0);
-            if (controlled >= 0)
-            {
-                _marker.position = _players[controlled].position + new Vector3(0f, 0.03f, 0f);
-                BroadcastCamera.Player = _players[controlled];
-            }
-            else
-            {
-                BroadcastCamera.Player = null;
-            }
+            _ball.position = new Vector3(Mathf.Lerp(pb.X, b.X, alpha), Mathf.Max(_ballRadius, Mathf.Lerp(pb.Y, b.Y, alpha)), Mathf.Lerp(pb.Z, b.Z, alpha));
         }
 
         public Transform PlayerTransform(int id) => _players[id];
@@ -459,12 +613,19 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         public string ClockText()
         {
-            if (Session == null) return "00:00";
+            int t = ClockSeconds();
+            return $"{t / 60:00}:{t % 60:00}";
+        }
+
+        /// <summary>Displayed match clock in whole seconds (90-minute scale). Allocation-free; the HUD caches the string.</summary>
+        public int ClockSeconds()
+        {
+            if (Session == null) return 0;
             var s = Session.Sim.State;
             float minutes = s.Clock / Session.Sim.Config.HalfDurationSeconds * 45f + (s.Half >= 2 ? 45f : 0f);
             int m = Mathf.FloorToInt(minutes);
             int sec = Mathf.FloorToInt((minutes - m) * 60f);
-            return $"{m:00}:{sec:00}";
+            return m * 60 + sec;
         }
 
         public string HomeShort => HomeClub != null ? HomeClub.ShortName : "HOM";

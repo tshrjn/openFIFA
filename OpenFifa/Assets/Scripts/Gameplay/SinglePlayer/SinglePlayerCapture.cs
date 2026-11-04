@@ -15,7 +15,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// 3. writes frames/frame_00001.png... at a fixed capture frame rate (Time.captureFramerate), plus stills from the
     ///    broadcast, sideline, close-up, goal-area and top-down cameras and one with the HUD and touch overlay;
     /// 4. quits. Stitch the frames with ffmpeg.
+    ///
+    /// The user's seat is always driven by the deterministic <see cref="ScriptedGamepadBot"/> (or the team AI with
+    /// -spAiVsAi) in both the probe and the recorded match, so the probe's goal actually happens on camera.
+    /// Runs after the controller (execution order -40 vs -50), so its Awake sees the parsed command line and its
+    /// AutoStart override cannot be undone by the controller's Awake.
     /// </summary>
+    [DefaultExecutionOrder(-40)]
     [RequireComponent(typeof(SinglePlayerMatchController))]
     public sealed class SinglePlayerCapture : MonoBehaviour
     {
@@ -42,6 +48,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 return;
             }
             _c.AutoStart = false; // the capture drives the start
+            // Device input would leave the user's player idle and diverge from the headless probe.
+            if (!_c.AiVsAi) _c.ScriptedHuman = true;
             Directory.CreateDirectory(Path.Combine(OutputDir, "frames"));
             Time.captureFramerate = Mathf.Max(1, Fps);
         }
@@ -60,18 +68,23 @@ namespace OpenFifa.Gameplay.SinglePlayer
             // Find the first goal headless with the same options and inputs.
             var probeOptions = _c.BuildOptions(_c.Level, out _, out _);
             var probe = new SinglePlayerMatchSession(probeOptions);
-            probe.HumanSlots[0].Input = _c.CreateHumanInput() is ScriptedGamepadBot ? new ScriptedGamepadBot() : null;
+            // Same seat driver as the recorded match: a fresh bot (forced in Awake), or null = team AI in AI vs AI.
+            probe.HumanSlots[0].Input = _c.CreateHumanInput();
             int goalTick = -1;
             while (!probe.IsFinished && goalTick < 0)
             {
                 var ev = probe.StepOnce(null);
                 for (int i = 0; i < ev.Count; i++)
-                    if (ev[i].Type == MatchEventType.Goal && probe.Sim.Tick > 600) goalTick = probe.Sim.Tick;
+                    if (ev[i].Type == MatchEventType.Goal && probe.Sim.Tick > 10 * probe.Sim.Config.TickRate) goalTick = probe.Sim.Tick;
             }
             Debug.Log("[capture] first goal at tick " + goalTick);
 
             _c.StartMatch(_c.Level);
-            int startTick = goalTick > 0 ? Math.Max(0, goalTick - (int)(Seconds * 0.66f * 60f)) : 0;
+            // The probe stepped with the yaw it was built with; keep the recorded match on exactly that value.
+            _c.Session.CameraYaw = probeOptions.CameraYaw;
+            _c.PinCameraYaw = true;
+            int tickRate = _c.Session.Sim.Config.TickRate;
+            int startTick = goalTick > 0 ? Math.Max(0, goalTick - (int)(Seconds * 0.66f * tickRate)) : 0;
             if (startTick > 0) _c.FastForwardTo(startTick);
             yield return null;
 
@@ -89,6 +102,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
                 if (!goalStillDone && _c.Session.Sim.Phase == SimMatchPhase.Stoppage && _c.Session.Sim.State.Ball.InNet != 0)
                 {
+                    Debug.Log("[capture] goal on camera at tick " + _c.Session.Sim.Tick + " (probe " + goalTick + ")");
                     goalStillDone = true;
                     _c.BroadcastCamera.GoalSide = _c.Session.Sim.State.Ball.InNet;
                     yield return ModeStill(SinglePlayerCamera.Mode.GoalArea, "still_goal_area.png");
