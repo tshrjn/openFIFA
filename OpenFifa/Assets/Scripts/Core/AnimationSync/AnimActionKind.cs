@@ -54,6 +54,10 @@ namespace OpenFifa.Core
         public const string ParamLocoRate = "LocoRate";
         public const string ParamActionRate = "ActionRate";
         public const string ParamMirror = "Mirror";
+        /// <summary>Idle blend 0..1: Quaternius Idle_Loop to the generated weight-shift idle (see <see cref="IdleVariety"/>).</summary>
+        public const string ParamIdleVariant = "IdleVariant";
+        /// <summary>Idle blend 0..1 toward the generated ready stance (ball close).</summary>
+        public const string ParamReady = "Ready";
 
         /// <summary>Animation event function name fired on the contact frame of action clips.</summary>
         public const string ContactEvent = "OnActionContact";

@@ -19,6 +19,16 @@ namespace OpenFifa.Core
         /// just reach and arrives late (seen in full-sim matches once ball prediction became exact).
         /// </summary>
         public const float ChaseAccelerationLag = 0.3f;
+        /// <summary>Scale of the adjustment drift while the ball is dead (set-piece holders, routine runners).</summary>
+        public const float SetPieceDriftScale = 0.6f;
+        /// <summary>Team-mates holding shape keep at least this far (m) from our carrier: support comes from 8-15 m.</summary>
+        public const float CarrierSpacing = 8f;
+        /// <summary>Score bonus for keeping last tick's support spot (relative to the carrier).</summary>
+        public const float SupportSpotStickiness = 0.25f;
+        /// <summary>Score cost per metre between a supporter and a candidate support spot.</summary>
+        public const float SupportTravelCost = 0.015f;
+        /// <summary>Score cost of a support spot straight down a running carrier's line (within ~30 deg).</summary>
+        public const float SupportLanePenalty = 0.4f;
 
         public readonly int Team;
         public TeamAITactics Tactics;
@@ -47,6 +57,13 @@ namespace OpenFifa.Core
         }
         /// <summary>Formation anchors by slot (0..10), world space.</summary>
         public readonly SimVec3[] Anchors = new SimVec3[TeamAIFormations.SlotCount];
+        /// <summary>
+        /// Velocity of each formation anchor (m/s, flat, smoothed): how fast the block slides with the ball. Holders get
+        /// it as their move target's velocity so they flow with the shape (see <see cref="TeamAIShapeMotion"/>).
+        /// </summary>
+        public readonly SimVec3[] AnchorVelocities = new SimVec3[TeamAIFormations.SlotCount];
+        private readonly SimVec3[] _anchorsAhead = new SimVec3[TeamAIFormations.SlotCount];
+        private TeamAIPhase _anchorPhase = (TeamAIPhase)(-1);
 
         public TeamAIPhase Phase => PhaseMachine.Phase;
         /// <summary>Our back-line depth (0..1 from our goal) this tick.</summary>
@@ -71,6 +88,8 @@ namespace OpenFifa.Core
         private readonly float[] _runStart = new float[TeamAIWorld.MaxPlayers];
         private readonly bool[] _oppTaken = new bool[TeamAIWorld.MaxPlayers];
         private readonly int[] _supporters = new int[2];
+        private readonly SimVec3[] _supportOffset = new SimVec3[TeamAIWorld.MaxPlayers];
+        private readonly int[] _supportOwner = new int[TeamAIWorld.MaxPlayers];
         private SimVec3 _firstSupportSpot;
         /// <summary>AI teammate making a run a human asked for this tick, -1 when none.</summary>
         public int DirectedRunnerIndex { get; private set; } = -1;
@@ -86,6 +105,7 @@ namespace OpenFifa.Core
             Tactics = tactics ?? new TeamAITactics();
             Difficulty = difficulty;
             Rng = new TeamAIRandom(seed);
+            for (int k = 0; k < _supportOwner.Length; k++) _supportOwner[k] = -1;
         }
 
         public void SetDifficulty(float theta) => Difficulty = new TeamAIDifficulty(theta);
@@ -118,6 +138,7 @@ namespace OpenFifa.Core
 
             // ---- Layer 2: formation anchors ----
             float line = TeamAIFormationShape.ComputeAnchors(phase, Tactics, ball, sign, pitch, Anchors);
+            UpdateAnchorVelocities(world, phase, sign, dt);
             if (!inPossession && ownerIndex >= 0 && ownerTeam != Team)
             {
                 // Ball pressure rule: drop the line when the carrier is unpressured and facing our goal.
@@ -172,7 +193,15 @@ namespace OpenFifa.Core
             for (int i = 0; i < TeamAIWorld.MaxPlayers; i++) _oppTaken[i] = false;
             _supporters[0] = -1;
             _supporters[1] = -1;
-            if (hasPossession && ownerIndex >= 0 && ownerTeam == Team) SelectSupporters(world, ownerIndex);
+            if (hasPossession && ownerIndex >= 0 && ownerTeam == Team)
+            {
+                SelectSupporters(world, ownerIndex);
+                // The first supporter's spot is fixed before anyone moves, so the second one (whatever his index) avoids
+                // this tick's spot, not last tick's.
+                if (_supporters[0] >= 0)
+                    _firstSupportSpot = FindSupportSpot(world, pc, _supporters[0], ownerIndex, AnchorFor(world.Players[_supporters[0]]),
+                        world.AttackSign(Team), false);
+            }
 
             int runners = 0;
             int overlappers = 0;
@@ -230,9 +259,14 @@ namespace OpenFifa.Core
                 if (SetPieceRoutineActive && SetPieces.Roles[i] != TeamAISetPieceRole.None)
                 {
                     var t = SetPieces.Targets[i];
-                    bool marker = SetPieces.Roles[i] == TeamAISetPieceRole.Marker;
-                    SetMove(ref cmd, p, t, TeamAIMath.FlatDistance(p.Position, t) > 12f,
-                        marker ? TeamAIIntent.Mark : TeamAIIntent.HoldShape);
+                    var role = SetPieces.Roles[i];
+                    bool marker = role == TeamAISetPieceRole.Marker;
+                    if (RoutineRoleDrifts(role, SetPieces.Kind))
+                        SetHold(ref cmd, p, world, t, SimVec3.Zero, TeamAIMath.FlatDistance(p.Position, t) > 12f,
+                            TeamAIIntent.HoldShape, false, false, SetPieceDriftScale);
+                    else
+                        SetMove(ref cmd, p, t, TeamAIMath.FlatDistance(p.Position, t) > 12f,
+                            marker ? TeamAIIntent.Mark : TeamAIIntent.HoldShape);
                     if (marker && SetPieces.MarkIndex[i] >= 0) cmd.TargetPlayerId = world.Players[SetPieces.MarkIndex[i]].Id;
                     continue;
                 }
@@ -379,8 +413,10 @@ namespace OpenFifa.Core
             // Support the ball carrier with an open angle.
             if (ownerOurs && (i == _supporters[0] || i == _supporters[1]))
             {
-                var spot = FindSupportSpot(world, pc, i, ownerIndex, anchor, sign, i == _supporters[1]);
-                if (i == _supporters[0]) _firstSupportSpot = spot;
+                var raw = i == _supporters[0] ? _firstSupportSpot : FindSupportSpot(world, pc, i, ownerIndex, anchor, sign, true);
+                var spot = SpaceFromCarrier(world, ownerIndex, raw);
+                // The spot is relative to the carrier: it moves with him, so the supporter keeps his 8-15 m distance
+                // (and angle) while the carrier dribbles instead of being run onto.
                 SetMove(ref cmd, p, spot, TeamAIMath.FlatDistance(p.Position, spot) > 8f, TeamAIIntent.Support);
                 return;
             }
@@ -412,9 +448,10 @@ namespace OpenFifa.Core
                 intent = TeamAIIntent.HoldWidth;
             }
             float tDepth = TeamAIMath.Depth(t.Z, sign, pitch);
-            if (tDepth > onsideDepth && tDepth > 0.5f)
-                t = new SimVec3(t.X, 0f, TeamAIMath.DepthToZ(Math.Max(onsideDepth, 0.5f), sign, pitch));
-            SetMove(ref cmd, p, t, TeamAIMath.FlatDistance(p.Position, t) > 15f, intent);
+            if (tDepth > onsideDepth - 0.012f && tDepth > 0.5f)
+                t = new SimVec3(t.X, 0f, TeamAIMath.DepthToZ(Math.Max(onsideDepth - 0.012f, 0.5f), sign, pitch)); // drift room
+            SetHold(ref cmd, p, world, t, AnchorVelocityFor(p), TeamAIMath.FlatDistance(p.Position, t) > 15f, intent,
+                false, intent == TeamAIIntent.HoldWidth, 1f, ownerOurs ? ownerIndex : -1);
         }
 
         private SimVec3 FindSupportSpot(TeamAIWorld world, TeamAIPitchControl pc, int i, int ownerIndex, SimVec3 anchor,
@@ -427,18 +464,28 @@ namespace OpenFifa.Core
             var best = anchor;
             float bestScore = float.MinValue;
             var forward = new SimVec3(0f, 0f, sign);
-            // A carrier closed down needs a short outlet: come to him (7 m) rather than wait at 12-19 m.
+            // Support comes from 8-15 m (a closed-down carrier gets the short 8 m outlet first). Closer than that a
+            // supporter only brings his marker into the carrier's space; the second supporter takes a different line
+            // (at least 50 deg round from the first, and 8 m from his spot).
             bool pressed = TeamAIOnBall.NearestOpponentDistance(world, Team, from) < 2.5f;
+            var me = TeamAIMath.Flat(world.Players[i].Position);
+            bool keep = _supportOwner[i] == world.Ball.OwnerId && world.Ball.OwnerId >= 0;
+            var prevOffset = _supportOffset[i];
+            var carrierVel = TeamAIMath.Flat(owner.Velocity);
+            bool carrierRunning = carrierVel.SqrMagnitude > 4f;
+            var carrierDir = carrierRunning ? carrierVel.Normalized : SimVec3.Zero;
+            var firstDir = TeamAIMath.FlatDirection(from, _firstSupportSpot);
             for (int ring = 0; ring < 2; ring++)
             {
-                float radius = ring == 0 ? (pressed ? 7f : 12f) : (pressed ? 12f : 19f);
+                float radius = ring == 0 ? (pressed ? 8f : 10f) : (pressed ? 12f : 15f);
                 for (int k = 0; k < 8; k++)
                 {
                     var dir = TeamAIMath.RotateFlat(forward, k * 0.785398f);
                     var c = TeamAIMath.ClampToPitch(from + dir * radius, pitch, 2f);
                     float cDepth = TeamAIMath.Depth(c.Z, sign, pitch);
                     if (cDepth > OffsideDepth - 0.008f && cDepth > 0.5f) continue;
-                    if (avoidFirst && TeamAIMath.FlatDistance(c, _firstSupportSpot) < 8f) continue;
+                    if (avoidFirst && (TeamAIMath.FlatDistance(c, _firstSupportSpot) < 8f ||
+                                       SimVec3.Dot(TeamAIMath.FlatDirection(from, c), firstDir) > 0.64f)) continue;
                     float control = pc.ControlAt(Team, c);
                     float lane = TeamAIOnBall.InterceptionRisk(world, Team, from, c,
                         TeamAIOnBall.GroundPassTime(radius), false);
@@ -446,9 +493,18 @@ namespace OpenFifa.Core
                     float score = control + 0.8f * (cDepth - ownerDepth) - 0.7f * lane -
                                   0.02f * Math.Max(0f, drift - 10f);
                     score += Rng.NextSigned() * Difficulty.DecisionNoise * 0.5f;
+                    // Commit to a line: a spot near the one picked last tick (relative to the carrier) is preferred, and
+                    // spots on the far side of the carrier cost the trip. A supporter whose spot flips round the carrier
+                    // every 0.1 s never gets out of his space.
+                    if (keep && TeamAIMath.FlatDistance(c, from + prevOffset) < 4f) score += SupportSpotStickiness;
+                    score -= SupportTravelCost * TeamAIMath.FlatDistance(c, me);
+                    // Not in the carrier's running lane: he would dribble straight into his supporter.
+                    if (carrierRunning && SimVec3.Dot(dir, carrierDir) > 0.85f) score -= SupportLanePenalty;
                     if (score > bestScore) { bestScore = score; best = c; }
                 }
             }
+            _supportOffset[i] = best - from;
+            _supportOwner[i] = world.Ball.OwnerId;
             return best;
         }
 
@@ -507,8 +563,16 @@ namespace OpenFifa.Core
                     target = new SimVec3(x, 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
                     markVel = intent == TeamAIIntent.Mark ? world.Players[opp].Velocity : SimVec3.Zero;
                 }
-                SetMoveTracking(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), markVel, false, intent);
-                if (opp >= 0) cmd.TargetPlayerId = world.Players[opp].Id;
+                if (opp >= 0)
+                {
+                    SetMoveTracking(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), markVel, false, intent);
+                    cmd.TargetPlayerId = world.Players[opp].Id;
+                }
+                else
+                {
+                    // Nobody to pick up: hold the line, sliding with it and adjusting along it.
+                    SetHold(ref cmd, p, world, target, AnchorVelocityFor(p), false, intent, true, false);
+                }
                 return;
             }
 
@@ -534,7 +598,8 @@ namespace OpenFifa.Core
                 }
             }
 
-            SetMove(ref cmd, p, anchor, TeamAIMath.FlatDistance(p.Position, anchor) > 15f, TeamAIIntent.HoldShape);
+            SetHold(ref cmd, p, world, anchor, AnchorVelocityFor(p), TeamAIMath.FlatDistance(p.Position, anchor) > 15f,
+                TeamAIIntent.HoldShape, false, false);
         }
 
         private void DecidePresser(TeamAIWorld world, int i, SimVec3 anchor, int ownerIndex, TeamAIPhase phase, int sign,
@@ -588,7 +653,7 @@ namespace OpenFifa.Core
                 }
                 else
                 {
-                    SetMove(ref cmd, p, anchor, false, TeamAIIntent.HoldShape);
+                    SetHold(ref cmd, p, world, anchor, AnchorVelocityFor(p), false, TeamAIIntent.HoldShape, false, false);
                 }
                 return;
             }
@@ -699,6 +764,14 @@ namespace OpenFifa.Core
                 float d = TeamAIMath.Depth(t.Z, sign, pitch);
                 if (d > 0.49f) t = new SimVec3(t.X, 0f, TeamAIMath.DepthToZ(0.49f, sign, pitch));
             }
+            bool kickoff = world.MatchPhase == TeamAIMatchPhase.Kickoff;
+            var driftVel = SimVec3.Zero;
+            if (!kickoff)
+            {
+                // Dead ball: walk small adjustments around the spot (kick-off spots stay put: the halfway line is close).
+                TeamAIShapeMotion.Adjustment(p.Id, world.Time, false, false, out var off, out driftVel, SetPieceDriftScale);
+                t += off;
+            }
             if (phase == TeamAIPhase.SetPieceAgainst)
             {
                 float d = TeamAIMath.FlatDistance(t, ball);
@@ -710,7 +783,35 @@ namespace OpenFifa.Core
                 }
             }
             t = TeamAIMath.ClampToPitch(t, pitch, 0.5f);
-            SetMove(ref cmd, p, t, false, TeamAIIntent.HoldShape);
+            if (kickoff) SetMove(ref cmd, p, t, false, TeamAIIntent.HoldShape);
+            else SetHold(ref cmd, p, world, t, driftVel, false, TeamAIIntent.HoldShape, false, false, 0f);
+        }
+
+        /// <summary>
+        /// Routine players who jostle for position while the ball is dead: box runners, zonal defenders, outlets. Walls,
+        /// markers (they follow their man), keepers, the taker and every penalty role keep their exact spot.
+        /// </summary>
+        private static bool RoutineRoleDrifts(TeamAISetPieceRole role, TeamAISetPieceKind kind)
+        {
+            if (kind == TeamAISetPieceKind.PenaltyFor || kind == TeamAISetPieceKind.PenaltyAgainst) return false;
+            switch (role)
+            {
+                case TeamAISetPieceRole.NearPost:
+                case TeamAISetPieceRole.FarPost:
+                case TeamAISetPieceRole.Central:
+                case TeamAISetPieceRole.KeeperScreen:
+                case TeamAISetPieceRole.EdgeOfBox:
+                case TeamAISetPieceRole.ShortOption:
+                case TeamAISetPieceRole.RestDefence:
+                case TeamAISetPieceRole.Rebound:
+                case TeamAISetPieceRole.ZonalPost:
+                case TeamAISetPieceRole.ZonalSixYard:
+                case TeamAISetPieceRole.ZonalEdge:
+                case TeamAISetPieceRole.Outlet:
+                    return true;
+                default:
+                    return false;
+            }
         }
 
         private int SetPieceTaker(TeamAIWorld world, SimVec3 ball)
@@ -912,6 +1013,75 @@ namespace OpenFifa.Core
                 if (d < best) best = d;
             }
             return best;
+        }
+
+        /// <summary>
+        /// Keeps a shape spot at least <see cref="CarrierSpacing"/> from our carrier: a team-mate whose spot falls on
+        /// top of the ball holds it on the same bearing 8 m out instead, so he is a passing option, not a crowd.
+        /// </summary>
+        private static SimVec3 SpaceFromCarrier(TeamAIWorld world, int ownerIndex, SimVec3 spot)
+        {
+            var c = TeamAIMath.Flat(world.Players[ownerIndex].Position);
+            float d = TeamAIMath.FlatDistance(spot, c);
+            if (d >= CarrierSpacing) return spot;
+            var dir = d > 0.3f ? TeamAIMath.FlatDirection(c, spot) : new SimVec3(c.X > 0f ? -1f : 1f, 0f, 0f);
+            return TeamAIMath.ClampToPitch(c + dir * CarrierSpacing, world.Pitch, 1.5f);
+        }
+
+        /// <summary>
+        /// Differentiates the anchors: anchors for the ball <see cref="TeamAIShapeMotion.AnchorLookAhead"/> s ahead
+        /// (same phase) minus anchors now, smoothed. Zero while the ball is dead or the phase just changed.
+        /// </summary>
+        private void UpdateAnchorVelocities(TeamAIWorld world, TeamAIPhase phase, int sign, float dt)
+        {
+            var ballVel = TeamAIShapeMotion.ClampSpeed(TeamAIMath.Flat(world.Ball.Velocity), TeamAIShapeMotion.MaxAnchorBallSpeed);
+            bool live = world.MatchPhase == TeamAIMatchPhase.InPlay && phase == _anchorPhase;
+            _anchorPhase = phase;
+            float k = dt > 0f ? 1f - (float)Math.Exp(-dt / TeamAIShapeMotion.AnchorVelocitySmoothing) : 1f;
+            if (live && ballVel.SqrMagnitude > 1e-4f)
+            {
+                var ahead = TeamAIMath.Flat(world.Ball.Position) + ballVel * TeamAIShapeMotion.AnchorLookAhead;
+                TeamAIFormationShape.ComputeAnchors(phase, Tactics, ahead, sign, world.Pitch, _anchorsAhead);
+            }
+            for (int s = 0; s < TeamAIFormations.SlotCount; s++)
+            {
+                var v = SimVec3.Zero;
+                if (live && ballVel.SqrMagnitude > 1e-4f)
+                    v = TeamAIShapeMotion.ClampSpeed((_anchorsAhead[s] - Anchors[s]) * (1f / TeamAIShapeMotion.AnchorLookAhead),
+                        TeamAIShapeMotion.MaxAnchorSpeed);
+                if (!live) AnchorVelocities[s] = v;
+                else AnchorVelocities[s] = AnchorVelocities[s] + (v - AnchorVelocities[s]) * k;
+            }
+        }
+
+        private SimVec3 AnchorVelocityFor(in TeamAIPlayer p)
+        {
+            int slot = p.FormationSlot;
+            if (slot < 0 || slot >= TeamAIFormations.SlotCount) return SimVec3.Zero;
+            return AnchorVelocities[slot];
+        }
+
+        /// <summary>
+        /// Hold a shape spot: the spot plus the player's adjustment drift, moving with the block's slide and the drift
+        /// (<see cref="TeamAIShapeMotion"/>). A player far from the spot just runs there (the drift is ignored by the
+        /// arrival logic until he is close; it is under 1.3 m).
+        /// </summary>
+        private void SetHold(ref AIPlayerCommand cmd, in TeamAIPlayer p, TeamAIWorld world, SimVec3 spot, SimVec3 spotVelocity,
+            bool sprint, TeamAIIntent intent, bool lineKeeper, bool wide, float driftScale = 1f, int spaceFromCarrier = -1)
+        {
+            TeamAIShapeMotion.Adjustment(p.Id, world.Time, lineKeeper, wide, out var off, out var offVel, driftScale);
+            if (lineKeeper)
+            {
+                // The back line steps up and drops together: one shared depth drift per team, so it stays level.
+                TeamAIShapeMotion.Adjustment(TeamAIShapeMotion.LineDriftId + Team, world.Time, true, false, out var lineOff,
+                    out var lineVel, driftScale);
+                off = new SimVec3(off.X, 0f, lineOff.Z);
+                offVel = new SimVec3(offVel.X, 0f, lineVel.Z);
+            }
+            var t = TeamAIMath.ClampToPitch(spot + off, world.Pitch, 0.5f);
+            if (spaceFromCarrier >= 0) t = SpaceFromCarrier(world, spaceFromCarrier, t);
+            SetMove(ref cmd, p, t, sprint, intent);
+            cmd.MoveTargetVelocity = TeamAIMath.Flat(spotVelocity + offVel);
         }
 
         private static void SetMove(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, bool sprint, TeamAIIntent intent)

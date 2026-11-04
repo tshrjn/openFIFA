@@ -33,6 +33,16 @@ namespace OpenFifa.Core
         /// </summary>
         public const float AssumedJogSpeed = 5f;
         public const float AssumedSprintSpeed = 8f;
+        /// <summary>
+        /// Shape adjustments: a plain (non-sprint) move to a spot closer than this (m) that moves slower than
+        /// <see cref="AdjustMaxTargetSpeed"/> is walked as a shuffle that keeps the body on the ball (the sim's held
+        /// Jockey: faces the ball, strafes or backpedals), the way an off-ball player re-positions without turning his
+        /// back on play. Further away, or for a fast target, he turns and runs.
+        /// </summary>
+        public const float AdjustRadius = 3f;
+        public const float AdjustMaxTargetSpeed = 2f;
+        /// <summary>Throttle cap of an adjustment shuffle (about 2 m/s at a typical jog top speed).</summary>
+        public const float AdjustMaxThrottle = 0.4f;
 
         public readonly TeamAIWorld World;
         public readonly TeamAITactics HomeTactics;
@@ -156,6 +166,24 @@ namespace OpenFifa.Core
             }
         }
 
+        /// <summary>Off-ball positioning intents that may shuffle facing the ball (never the carrier or a ball chaser).</summary>
+        public static bool IsOffBallShapeIntent(TeamAIIntent intent)
+        {
+            switch (intent)
+            {
+                case TeamAIIntent.HoldShape:
+                case TeamAIIntent.HoldWidth:
+                case TeamAIIntent.KeepLine:
+                case TeamAIIntent.Support:
+                case TeamAIIntent.Mark:
+                case TeamAIIntent.CoverShadow:
+                case TeamAIIntent.GKPosition:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         public static IntentAction MapAction(TeamAIAction a)
         {
             switch (a)
@@ -260,7 +288,28 @@ namespace OpenFifa.Core
                 // Holding the spot: no micro-steering, just turn to face the ball. A throttle this small turns the body
                 // (the sim faces the move direction below 0.3 m/s) while asking for under 2 cm/s.
                 SimVec3 look = (cmd.LookAt - player.Position).Flat;
-                if (look.SqrMagnitude > 0.25f) intent.Move = look.Normalized * FaceThrottle;
+                if (look.SqrMagnitude > 0.25f)
+                {
+                    // Still coasting in: brake facing the ball (held Jockey, no move) instead of swinging the body round
+                    // to the run direction for the last half metre; settled: the tiny turn-only throttle.
+                    if (speed > 0.3f && IsOffBallShapeIntent(cmd.Intent)) intent.Action = IntentAction.Jockey;
+                    else intent.Move = look.Normalized * FaceThrottle;
+                }
+            }
+
+            // Small shape adjustment: shuffle facing the ball instead of turning the body to every 1 m step.
+            // Hysteresis on the sim's own Jockeying flag (last tick's mode): stay in the shuffle until clearly out of it,
+            // so the body does not swap between facing the ball and facing the run every few ticks.
+            bool shuffling = player.Jockeying;
+            float adjustRadius = shuffling ? AdjustRadius + 1f : AdjustRadius;
+            float adjustTargetSpeed = shuffling ? AdjustMaxTargetSpeed + 0.5f : AdjustMaxTargetSpeed;
+            if (plainMove && IsOffBallShapeIntent(cmd.Intent) && !intent.Sprint && cmd.FaceLookAt && dist < adjustRadius && tvSpeed < adjustTargetSpeed &&
+                (shuffling || speed < 2.6f) &&
+                intent.Move.SqrMagnitude > FaceThrottle * FaceThrottle * 4f && (cmd.LookAt - player.Position).Flat.SqrMagnitude > 0.25f)
+            {
+                float m = intent.Move.Magnitude;
+                if (m > AdjustMaxThrottle) intent.Move = intent.Move * (AdjustMaxThrottle / m);
+                intent.Action = IntentAction.Jockey;
             }
 
             IntentAction act = MapAction(cmd.Action);

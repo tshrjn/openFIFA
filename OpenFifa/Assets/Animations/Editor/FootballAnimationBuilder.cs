@@ -162,6 +162,8 @@ namespace OpenFifa.Editor
             AddFloat(ctrl, AnimStateNames.ParamLocoRate, 1f);
             AddFloat(ctrl, AnimStateNames.ParamActionRate, 1f);
             ctrl.AddParameter(AnimStateNames.ParamMirror, AnimatorControllerParameterType.Bool);
+            AddFloat(ctrl, AnimStateNames.ParamIdleVariant, 0f);
+            AddFloat(ctrl, AnimStateNames.ParamReady, 0f);
 
             AnimatorControllerLayer[] layers = ctrl.layers;
             layers[0].iKPass = true; // PlayerAnimationDriver applies contact/plant IK in OnAnimatorIK
@@ -179,7 +181,7 @@ namespace OpenFifa.Editor
             AnimationClip jog = LibraryClip(Ual1Path, "Jog_Fwd_Loop");
             AnimationClip sprint = LibraryClip(Ual1Path, "Sprint_Loop");
             generated.TryGetValue("Jockey", out AnimationClip jockey);
-            AddChild(tree, idle, Vector2.zero, 1f, false);
+            AddIdleTree(tree, idle, Gen(generated, IdleWeightShiftState), Gen(generated, IdleReadyState));
             AddChild(tree, walk, new Vector2(0f, WalkSpeed), 1f, false);
             AddChild(tree, jog, new Vector2(0f, JogSpeed), 1f, false);
             AddChild(tree, sprint, new Vector2(0f, SprintSpeed), 1f, false);
@@ -212,6 +214,33 @@ namespace OpenFifa.Editor
             AddAction(sm, AnimStateNames.GoalkeeperThrow, LibraryClip(Ual2Path, "OverhandThrow"), loco, 0.9f, true);
 
             EditorUtility.SetDirty(ctrl);
+        }
+
+        /// <summary>Generated idle clips (not action states): keys into the generated-clip dictionary.</summary>
+        public const string IdleWeightShiftState = "IdleWeightShift", IdleReadyState = "IdleReady";
+
+        /// <summary>
+        /// The idle slot of the locomotion tree, as nested 1D trees: Ready (0 = standing idles, 1 = ready stance) over
+        /// IdleVariant (0 = Quaternius Idle_Loop, 1 = weight-shift idle). PlayerAnimationDriver drives both from
+        /// <see cref="IdleVariety"/> and offsets/varies each player's idle phase and rate, so players never idle in sync.
+        /// Missing generated clips fall back to the plain idle.
+        /// </summary>
+        private static void AddIdleTree(BlendTree loco, AnimationClip idle, AnimationClip weightShift, AnimationClip ready)
+        {
+            if (idle == null) return;
+            BlendTree readyTree = loco.CreateBlendTreeChild(Vector2.zero);
+            readyTree.name = "Idle";
+            readyTree.blendType = BlendTreeType.Simple1D;
+            readyTree.blendParameter = AnimStateNames.ParamReady;
+            readyTree.useAutomaticThresholds = false;
+            BlendTree stand = readyTree.CreateBlendTreeChild(0f);
+            stand.name = "IdleStand";
+            stand.blendType = BlendTreeType.Simple1D;
+            stand.blendParameter = AnimStateNames.ParamIdleVariant;
+            stand.useAutomaticThresholds = false;
+            stand.AddChild(idle, 0f);
+            stand.AddChild(weightShift != null ? weightShift : idle, 1f);
+            readyTree.AddChild(ready != null ? ready : idle, 1f);
         }
 
         private static void AddFloat(AnimatorController ctrl, string name, float defaultValue)
@@ -465,6 +494,35 @@ namespace OpenFifa.Editor
                 j.Keys.Add(new PoseKey(0.525f, J(0.28f, 0.16f, 1f, 0f, -0.08f))); // right foot lifts and steps out
                 j.Keys.Add(new PoseKey(0.7f, J(0.45f, 0.35f, 0f, 0f, -0.1f)));
                 yield return j;
+
+                // Weight-shift idle (3 s loop): the weight rocks onto the left leg, back to centre, onto the right; the
+                // free knee softens, the trunk counters, the head settles. Blended against Idle_Loop by IdleVariant.
+                ClipSpec ws = Spec(IdleWeightShiftState, "Gen_Idle_WeightShift_Loop", AnimActionKind.None, loop: true, length: 3f);
+                Dictionary<string, float> W(float shift) => P(
+                    "RootT.x", 0.035f * shift, SpLR, -0.06f * shift, ChFB, 0.02f,
+                    LLL, shift > 0f ? -0.18f * shift : 0f, RLL, shift < 0f ? 0.18f * shift : 0f,
+                    LULio, 0.04f * shift, RULio, -0.04f * shift, Nod, -0.03f, LArmDU, 0.03f * shift, RArmDU, -0.03f * shift);
+                ws.Keys.Add(new PoseKey(0f, W(0f)));
+                ws.Keys.Add(new PoseKey(0.75f, W(-1f)));   // onto the left leg (right knee soft)
+                ws.Keys.Add(new PoseKey(1.5f, W(0f)));
+                ws.Keys.Add(new PoseKey(2.25f, W(1f)));    // onto the right leg
+                ws.Keys.Add(new PoseKey(3f, W(0f)));
+                yield return ws;
+
+                // Ready stance (1.2 s loop): knees bent, hips back, chest over the toes, arms off the body, a small bounce
+                // on the balls of the feet. Blended in by Ready when the ball is within 12-20 m.
+                ClipSpec rd = Spec(IdleReadyState, "Gen_Ready_Loop", AnimActionKind.None, loop: true, length: 1.2f);
+                Dictionary<string, float> R(float bounce) => P(
+                    "RootT.y", -0.07f - 0.015f * bounce, LLL, -0.35f - 0.06f * bounce, RLL, -0.35f - 0.06f * bounce,
+                    LULfb, 0.22f + 0.03f * bounce, RULfb, 0.22f + 0.03f * bounce, LULio, 0.08f, RULio, 0.08f,
+                    SpFB, 0.18f, ChFB, 0.08f, Nod, 0.12f, LArmDU, 0.18f, RArmDU, 0.18f, LArmFB, 0.12f, RArmFB, 0.12f,
+                    RFoot, 0.08f);
+                rd.Keys.Add(new PoseKey(0f, R(0f)));
+                rd.Keys.Add(new PoseKey(0.3f, R(1f)));
+                rd.Keys.Add(new PoseKey(0.6f, R(0f)));
+                rd.Keys.Add(new PoseKey(0.9f, R(1f)));
+                rd.Keys.Add(new PoseKey(1.2f, R(0f)));
+                yield return rd;
             }
         }
     }

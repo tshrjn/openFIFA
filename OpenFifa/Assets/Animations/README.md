@@ -44,12 +44,12 @@ Leave the avatar in its T-pose (`A_TPose` exists in both libraries if you need t
 
 Run **OpenFifa > Animation > Build Footballer Animator**. In batch mode, use `-executeMethod OpenFifa.Editor.FootballAnimationBuilder.BuildAll`. The builder:
 
-1. Samples the Quaternius idle pose and writes placeholder humanoid clips into `Generated/`. Each clip is keyed as muscle offsets from that pose, so they all start and end on a valid idle. The clips are `Gen_Pass_R`, `Gen_Shot_R`, `Gen_Cross_R`, `Gen_FirstTouch_R`, `Gen_Header`, `Gen_TackleStand_R`, `Gen_GkDive_R` and `Gen_Jockey_R_Loop`. In each clip the contact pose sits exactly at `ActionClipProfile.ContactTime`, and the clip fires `OnActionContact` there.
+1. Samples the Quaternius idle pose and writes placeholder humanoid clips into `Generated/`. Each clip is keyed as muscle offsets from that pose, so they all start and end on a valid idle. The clips are `Gen_Pass_R`, `Gen_Shot_R`, `Gen_Cross_R`, `Gen_FirstTouch_R`, `Gen_Header`, `Gen_TackleStand_R`, `Gen_GkDive_R`, `Gen_Jockey_R_Loop`, and two idle loops: `Gen_Idle_WeightShift_Loop` (3 s, weight rocks left/right, free knee softens) and `Gen_Ready_Loop` (1.2 s, knees bent, chest over the toes, small bounce). In each clip the contact pose sits exactly at `ActionClipProfile.ContactTime`, and the clip fires `OnActionContact` there.
 2. Creates `Controllers/Footballer.controller`:
-   - **Parameters:** `Speed`, `Forward`, `Strafe`, `TurnRate`, `LocoRate` (default 1), `ActionRate` (default 1), `Mirror`.
+   - **Parameters:** `Speed`, `Forward`, `Strafe`, `TurnRate`, `LocoRate` (default 1), `ActionRate` (default 1), `Mirror`, `IdleVariant` (0..1), `Ready` (0..1).
    - **Base layer:** IK Pass is on.
    - **`Locomotion` state:** a 2D Freeform Directional blend tree on (`Strafe`, `Forward`) in m/s:
-     - idle at (0, 0);
+     - idle at (0, 0): a nested 1D tree on `Ready` (0 = standing idles, 1 = `Gen_Ready_Loop`) over a 1D tree on `IdleVariant` (0 = UAL1 `Idle_Loop`, 1 = `Gen_Idle_WeightShift_Loop`). `PlayerAnimationDriver` drives both from `OpenFifa.Core.IdleVariety`: each player starts the locomotion state at his own idle phase and plays the idle at his own rate (0.85-1.15), swaps between the plain and weight-shift idle every 2.5-6 s, eases into the ready stance when the ball is within 12-20 m, and turns his head toward the ball in saccades (with an occasional shoulder check) through the Animator look-at. A controller built before these parameters existed still gets the phase/rate desync and the look-at;
      - walk at (0, 1.0);
      - jog at (0, 5.9);
      - sprint at (0, 8.5);
