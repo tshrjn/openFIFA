@@ -12,6 +12,10 @@ namespace OpenFifa.Core
         public const float ArriveRadius = 0.6f;
         /// <summary>Distance (m) over which the throttle ramps from 0 to 1 near the target.</summary>
         public const float SlowRadius = 3f;
+        /// <summary>Deceleration (m/s^2) assumed when braking onto a target; under the sim's weakest braking (6 m/s^2).</summary>
+        public const float ArriveDeceleration = 5f;
+        /// <summary>Throttle while braking: low enough to shed speed, non-zero so the player keeps turning to the spot.</summary>
+        public const float BrakeThrottle = 0.05f;
 
         public readonly TeamAIWorld World;
         public readonly TeamAITactics HomeTactics;
@@ -184,15 +188,25 @@ namespace OpenFifa.Core
         public static PlayerIntent ToIntent(in AIPlayerCommand cmd, in SimPlayer player, bool allowOneShot)
         {
             var intent = PlayerIntent.Idle;
+            // Steer by the live offset to the target every tick: the command (and its MoveDirection) is only refreshed
+            // at the decision rate, and a sprinter following a 0.1 s old direction runs ~0.8 m past his spot.
             SimVec3 to = (cmd.MoveTarget - player.Position).Flat;
             float dist = to.Magnitude;
-            SimVec3 dir = cmd.MoveDirection.Flat;
-            if (dir.SqrMagnitude < 1e-6f && dist > ArriveRadius) dir = to / dist;
-            if (dir.SqrMagnitude > 1e-6f && dist > ArriveRadius)
+            if (dist > ArriveRadius)
             {
+                SimVec3 dir = to / dist;
                 float throttle = cmd.Sprint ? 1f : SimMath.Clamp((dist - ArriveRadius) / SlowRadius, 0.25f, 1f);
-                intent.Move = dir.Normalized * throttle;
-                intent.Sprint = cmd.Sprint;
+                bool sprint = cmd.Sprint;
+                // Arrive: brake when the stopping distance at a sure deceleration reaches the spot.
+                float speed = player.Velocity.Flat.Magnitude;
+                float allowed = (float)Math.Sqrt(2f * ArriveDeceleration * SimMath.Max(0f, dist - ArriveRadius * 0.5f));
+                if (speed > allowed + 0.25f)
+                {
+                    throttle = BrakeThrottle;
+                    sprint = false;
+                }
+                intent.Move = dir * throttle;
+                intent.Sprint = sprint;
             }
 
             IntentAction act = MapAction(cmd.Action);

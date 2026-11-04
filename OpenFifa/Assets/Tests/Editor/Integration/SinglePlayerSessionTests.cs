@@ -160,17 +160,17 @@ namespace OpenFifa.Tests.Editor.Integration
 
         private struct LevelStats
         {
-            public int HumanGoals, AIGoals, AIShots, AIPasses, AIPassesCompleted;
+            public int HumanGoals, AIGoals, AIShots, HumanShots, AIPasses, AIPassesCompleted;
             public float AIPossession;
             public float AIPassRate => AIPasses > 0 ? AIPassesCompleted / (float)AIPasses : 0f;
         }
 
-        private static LevelStats PlaySeeds(TeamAIDifficultyLevel level, int seeds)
+        private static LevelStats PlaySeeds(TeamAIDifficultyLevel level, int seeds, float half = 360f)
         {
             var st = new LevelStats();
             for (int seed = 1; seed <= seeds; seed++)
             {
-                var s = NewSession(level, (ulong)seed);
+                var s = NewSession(level, (ulong)seed, half);
                 var bot = new ScriptedGamepadBot();
                 while (!s.IsFinished)
                 {
@@ -187,26 +187,53 @@ namespace OpenFifa.Tests.Editor.Integration
                 st.HumanGoals += r.HumanGoals;
                 st.AIGoals += r.AIGoals;
                 st.AIShots += r.AwayShots;
+                st.HumanShots += r.HomeShots;
                 st.AIPossession += (1f - r.HomePossession) / seeds;
             }
             return st;
         }
 
         /// <summary>
-        /// Behaviour-level difficulty check (review item 7). Goals are logged but not asserted: against the scripted
-        /// user they are dominated by team AI defending/shooting tuning (see the integration report), and they moved a lot
-        /// while the sim and team AI fixes landed. Pass completion and possession track the AI theta reliably.
+        /// Behaviour-level difficulty check: the AI's threat must rise with the level and the user's scoring fall, over
+        /// seeds, against the same scripted user. Counts are totals over <c>seeds</c> matches of two 4-minute halves;
+        /// thresholds sit well inside the 10-seed full-length numbers (AI shots per match 3.2 / 7.6 / 16, AI goals
+        /// 0.4 / 1.4 / 2.3, user goals 2.1 / 0.7 / 0.1 for Beginner / Professional / Ultimate) so they hold across
+        /// seeds and tuning noise. Pass completion and possession are logged, not asserted: a stronger AI plays more
+        /// forward passes, so its completion rate is not a measure of threat.
         /// </summary>
         [Test]
-        public void Difficulty_UltimateVsBeginner_AIPassesAndKeepsBallBetterOverSeeds()
+        public void Difficulty_BeginnerProfessionalUltimate_AIThreatRisesAndUserScoringFallsOverSeeds()
         {
             const int seeds = 5;
-            var b = PlaySeeds(TeamAIDifficultyLevel.Beginner, seeds);
-            var u = PlaySeeds(TeamAIDifficultyLevel.Ultimate, seeds);
-            Log($"Beginner: user {b.HumanGoals} AI {b.AIGoals}, AI shots {b.AIShots}, AI pass {b.AIPassRate:P0}, AI poss {b.AIPossession:F2}");
-            Log($"Ultimate: user {u.HumanGoals} AI {u.AIGoals}, AI shots {u.AIShots}, AI pass {u.AIPassRate:P0}, AI poss {u.AIPossession:F2}");
-            Assert.Greater(u.AIPassRate, b.AIPassRate + 0.03f, "Ultimate AI should complete clearly more passes");
-            Assert.Greater(u.AIPossession, b.AIPossession, "Ultimate AI should keep the ball more");
+            const float half = 240f;
+            var b = PlaySeeds(TeamAIDifficultyLevel.Beginner, seeds, half);
+            var p = PlaySeeds(TeamAIDifficultyLevel.Professional, seeds, half);
+            var u = PlaySeeds(TeamAIDifficultyLevel.Ultimate, seeds, half);
+            Log(Describe("Beginner", b));
+            Log(Describe("Professional", p));
+            Log(Describe("Ultimate", u));
+
+            // The match swings toward the AI level by level: the balance (goal difference plus 0.2 per shot of shot
+            // difference, AI minus user) is strictly ordered. Over four sets of five seeds it ran -9.8..-3.4
+            // (Beginner), -1.2..6 (Professional) and 15..22 (Ultimate); the closest step was 2.2 apart.
+            Assert.Less(Balance(b), Balance(p), "Professional should go better for the AI than Beginner");
+            Assert.Less(Balance(p), Balance(u), "Ultimate should go better for the AI than Professional");
+            // Shots: Ultimate well clear of both.
+            Assert.Greater(u.AIShots, p.AIShots + 10, "Ultimate AI should shoot clearly more than Professional");
+            Assert.GreaterOrEqual(u.AIShots, 2 * b.AIShots + 5, "Ultimate AI should be far more threatening than Beginner");
+            // Goals: the top level outscores the bottom one, and Beginner still lets the user win.
+            Assert.Greater(u.AIGoals, b.AIGoals, "Ultimate AI should score more than Beginner");
+            Assert.Greater(b.HumanGoals, b.AIGoals, "the user should outscore the Beginner AI");
+            // The user's scoring falls with the level.
+            Assert.Greater(b.HumanGoals, u.HumanGoals + 2, "the user should score clearly more against Beginner than Ultimate");
+            Assert.GreaterOrEqual(b.HumanShots, u.HumanShots, "the user should get at least as many shots against Beginner");
         }
+
+        private static float Balance(in LevelStats s) =>
+            s.AIGoals - s.HumanGoals + 0.2f * (s.AIShots - s.HumanShots);
+
+        private static string Describe(string name, in LevelStats s) =>
+            $"{name}: user {s.HumanGoals} goals / {s.HumanShots} shots, AI {s.AIGoals} goals / {s.AIShots} shots, " +
+            $"AI pass {s.AIPassRate:P0}, AI poss {s.AIPossession:F2}, balance {Balance(s):F1}";
     }
 }

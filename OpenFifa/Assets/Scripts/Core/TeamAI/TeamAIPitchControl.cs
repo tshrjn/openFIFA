@@ -111,6 +111,9 @@ namespace OpenFifa.Core
                 if (players[i].Team == 0) { if (t < t0) t0 = t; }
                 else if (t < t1) t1 = t;
             }
+            // Both sides there before the ball: whoever is closer still gets first contact (a receiver with his
+            // marker 1.5 m away is not a coin flip), at half strength since both can contest it.
+            if (t0 < ballArrival && t1 < ballArrival) return 0.5f + 0.5f * (TeamAIMath.Sigmoid(LogisticK * (t1 - t0)) - 0.5f);
             if (t0 < ballArrival) t0 = ballArrival;
             if (t1 < ballArrival) t1 = ballArrival;
             return TeamAIMath.Sigmoid(LogisticK * (t1 - t0));

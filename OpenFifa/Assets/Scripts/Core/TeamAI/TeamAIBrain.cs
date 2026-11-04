@@ -341,7 +341,9 @@ namespace OpenFifa.Core
                 var owner = world.Players[ownerIndex];
                 float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
                 float ownerPressure = TeamAIOnBall.NearestOpponentDistance(world, Team, owner.Position);
-                bool ownerHasTime = ownerPressure > 3.5f && SimVec3.Dot(owner.Facing, new SimVec3(0f, 0f, sign)) > 0.2f;
+                // The carrier can play the ball once no one is close enough to smother the kick (see TeamAIOnBall.BlockRisk);
+                // waiting for a free carrier means a team pressed by one man never runs in behind.
+                bool ownerHasTime = ownerPressure > TeamAIOnBall.BlockSafe + 0.6f && SimVec3.Dot(owner.Facing, new SimVec3(0f, 0f, sign)) > 0.2f;
                 bool continuing = _running[i] && world.Time - _runStart[i] < 3f && myDepth < 0.96f;
                 bool nearLine = myDepth >= OffsideDepth - 0.035f && myDepth <= OffsideDepth + 0.002f;
                 bool spaceBehind = OffsideDepth < 0.9f;
@@ -411,9 +413,11 @@ namespace OpenFifa.Core
             var best = anchor;
             float bestScore = float.MinValue;
             var forward = new SimVec3(0f, 0f, sign);
+            // A carrier closed down needs a short outlet: come to him (7 m) rather than wait at 12-19 m.
+            bool pressed = TeamAIOnBall.NearestOpponentDistance(world, Team, from) < 2.5f;
             for (int ring = 0; ring < 2; ring++)
             {
-                float radius = ring == 0 ? 12f : 19f;
+                float radius = ring == 0 ? (pressed ? 7f : 12f) : (pressed ? 12f : 19f);
                 for (int k = 0; k < 8; k++)
                 {
                     var dir = TeamAIMath.RotateFlat(forward, k * 0.785398f);
@@ -592,10 +596,10 @@ namespace OpenFifa.Core
             bool exposed = TeamAIMath.FlatDistance(ball, owner.Position) > 1.0f;
             bool facingAway = SimVec3.Dot(owner.Facing, toGoal) < -0.3f;
             bool goalSide = SimVec3.Dot(p.Position - ball, toGoal) > -0.3f;
-            float success = 0.3f + 0.45f * p.Defending - 0.3f * owner.Dribbling + (exposed ? 0.3f : 0f) +
-                            (facingAway ? 0.1f : 0f);
+            float success = TackleWinChance(p, owner, TeamAIMath.FlatDistance(p.Position, ball)) +
+                            (exposed ? 0.1f : 0f) + (facingAway ? 0.05f : 0f);
             success += Rng.NextSigned() * Difficulty.DecisionNoise;
-            if (goalSide && success > 0.55f)
+            if (goalSide && success > TackleThreshold(Difficulty.Theta))
             {
                 SetMove(ref cmd, p, ball, false, TeamAIIntent.Tackle);
                 cmd.Action = TeamAIAction.Tackle;
@@ -607,6 +611,22 @@ namespace OpenFifa.Core
             cmd.Action = TeamAIAction.Jockey;
             cmd.ActionTarget = ball;
         }
+
+        /// <summary>
+        /// Win chance of a standing tackle, mirroring the sim's resolution: skill gap on the 1-99 scale over 15, a 0.3
+        /// base, part of the jockey bonus (the tackler jockeys into it), minus 0.8 x ball distance / 1.6 m range.
+        /// </summary>
+        public static float TackleWinChance(in TeamAIPlayer tackler, in TeamAIPlayer carrier, float ballDistance)
+        {
+            float z = (tackler.Defending - carrier.Dribbling) * 6.6f + 0.3f + 0.2f - 0.8f * ballDistance / 1.6f;
+            return TeamAIMath.Sigmoid(z);
+        }
+
+        /// <summary>
+        /// Win chance a presser needs before he commits to a tackle. A weak side jockeys and backs off; a strong side
+        /// reads the touch and goes in (a missed tackle costs half a second, and the second presser covers).
+        /// </summary>
+        public static float TackleThreshold(float theta) => TeamAIMath.Lerp(0.5f, 0.36f, theta);
 
         private int FindMarkTarget(TeamAIWorld world, SimVec3 anchor, int sign, float radius, float maxDepth)
         {

@@ -31,6 +31,8 @@ namespace OpenFifa.Core
         public readonly float PassArrivalSpeedMin;
         public readonly float PassArrivalSpeedRange;
         public readonly float PassMaxSpeed;
+        /// <summary>Extra lead (m) the sim gives a through ball along the receiver's run.</summary>
+        public readonly float ThroughLeadDistance;
 
         // Master rolling run, one sample per integrator step: distance travelled and speed at time i * Dt.
         private readonly float[] _rollDist;
@@ -52,6 +54,7 @@ namespace OpenFifa.Core
             PassArrivalSpeedMin = actions.PassArrivalSpeedMin;
             PassArrivalSpeedRange = actions.PassArrivalSpeedRange;
             PassMaxSpeed = actions.PassMaxSpeed;
+            ThroughLeadDistance = actions.ThroughLeadDistance;
 
             // ---- Rolling master run ----
             int max = (int)(MaxRollSeconds / dt) + 2;
@@ -121,8 +124,12 @@ namespace OpenFifa.Core
         /// <summary>Arrival speed the kick solver aims for at this pass power (0..1).</summary>
         public float ArrivalSpeedForPower(float power) => PassArrivalSpeedMin + PassArrivalSpeedRange * TeamAIMath.Clamp01(power);
 
-        /// <summary>The power the team AI uses for a ground pass of this length (see TeamAIOnBall).</summary>
-        public static float GroundPassPower(float dist) => TeamAIMath.Clamp(dist / TeamAIOnBall.MaxGroundPass, 0.12f, 1f);
+        /// <summary>
+        /// The power the team AI uses for a ground pass of this length (see TeamAIOnBall). Passes are played firm: the
+        /// arrival speed (4 + 5 x power m/s) stays well under any receiver's clean first-touch speed (6 + 12 x control),
+        /// and a soft pass (a 15 m ball taking ~1.9 s) is picked off by anyone near the lane.
+        /// </summary>
+        public static float GroundPassPower(float dist) => TeamAIMath.Clamp(0.5f + dist / 60f, 0.5f, 1f);
 
         /// <summary>Seconds for an AI ground pass of <paramref name="dist"/> m (power from the AI's own mapping).</summary>
         public float GroundPassTime(float dist) => GroundPassTime(dist, ArrivalSpeedForPower(GroundPassPower(dist)));

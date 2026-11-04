@@ -307,6 +307,11 @@ namespace OpenFifa.Core
 
         /// <summary>How long an AI kick or tackle decision waits for its window (s).</summary>
         public const float AIKickLatchSeconds = 0.6f;
+        /// <summary>
+        /// How long a shot decision waits (s). A carrier at pace has the ball up to a stride ahead, so the strike window
+        /// can take longer than a pass's to open; dropping the shot after 0.6 s threw away about a third of them.
+        /// </summary>
+        public const float AIShotLatchSeconds = 1.0f;
         private readonly PlayerIntent[] _aiKick = new PlayerIntent[MatchSimState.PlayerCount];
         private readonly int[] _aiKickUntil = NewFilled(MatchSimState.PlayerCount, -1);
 
@@ -364,17 +369,29 @@ namespace OpenFifa.Core
                     continue;
                 }
                 var intent = SimTeamAIAdapter.ToIntent(Director.Commands[id], state.Players[id], decided);
-                if (decided)
+                // A latched shot is a commitment: a later decision tick that merely prefers to carry (decision noise flips
+                // close calls) does not cancel it; only a new kick replaces it, and losing the ball ends it.
+                bool shotCommitted = _aiKickUntil[id] >= state.Tick && PlayerIntent.IsShotAction(_aiKick[id].Action) &&
+                                     state.Owner == id && !intent.IsKick;
+                if (decided && !shotCommitted)
                 {
                     if (_aiKickUntil[id] >= state.Tick && PlayerIntent.IsShotAction(_aiKick[id].Action) && !PlayerIntent.IsShotAction(intent.Action))
                         AIShotsDropped++;
                     _aiKickUntil[id] = -1;
-                    if (intent.IsKick || intent.Action == IntentAction.Tackle || intent.Action == IntentAction.SlideTackle)
+                    if ((intent.IsKick || intent.Action == IntentAction.Tackle || intent.Action == IntentAction.SlideTackle) &&
+                        !state.Players[id].IsFree)
+                    {
+                        // Already winding up or recovering: the kick in progress is the decision; re-latching it
+                        // here left a stale latch behind the real shot (counted as dropped when it expired).
+                        intent.Action = IntentAction.None;
+                    }
+                    else if (intent.IsKick || intent.Action == IntentAction.Tackle || intent.Action == IntentAction.SlideTackle)
                     {
                         // Latch the kick and release it when the strike window opens (see KickTiming).
                         if (PlayerIntent.IsShotAction(intent.Action)) AIShotsLatched++;
                         _aiKick[id] = intent;
-                        _aiKickUntil[id] = state.Tick + Sim.Config.SecondsToTicks(AIKickLatchSeconds);
+                        float latch = PlayerIntent.IsShotAction(intent.Action) ? AIShotLatchSeconds : AIKickLatchSeconds;
+                        _aiKickUntil[id] = state.Tick + Sim.Config.SecondsToTicks(latch);
                         intent.Action = IntentAction.None;
                     }
                 }
