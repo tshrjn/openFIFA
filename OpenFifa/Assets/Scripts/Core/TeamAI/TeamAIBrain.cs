@@ -52,6 +52,19 @@ namespace OpenFifa.Core
         /// </summary>
         public const int RestDefenders = 3;
         private int _restBehind;
+
+        /// <summary>
+        /// 0..1: how hard a pressing side (PressingIntensity above 0.5) squeezes while it is in its high press or
+        /// counter-press; 0 in every other phase and for neutral or passive sides. Drives tighter cover shadows on the
+        /// nearest passing options (to intercept), a closer second presser and earlier tackles.
+        /// </summary>
+        public float PressSqueeze =>
+            Phase == TeamAIPhase.HighPress || Phase == TeamAIPhase.CounterPress
+                ? TeamAIMath.Clamp01((Effective.PressingIntensity - 0.5f) * 2f)
+                : 0f;
+        /// <summary>Cover-shadow point: this far from the ball toward the receiver (0.4), up to 0.75 at full squeeze.</summary>
+        public const float ShadowFraction = 0.4f;
+        public const float SqueezeShadowFraction = 0.75f;
         public TeamAIDifficulty Difficulty { get; private set; }
         public readonly TeamAIRandom Rng;
         public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
@@ -649,9 +662,10 @@ namespace OpenFifa.Core
                 {
                     _oppTaken[opp] = true;
                     var op = world.Players[opp].Position;
-                    var shadow = ball + (op - ball) * 0.4f;
+                    float squeeze = PressSqueeze;
+                    var shadow = ball + (op - ball) * TeamAIMath.Lerp(ShadowFraction, SqueezeShadowFraction, squeeze);
                     shadow = new SimVec3(shadow.X, 0f, shadow.Z);
-                    if (TeamAIMath.FlatDistance(shadow, anchor) < 12f)
+                    if (TeamAIMath.FlatDistance(shadow, anchor) < 12f + 10f * squeeze)
                     {
                         cmd.TargetPlayerId = world.Players[opp].Id;
                         // The shadow point sits 40% of the way from the ball to the runner and moves with both.
@@ -730,7 +744,7 @@ namespace OpenFifa.Core
             if (dist > 2.4f)
             {
                 // Close down on a goal-side curve.
-                var approach = ball + toGoal * (second ? 3f : 1.0f);
+                var approach = ball + toGoal * (second ? 3f - 1.5f * PressSqueeze : 1.0f);
                 SetMoveTracking(ref cmd, p, approach, owner.Velocity, true, TeamAIIntent.Press);
                 // Slide: last-ditch, chasing a carrier who is getting away near our box.
                 bool goalSideNow = SimVec3.Dot(p.Position - ball, toGoal) > 0f;
@@ -752,7 +766,7 @@ namespace OpenFifa.Core
             float success = TackleWinChance(p, owner, TeamAIMath.FlatDistance(p.Position, ball)) +
                             (exposed ? 0.1f : 0f) + (facingAway ? 0.05f : 0f);
             success += Rng.NextSigned() * Difficulty.DecisionNoise;
-            if (goalSide && success > TackleThreshold(Difficulty.Theta))
+            if (goalSide && success > TackleThreshold(Difficulty.Theta) - 0.12f * PressSqueeze)
             {
                 SetMoveTracking(ref cmd, p, ball, owner.Velocity, false, TeamAIIntent.Tackle);
                 cmd.Action = TeamAIAction.Tackle;
@@ -824,7 +838,7 @@ namespace OpenFifa.Core
                 if (!o.Active || o.Team == Team || j == ownerIndex || o.Role == TeamAIRole.GK || _oppTaken[j]) continue;
                 float dBall = TeamAIMath.FlatDistance(o.Position, ball);
                 float dAnchor = TeamAIMath.FlatDistance(o.Position, anchor);
-                if (dBall > 30f || dAnchor > 16f) continue;
+                if (dBall > 30f || dAnchor > 16f + 10f * PressSqueeze) continue;
                 // Danger: closer to our goal is worse.
                 float danger = 1f - TeamAIMath.Depth(o.Position.Z, sign, world.Pitch);
                 float score = danger - 0.03f * dAnchor;
