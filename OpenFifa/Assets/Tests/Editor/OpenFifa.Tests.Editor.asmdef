@@ -5,7 +5,8 @@
         "OpenFifa.Core",
         "OpenFifa.Gameplay",
         "OpenFifa.AI",
-        "OpenFifa.UI"
+        "OpenFifa.UI",
+        "OpenFifa.Editor"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],

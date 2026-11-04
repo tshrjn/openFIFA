@@ -160,7 +160,13 @@ namespace OpenFifa.UI
 
             // Apply safe area inset to this RectTransform
             var rectTransform = GetComponent<RectTransform>();
-            if (rectTransform != null)
+            if (rectTransform != null && canvas.targetDisplay != 0)
+            {
+                // On an external monitor there are no iPad notch/home-indicator insets: use the full screen.
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+            }
+            else if (rectTransform != null)
             {
                 Vector2 anchorMin = safeArea.position;
                 Vector2 anchorMax = safeArea.position + safeArea.size;

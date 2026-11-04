@@ -468,6 +468,7 @@ PlayerSettings:
   qualitySettingsNames: []
   projectGenerationRootNamespace:
   projectGenerationUserExtensions: []
+  enableFrameTimingStats: 1
   enableOpenGLProfilerGPURecorders: 1
   enableTextureStreamingInPlayMode: 1
   enableTextureStreamingInEditMode: 0
