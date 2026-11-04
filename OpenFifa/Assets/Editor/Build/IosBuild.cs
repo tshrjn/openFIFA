@@ -124,6 +124,7 @@ namespace OpenFifa.Editor
             var ios = NamedBuildTarget.iOS;
             PlayerSettings.SetApplicationIdentifier(ios, ctx.BundleId);
             PlayerSettings.productName = ProductName;
+            PlayerSettings.enableFrameTimingStats = true;
             if (!string.IsNullOrEmpty(marketingVersion))
             {
                 PlayerSettings.bundleVersion = marketingVersion;
