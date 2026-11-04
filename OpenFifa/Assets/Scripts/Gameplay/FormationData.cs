@@ -7,7 +7,7 @@ namespace OpenFifa.Gameplay
     /// ScriptableObject wrapper for formation data.
     /// Defines a team formation with 5 position slots.
     /// </summary>
-    [CreateAssetMenu(fileName = "FormationData", menuName = "OpenFifa/Config/Formation Data")]
+    [CreateAssetMenu(fileName = "FormationData", menuName = "OpenFootball/Config/Formation Data")]
     public class FormationData : ScriptableObject
     {
         [System.Serializable]

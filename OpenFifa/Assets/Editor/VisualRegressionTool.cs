@@ -25,7 +25,7 @@ namespace OpenFifa.Editor
         private int _selectedResultIndex = -1;
         private Texture2D _diffTexture;
 
-        [MenuItem("OpenFifa/Visual Regression")]
+        [MenuItem("OpenFootball/Visual Regression")]
         public static void ShowWindow()
         {
             var window = GetWindow<VisualRegressionTool>("Visual Regression");

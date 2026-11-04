@@ -62,9 +62,8 @@ crashlytics-build.properties
 # Packed Addressables
 **/[Aa]ssets/[Aa]ddressable[Aa]ssets[Dd]ata/*/*.bin*
 
-# TextMeshPro (auto-imported by Unity)
-**/[Aa]ssets/TextMesh Pro/
-**/[Aa]ssets/TextMesh Pro.meta
+# TextMeshPro essentials are committed: Unity only offers to import them interactively, so batch
+# builds and CI players shipped without TMP Settings and every TMP text threw on Awake.
 
 # MobileDependencyResolver (auto-imported)
 **/[Aa]ssets/MobileDependencyResolver/

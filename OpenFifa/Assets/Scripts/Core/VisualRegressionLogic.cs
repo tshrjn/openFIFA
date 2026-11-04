@@ -165,6 +165,7 @@ namespace OpenFifa.Core
         /// </summary>
         public int HammingDistance(long hashA, long hashB)
         {
+            // ulong: an arithmetic right shift of a negative long never reaches 0 (infinite loop).
             ulong xor = (ulong)(hashA ^ hashB);
             int distance = 0;
             while (xor != 0)

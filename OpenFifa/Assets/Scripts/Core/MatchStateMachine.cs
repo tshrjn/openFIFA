@@ -14,16 +14,18 @@ namespace OpenFifa.Core
             new Dictionary<MatchState, HashSet<MatchState>>
             {
                 { MatchState.PreKickoff, new HashSet<MatchState> { MatchState.FirstHalf } },
-                { MatchState.FirstHalf, new HashSet<MatchState> { MatchState.HalfTime, MatchState.GoalCelebration } },
+                { MatchState.FirstHalf, new HashSet<MatchState> { MatchState.HalfTime, MatchState.GoalCelebration, MatchState.Stoppage } },
                 { MatchState.HalfTime, new HashSet<MatchState> { MatchState.SecondHalf } },
-                { MatchState.SecondHalf, new HashSet<MatchState> { MatchState.FullTime, MatchState.GoalCelebration } },
+                { MatchState.SecondHalf, new HashSet<MatchState> { MatchState.FullTime, MatchState.GoalCelebration, MatchState.Stoppage } },
                 { MatchState.FullTime, new HashSet<MatchState>() },
                 { MatchState.GoalCelebration, new HashSet<MatchState> { MatchState.PreKickoff } },
-                { MatchState.Paused, new HashSet<MatchState>() } // Resume handled separately
+                { MatchState.Paused, new HashSet<MatchState>() }, // Resume handled separately
+                { MatchState.Stoppage, new HashSet<MatchState> { MatchState.FirstHalf, MatchState.SecondHalf } } // via EndStoppage
             };
 
         private MatchState _currentState;
         private MatchState _previousState;
+        private MatchState _stoppageReturnState = MatchState.FirstHalf;
 
         /// <summary>Current match state.</summary>
         public MatchState CurrentState => _currentState;
@@ -75,6 +77,29 @@ namespace OpenFifa.Core
             var oldState = _currentState;
             _currentState = MatchState.Paused;
             OnStateChanged?.Invoke(oldState, MatchState.Paused);
+        }
+
+        /// <summary>
+        /// Stop play for a dead-ball restart (e.g. offside free kick).
+        /// Only valid during a half; returns false otherwise.
+        /// </summary>
+        public bool BeginStoppage()
+        {
+            if (_currentState != MatchState.FirstHalf && _currentState != MatchState.SecondHalf)
+                return false;
+
+            _stoppageReturnState = _currentState;
+            TransitionTo(MatchState.Stoppage);
+            return true;
+        }
+
+        /// <summary>
+        /// Restart play after a stoppage, returning to the half it interrupted.
+        /// </summary>
+        public void EndStoppage()
+        {
+            if (_currentState != MatchState.Stoppage) return;
+            TransitionTo(_stoppageReturnState);
         }
 
         /// <summary>

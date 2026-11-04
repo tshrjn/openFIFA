@@ -7,7 +7,7 @@ namespace OpenFifa.Gameplay
     /// ScriptableObject weather preset for Inspector-based weather configuration.
     /// References pure C# WeatherConfig values and provides quick swap between presets.
     /// </summary>
-    [CreateAssetMenu(fileName = "WeatherPreset", menuName = "OpenFifa/Config/Weather Preset")]
+    [CreateAssetMenu(fileName = "WeatherPreset", menuName = "OpenFootball/Config/Weather Preset")]
     public class WeatherPreset : ScriptableObject
     {
         [Header("Weather Type")]

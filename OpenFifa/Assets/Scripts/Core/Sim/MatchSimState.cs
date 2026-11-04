@@ -46,6 +46,9 @@ namespace OpenFifa.Core
         public SimVec3[] OffsidePositions = new SimVec3[PlayerCount];
         public float[] OffsideMargins = new float[PlayerCount];
         public int OffsidePasser = -1;
+        /// <summary>World Z of the second-last defender and of the ball at that kick (for the offside lines overlay).</summary>
+        public float OffsideDefenderLineZ;
+        public float OffsideBallLineZ;
 
         public bool PassLive;
         public int PassFrom = -1;

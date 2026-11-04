@@ -186,7 +186,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Validates the currently selected character model in the Project window.
         /// </summary>
-        [MenuItem("OpenFifa/Characters/Validate Selected Model")]
+        [MenuItem("OpenFootball/Characters/Validate Selected Model")]
         public static void ValidateSelectedModel()
         {
             var selected = Selection.activeObject;
@@ -217,7 +217,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Sets up URP-compatible materials on the selected character model.
         /// </summary>
-        [MenuItem("OpenFifa/Characters/Setup URP Materials")]
+        [MenuItem("OpenFootball/Characters/Setup URP Materials")]
         public static void SetupURPMaterials()
         {
             var selected = Selection.activeObject as GameObject;
@@ -258,7 +258,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Reimports all FBX files under the character model path.
         /// </summary>
-        [MenuItem("OpenFifa/Characters/Reimport All Character Models")]
+        [MenuItem("OpenFootball/Characters/Reimport All Character Models")]
         public static void ReimportAllCharacterModels()
         {
             string[] guids = AssetDatabase.FindAssets("t:Model", new[] { "Assets/Models/Characters" });

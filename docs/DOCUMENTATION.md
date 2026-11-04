@@ -1,4 +1,4 @@
-# OpenFifa Development Log
+# OpenFootball Development Log
 
 > Real-time record of decisions, progress, and issues. **Read this first** at the start of every session.
 
@@ -41,6 +41,25 @@ Possible next steps:
 ---
 
 ## Log
+
+## 2026-11-04 Session — Broadcast kit rendering (OpenFifa/Kit shader)
+
+**Status**: Completed (not yet verified inside the Unity Editor; see Known Issues)
+**Changes**:
+- `Assets/Shaders/OpenFifaKit.shader` + `OpenFifaKit*.hlsl`: hand-written URP 17 shader with ForwardLit, ShadowCaster, DepthOnly, DepthNormals and MotionVectors passes; SRP Batcher-compatible `UnityPerMaterial` CBUFFER. Procedural patterns (solid, stripes, hoops, halves, halftone gradient, pinstripes, chevron, sash) from 3 colours, polyester knit micro-normal, Charlie sheen lobe, heat-pressed name/number layer with gloss and edge bevel, crest/sponsor decal slots, `_Sweat`/`_Dirt` match wear, and licensed override textures (`_KitAlbedo`/`_KitNormal`/`_KitMask`, `_UseLicensedTextures`).
+- Two mappings: `_MappingMode 0` object space for the capsule players (shirt/shorts/socks/boots bands, planar back/front prints, kit turns to face the run direction via `_FacingAngle`), `_MappingMode 1` mesh UVs for a future skinned jersey (print panels are UV rects on `JerseyRenderer`).
+- Core (pure C#): `KitDefinitionData`/`KitLibraryData` JSON schema, `KitDefinitionValidator`, `KitLibraryLogic` (merge packs, match kit selection reusing `KitVariantManager` clash rules), `KitGlyphFont` (original stroke font, no font assets), `KitPrintLayoutLogic` (straight/arched name, back number, small front number), `KitPrintRasterizer`, `KitCrestRasterizer` (placeholder shield crest). `JerseyPattern.Sash = 7` added.
+- Gameplay: `KitDefinition` and `KitLibrary` ScriptableObjects, `KitPrintTextureBuilder`, rewritten `JerseyRenderer` (per-player material instance, cached print texture), `MatchKitBinder`, 3-line hook in `MatchOrchestrator.CreatePlayer`.
+- `Assets/Resources/Kits/DefaultKits.json`: four original placeholder teams (no real clubs, names or crests). `Assets/Resources/Kits/OpenFifaKit.mat` keeps the shader in player builds.
+- Tests: `KitDefinitionTests`, `KitLibraryClashTests`, `KitPrintLayoutTests`, `KitLibraryJsonTests` (`[Category("Kits")]`).
+**Decisions**:
+- Name/number atlas stores coverage data (R fill, G fill+outline, B edge height), not colour: recolouring is a material change, re-rasterizing happens only when name/number/style change.
+- Per-player material instances instead of MaterialPropertyBlocks so players stay on the SRP Batcher path.
+- Adding licensed kits: drop textures under `Resources/` and a `Resources/Kits/LicensedKits.json` (same schema; set `Licensed.AlbedoPath` etc.). It is merged after the placeholders and replaces kits with the same id or team+variant. Or author `KitDefinition`/`KitLibrary` assets (`Resources/Kits/KitLibrary.asset` wins over the JSON default).
+**Known Issues**:
+- No Unity licence on the dev VPS: C# was compiled with the editor's Roslyn against UnityEngine module DLLs and the Core tests were run outside Unity (all passing), but the shader has not been compiled by Unity and nothing has been visually inspected. First Editor run should check the console for shader errors and capture screenshots.
+- Capsules never rotate, so the kit is turned in the shader from Rigidbody velocity; remove `faceMovementDirection` once players rotate or the humanoid lands.
+**Next**: Open in the Editor, fix any shader compile issues, capture screenshots, tune `_KnitScale`/sheen under stadium lighting; switch `JerseyRenderer` to `MeshUV` with real panel rects when the humanoid jersey mesh arrives.
 
 ## 2026-03-26 Session — Phase 6-7 PRD Completion: US-044 through US-056
 
@@ -454,7 +473,7 @@ Possible next steps:
 - MenuNavigationLogic maps buttons to scene names (TeamSelect, Settings, Credits)
 - UIScalerConfig: 1920x1080 reference, matchWidthOrHeight 0.5
 - MainMenuController uses Button.onClick.AddListener for navigation
-- Title displayed as TMP_Text with "OpenFifa"
+- Title displayed as TMP_Text with "OpenFootball"
 
 **Known Issues**: None
 
@@ -1055,3 +1074,12 @@ Possible next steps:
 **Known Issues**: None (empty project)
 
 **Next**: US-001 — Unity project scaffold with macOS/iPad build pipeline and test framework
+
+## Offside (Law 11)
+
+- **Rules** — `Scripts/Core/OffsideLogic.cs` (pure C#, implements `IOffsideDecisionSource`). Snapshot on every touch: team-mates of the toucher whose foremost point (centre + `BodyRadius`, arms ignored) is in the opponents' half (halfway line excluded) and beyond both the ball and the second-last opponent (keeper counts) by more than `LevelTolerance` are flagged. Offence when a flagged player is next to touch the ball, or challenges an opponent within `InterferenceRadius` of the ball. Deliberate opponent play resets; deflections/saves don't. Goal kicks, throw-ins and corners are exempt. Tests: `Tests/Editor/OffsideLogicTests.cs` (`[Category("Offside")]`).
+- **Wiring** — `BallTouchTracker` (on the ball) emits team-aware touches from `BallOwnership` changes and collisions; `OffsideController` (attached by `MatchOrchestrator.Start`) runs the logic, enters `MatchState.Stoppage`, plays the presentation and awards an indirect free kick at the offence position. Any other rules engine can drive it via `OffsideController.UseDecisionSource(IOffsideDecisionSource)`.
+- **Match sim** — the fixed-tick `MatchSim` (single player) has its own point-based offside rule (`Scripts/Core/Sim/OffsideRule.cs`); both paths share one `RestartType` enum (`Scripts/Core/RestartType.cs`, sim numbering) and `OffsideLogic.IsExemptRestart` delegates to `OffsideRule.AppliesToRestart`. `SimOffsideDecisionSource` (`Scripts/Core/Integration/`) turns the sim's `Offside` events (which carry `DefenderLineZ`/`BallLineZ`) into `OffsideDecision`s on `IOffsideDecisionSource`, so the presentation can show sim calls. The sim's pitch length runs along world Z, so its decision "line X" values are Z positions; the overlay needs an axis mapping before it is wired into `SinglePlayerMatchController`. Tests: `Tests/Editor/Integration/SimOffsideDecisionSourceTests.cs`.
+- **Config** — `OffsideConfig` (rules; on for 11v11, `_enabledSmallSided` toggle for Rush, default on) and `OffsidePresentationConfig` (timing, colours, camera, banner). Both optional on `MatchOrchestrator`; runtime defaults are used when empty.
+- **Presentation** — `OffsidePresentation` sequences `OffsidePresentationTimeline` cues (~2.5 s, skippable with Enter / gamepad B or Start): whistle (`OffsidePresentation.OnWhistle`, played by `SoundManager`), `AssistantRefereeFlag` placeholder (events for a future animated official), slow motion into freeze, `OffsideCameraCut`, `OffsideLineOverlay` (lines at the snapshot positions, i.e. when the ball was played) and the `OffsideBanner` lower third.
+- **Known gaps** — not compiled or play-tested yet (no Unity licence on the build box). The line material is built at runtime from `Universal Render Pipeline/Particles/Unlit`; if that shader is stripped from a player build, assign `Line Material Override` in `OffsidePresentationConfig`. The game has no throw-ins/corners/goal kicks yet, so the exemption is only reachable via `BallTouchTracker.SetPendingRestart`.

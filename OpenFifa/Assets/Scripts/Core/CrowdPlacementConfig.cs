@@ -117,9 +117,7 @@ namespace OpenFifa.Core
                 return 0;
 
             float density = CrowdDensityPerZone[sectionIndex];
-            // 200 * 0.95f is 189.99998 in single precision, so a bare (int) cast lost a seat. Floor with a small
-            // tolerance so exact products (190) are kept while fractional seats still round down.
-            return (int)System.Math.Floor(MaxCrowdPerSection * (double)density + 1e-3);
+            return (int)Math.Round(MaxCrowdPerSection * density); // 200 * 0.95f truncates to 189
         }
 
         /// <summary>

@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/github/stars/tshrjn/openfifa?style=for-the-badge&color=yellow" alt="Stars"/>
 </p>
 
-<h1 align="center">OpenFifa</h1>
+<h1 align="center">OpenFootball</h1>
 
 <p align="center">
   <strong>The open-source AAA arcade soccer game for macOS</strong><br/>
@@ -23,16 +23,16 @@
 
 ---
 
-## What is OpenFifa?
+## What is OpenFootball?
 
-OpenFifa is an **open-source, AAA arcade-style 5v5 soccer game** for macOS. Think FIFA meets Sensible Soccer — fast matches, premium-quality gameplay, standard FIFA-style controls (keyboard/mouse + Xbox-like gamepad), and pure fun.
+OpenFootball is an **open-source, AAA arcade-style 5v5 soccer game** for macOS. Think FIFA meets Sensible Soccer — fast matches, premium-quality gameplay, standard FIFA-style controls (keyboard/mouse + Xbox-like gamepad), and pure fun.
 
 Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebase is being developed through **AI-assisted long-horizon task automation** — every feature starts as a test, every component is independently verifiable, and the entire development process is documented in real-time.
 
 > **This is not just a game. It's an experiment in building complex software with AI coding agents.**
 
 <p align="center">
-  <img src="screenshots/gameplay_hero.png" alt="OpenFifa Gameplay - Night Stadium" width="720"/>
+  <img src="screenshots/gameplay_hero.png" alt="OpenFootball Gameplay - Night Stadium" width="720"/>
   <br/>
   <em>Rush mode: 4v4 night match with broadcast HUD, stadium floodlights, and FIFA-style controls</em>
 </p>
@@ -154,7 +154,7 @@ $UNITY -batchmode \
 
 ## Gameplay
 
-OpenFifa is designed for quick, fun matches:
+OpenFootball is designed for quick, fun matches:
 
 - **5v5 format** — faster pace than 11v11, easier to follow
 - **3-minute halves** — complete matches in ~7 minutes
@@ -180,7 +180,7 @@ OpenFifa is designed for quick, fun matches:
 
 ## Contributing
 
-We welcome contributions from everyone! OpenFifa is built by the community, for the community.
+We welcome contributions from everyone! OpenFootball is built by the community, for the community.
 
 ### Ways to Contribute
 
@@ -212,7 +212,7 @@ See [`CLAUDE.md`](CLAUDE.md) for the complete coding guide.
 
 ## Request for Art
 
-**We need artists!** OpenFifa currently uses placeholder assets (Unity primitives with solid colors). We're looking for contributors to help with:
+**We need artists!** OpenFootball currently uses placeholder assets (Unity primitives with solid colors). We're looking for contributors to help with:
 
 ### Characters
 - High-fidelity humanoid character models (15-30K triangles per character)
@@ -273,7 +273,7 @@ See [`docs/PLAN.md`](docs/PLAN.md) for detailed milestones and [`prd.json`](prd.
 
 ## Architecture
 
-OpenFifa follows a **test-driven, agent-friendly architecture**:
+OpenFootball follows a **test-driven, agent-friendly architecture**:
 
 ```
 OpenFifa/
@@ -317,7 +317,7 @@ Key principle: **Pure C# logic is separated from MonoBehaviour** so core game lo
 
 ## AI-Driven Development
 
-OpenFifa is an experiment in **agent-driven game development**. Every feature is:
+OpenFootball is an experiment in **agent-driven game development**. Every feature is:
 
 1. **Specified** as a user story with testable acceptance criteria ([`prd.json`](prd.json))
 2. **Test-driven** — tests written before implementation ([`docs/TESTING.md`](docs/TESTING.md))

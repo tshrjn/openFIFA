@@ -135,7 +135,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Menu item to create the recommended Audio subfolder structure.
         /// </summary>
-        [MenuItem("OpenFifa/Audio/Create Audio Folder Structure")]
+        [MenuItem("OpenFootball/Audio/Create Audio Folder Structure")]
         public static void CreateAudioFolderStructure()
         {
             string[] subfolders = { "SFX", "Music", "Crowd", "Ambient", "UI" };
@@ -155,7 +155,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Menu item to re-import all audio files with current settings.
         /// </summary>
-        [MenuItem("OpenFifa/Audio/Re-import All Audio")]
+        [MenuItem("OpenFootball/Audio/Re-import All Audio")]
         public static void ReimportAllAudio()
         {
             string[] guids = AssetDatabase.FindAssets("t:AudioClip", new[] { "Assets/Audio" });

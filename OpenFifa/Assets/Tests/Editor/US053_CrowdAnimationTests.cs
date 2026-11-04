@@ -266,10 +266,8 @@ namespace OpenFifa.Tests.Editor
             var director = new CrowdDirector(config);
 
             director.HandleEvent(CrowdGameEvent.NearMiss, eventPositionX: 24f, eventPositionZ: 0f);
-            // Reactions are staggered by distance (ReactionDelayPerUnit 0.02 s/m). The far West stand (section 3,
-            // x = -45) is 69 m from the event, so it stands after 1.38 s; 1 s was too short for it by design. 1.5 s
-            // is past every section's delay and well inside the 3 s standing duration.
-            director.Update(1.5f);
+            // Farthest (West) section is ~69 units away: 69 * 0.02 = 1.38 s delay; nearest stands until 0.42 + 3 s.
+            director.Update(2f);
 
             for (int i = 0; i < director.Sections.Count; i++)
             {

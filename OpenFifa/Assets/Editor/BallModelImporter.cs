@@ -115,7 +115,7 @@ namespace OpenFifa.Editor
         /// Sets up a prefab with the correct SphereCollider radius after model import.
         /// Call from a menu item or build script.
         /// </summary>
-        [MenuItem("OpenFifa/Ball/Setup Ball Collider")]
+        [MenuItem("OpenFootball/Ball/Setup Ball Collider")]
         public static void SetupBallCollider()
         {
             var selected = Selection.activeGameObject;
@@ -154,7 +154,7 @@ namespace OpenFifa.Editor
         /// Creates a PBR material for the ball with all texture slots configured.
         /// Call from a menu item.
         /// </summary>
-        [MenuItem("OpenFifa/Ball/Create Ball PBR Material")]
+        [MenuItem("OpenFootball/Ball/Create Ball PBR Material")]
         public static void CreateBallPBRMaterial()
         {
             var config = new BallModelConfig();

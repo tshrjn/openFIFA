@@ -40,7 +40,8 @@ namespace OpenFifa.Core
         Corner,
         FreeKick,
         Penalty,
-        /// <summary>Offside called. Player = offside player, Other = passer, Position = player position at the pass, Value = margin (m).</summary>
+        /// <summary>Offside called. Player = offside player, Other = passer, Position = player position at the pass, Value = margin (m),
+        /// DefenderLineZ / BallLineZ = the second-last defender and ball lines at the pass (world Z).</summary>
         Offside,
         /// <summary>A restart was taken (ball back in play). Detail = (int)RestartType.</summary>
         RestartTaken,

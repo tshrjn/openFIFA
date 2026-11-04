@@ -408,6 +408,9 @@ namespace OpenFifa.Core
             }
 
             _s.OffsidePasser = _s.OffsideMask != 0 ? kicker : -1;
+            int sign = AttackSign(team);
+            _s.OffsideDefenderLineZ = line * sign;
+            _s.OffsideBallLineZ = ballCoord * sign;
         }
 
         private void ClearOffside()
@@ -419,7 +422,8 @@ namespace OpenFifa.Core
         private void CallOffside(int id)
         {
             SimVec3 at = _s.OffsidePositions[id];
-            Emit(MatchEventType.Offside, id, _s.OffsidePasser, TeamOf(id), at, value: _s.OffsideMargins[id]);
+            Emit(MatchEventType.Offside, id, _s.OffsidePasser, TeamOf(id), at, value: _s.OffsideMargins[id],
+                defenderLineZ: _s.OffsideDefenderLineZ, ballLineZ: _s.OffsideBallLineZ);
             AwardRestart(RestartType.IndirectFreeKick, Opponent(TeamOf(id)), at, _cfg.FoulDelay);
         }
 
