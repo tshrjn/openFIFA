@@ -49,6 +49,8 @@ namespace OpenFifa.Core
             float autoSwitchDefenceDistance, long otherHumans = 0)
         {
             _blocked = otherHumans;
+            long teamBits = ((1L << MatchSetup.PlayersPerTeam) - 1) << MatchSim.FirstId(Team);
+            _coopTeam = (_blocked & teamBits) != 0;
             var s = sim.State;
             float now = s.Tick * sim.Dt;
             RefreshLists(sim);
@@ -75,7 +77,7 @@ namespace OpenFifa.Core
                     var e = events[i];
                     if (e.Type == MatchEventType.Pass && e.Team == Team && e.OtherPlayerId >= 0
                         && MatchSim.TeamOf(e.OtherPlayerId) == Team
-                        && (!CoopTeam || e.PlayerId == ControlledId)) // co-op: only the passer follows his pass
+                        && (!_coopTeam || e.PlayerId == ControlledId)) // co-op: only the passer follows his pass
                     {
                         Set(e.OtherPlayerId);
                         return;
@@ -119,23 +121,17 @@ namespace OpenFifa.Core
         /// <summary>Pitch-space direction of the latest right-stick flick / swipe (set by the session before Update).</summary>
         public void SetFlickDirection(SimVec3 pitchDir) => _lastFlickPitch = pitchDir;
 
+        /// <summary>Another user seat plays on this team (set at the start of <see cref="Update"/>).</summary>
+        private bool _coopTeam;
+
         /// <summary>
         /// Co-op: of the user seats on this team, is this one the closest to <paramref name="id"/>? Always true with a
         /// single seat. Keeps every seat from grabbing an AI teammate who wins the ball (the lowest seat would always win).
+        /// Ties go to the seat on the lower player id (deterministic).
         /// </summary>
-        /// <summary>Another user seat plays on this team.</summary>
-        private bool CoopTeam
-        {
-            get
-            {
-                long teamBits = ((1L << MatchSetup.PlayersPerTeam) - 1) << MatchSim.FirstId(Team);
-                return (_blocked & teamBits) != 0;
-            }
-        }
-
         private bool NearestSeatTo(MatchSim sim, int id)
         {
-            if (!CoopTeam || ControlledId < 0) return true;
+            if (!_coopTeam || ControlledId < 0) return true;
             var s = sim.State;
             var target = s.Players[id].Position;
             float mine = SimMath.FlatDistance(s.Players[ControlledId].Position, target);

@@ -178,5 +178,52 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             sel.Update(s.Sim, new[] { pass }, default, true, 0f, 1L << 15); // only an opponent seat is blocked
             Assert.AreEqual(9, sel.ControlledId);
         }
+
+        private static void Place(SinglePlayerMatchSession s, int id, float x, float z) =>
+            s.Sim.State.Players[id].Position = new SimVec3(x, 0f, z);
+
+        [Test]
+        public void Selector_Coop_AITeammateWinsBallEquidistant_LowerIdSeatTakesHim()
+        {
+            var s = LooseBallSession();
+            Place(s, 9, 0f, 0f);
+            Place(s, 6, -5f, 0f);
+            Place(s, 7, 5f, 0f);
+            s.Sim.State.Owner = 9;
+            var a = new HumanPlayerSelector(SimTeam.Home, 6);
+            var b = new HumanPlayerSelector(SimTeam.Home, 7);
+            a.Update(s.Sim, null, default, true, 0f, 1L << 7);
+            b.Update(s.Sim, null, default, true, 0f, 1L << 6);
+            Assert.AreEqual(9, a.ControlledId, "tie goes to the seat on the lower player id");
+            Assert.AreEqual(7, b.ControlledId);
+        }
+
+        [Test]
+        public void Selector_Coop_NearerSeatTakesAITeammateWhoWinsBall()
+        {
+            var s = LooseBallSession();
+            Place(s, 9, 0f, 0f);
+            Place(s, 6, -20f, 0f);
+            Place(s, 7, 4f, 0f);
+            s.Sim.State.Owner = 9;
+            var a = new HumanPlayerSelector(SimTeam.Home, 6);
+            var b = new HumanPlayerSelector(SimTeam.Home, 7);
+            a.Update(s.Sim, null, default, true, 0f, 1L << 7);
+            b.Update(s.Sim, null, default, true, 0f, 1L << 6);
+            Assert.AreEqual(6, a.ControlledId);
+            Assert.AreEqual(9, b.ControlledId);
+        }
+
+        [Test]
+        public void Selector_Coop_PartnerHasTheBall_OtherSeatStaysOnHisPlayer()
+        {
+            var s = LooseBallSession();
+            Place(s, 7, 0f, 0f);
+            Place(s, 6, -30f, 10f);
+            s.Sim.State.Owner = 7;
+            var a = new HumanPlayerSelector(SimTeam.Home, 6);
+            a.Update(s.Sim, null, default, true, 0f, 1L << 7);
+            Assert.AreEqual(6, a.ControlledId);
+        }
     }
 }
