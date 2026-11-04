@@ -82,4 +82,14 @@ namespace OpenFifa.Gameplay
         /// <summary>The sim's fixed step (s), e.g. 1/60.</summary>
         float FixedDeltaTime { get; }
     }
+
+    /// <summary>
+    /// Optional companion to <see cref="IPlayerAnimSource"/>: whether the player's side is out of possession. The driver
+    /// shows the defensive jockey for side-on moves only then (<see cref="OpenFifa.Core.StrafePosture"/>); a source
+    /// without it keeps the jockey for every side-on move.
+    /// </summary>
+    public interface IPlayerAnimPossession
+    {
+        bool OutOfPossession { get; }
+    }
 }

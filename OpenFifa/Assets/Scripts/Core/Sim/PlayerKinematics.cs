@@ -59,9 +59,13 @@ namespace OpenFifa.Core
 
             SimVec3 vel = p.Velocity.Flat;
             float speed = vel.Magnitude;
-            float heading = speed > 0.05f ? SimMath.Yaw(vel) : p.Facing;
-            float turnRate = TurnRate(a, c, speed);
             bool strafing = faceDir.SqrMagnitude > 1e-6f;
+            // From rest, a strafing (jockeying) player steps straight off in the move direction: his run is free of the
+            // body. Starting from the facing instead deadlocked any move more than 90 deg off it (a backward step):
+            // plant-and-turn zeroed the speed every tick, so the heading reset to the facing and he never moved.
+            float heading = speed > 0.05f ? SimMath.Yaw(vel)
+                : (strafing && throttle > 1e-3f ? SimMath.Yaw(flatMove) : p.Facing);
+            float turnRate = TurnRate(a, c, speed);
 
             if (throttle > 1e-3f)
             {

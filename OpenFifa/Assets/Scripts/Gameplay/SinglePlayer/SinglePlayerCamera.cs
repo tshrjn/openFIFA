@@ -14,7 +14,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// grass from filling the bottom of the frame. The smoothed framing never trails the ball by more than
     /// <see cref="MaxBallOffset"/> (a hard dead-zone edge), so a fast break or a goalmouth scramble cannot leave shot.
     /// </summary>
+    /// <remarks>
+    /// Execution order: runs after the match controller (-50, which places the ball and sizes its visual in its own
+    /// LateUpdate) and after the animation drivers (100, which move the players), so the framing reads this frame's ball
+    /// and player, not last frame's.
+    /// </remarks>
     [RequireComponent(typeof(Camera))]
+    [DefaultExecutionOrder(200)]
     public sealed class SinglePlayerCamera : MonoBehaviour
     {
         public enum Mode
@@ -54,7 +60,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private Vector3 _vel;
         private bool _snapped;
         private Vector3 _lastBall;
-        private float _ballVz, _lead, _leadVel, _attackLead, _attackLeadVel, _attackSign;
+        private float _ballVz, _carryVx, _carryVz, _lead, _leadVel, _attackLead, _attackLeadVel, _attackSign;
 
         /// <summary>Camera yaw in radians, same convention as the sim (0 = +Z, +pi/2 = +X).</summary>
         public float YawRadians => Mathf.Atan2(transform.forward.x, transform.forward.z);
@@ -72,6 +78,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (snap || !_snapped || dt <= 0f)
             {
                 _lastBall = ball;
+                _carryVx = 0f;
+                _carryVz = 0f;
                 if (!_snapped) { _ballVz = 0f; _lead = 0f; _leadVel = 0f; _attackLead = 0f; _attackLeadVel = 0f; _attackSign = 0f; }
                 if (AttackDirection != 0) _attackSign = AttackDirection;
                 _attackLead = _attackSign * BroadcastFraming.AttackLeadMetres;
@@ -79,8 +87,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
             else
             {
                 float vz = (ball.z - _lastBall.z) / dt;
+                float vx = (ball.x - _lastBall.x) / dt;
                 _lastBall = ball;
                 _ballVz = Mathf.Lerp(_ballVz, Mathf.Clamp(vz, -30f, 30f), 1f - Mathf.Exp(-dt * 3f));
+                // Lightly smoothed ball velocity (frame-time noise only), carried by the framing out of the dead-zone edge.
+                float kc = 1f - Mathf.Exp(-dt * 15f);
+                _carryVx = Mathf.Lerp(_carryVx, Mathf.Clamp(vx, -BroadcastFraming.MaxFollowSpeed, BroadcastFraming.MaxFollowSpeed), kc);
+                _carryVz = Mathf.Lerp(_carryVz, Mathf.Clamp(vz, -BroadcastFraming.MaxFollowSpeed, BroadcastFraming.MaxFollowSpeed), kc);
                 _lead = Mathf.SmoothDamp(_lead, Mathf.Clamp(_ballVz * LeadSeconds, -MaxLead, MaxLead), ref _leadVel, 0.5f, Mathf.Infinity, dt);
                 // Lead towards the goal being attacked; a loose ball keeps the last direction (no swing on every touch).
                 if (AttackDirection != 0) _attackSign = AttackDirection;
@@ -92,15 +105,24 @@ namespace OpenFifa.Gameplay.SinglePlayer
             // sat at the frame edge).
             target.z = Mathf.Clamp(target.z + _lead + _attackLead, -HalfLength + 3f, HalfLength - 3f);
             target.x = Mathf.Clamp(target.x, -HalfWidth, HalfWidth);
-            if (snap || !_snapped || dt <= 0f) { _focus = target; _snapped = true; _vel = Vector3.zero; }
-            else _focus = Vector3.SmoothDamp(_focus, target, ref _vel, FollowDamping, Mathf.Infinity, dt);
-            // Hard dead-zone edge around the ball itself: never more than MaxBallOffset behind it, whatever the smoothing.
-            float fz = BroadcastFraming.ClampFollow(_focus.z, ball.z, MaxBallOffset);
-            float fx = BroadcastFraming.ClampFollow(_focus.x, Mathf.Clamp(ball.x, -HalfWidth, HalfWidth), MaxBallOffset * 0.7f);
-            if (fz != _focus.z) _vel.z = 0f;
-            if (fx != _focus.x) _vel.x = 0f;
-            _focus.x = fx;
-            _focus.z = fz;
+            if (snap || !_snapped || dt <= 0f)
+            {
+                _focus = target;
+                _snapped = true;
+                _vel = Vector3.zero;
+                // Hard dead-zone edge around the ball itself: never more than MaxBallOffset behind it.
+                _focus.z = BroadcastFraming.ClampFollow(_focus.z, ball.z, MaxBallOffset);
+                _focus.x = BroadcastFraming.ClampFollow(_focus.x, Mathf.Clamp(ball.x, -HalfWidth, HalfWidth), MaxBallOffset * 0.7f);
+            }
+            else
+            {
+                // Smooth follow plus the hard dead-zone edge; while the edge holds the framing it moves at the ball's
+                // speed, and keeps that speed when the edge lets go (no dead stop after a long ball).
+                _focus.z = BroadcastFraming.FollowAxis(_focus.z, ref _vel.z, target.z, ball.z, _carryVz, MaxBallOffset, FollowDamping, dt);
+                _focus.x = BroadcastFraming.FollowAxis(_focus.x, ref _vel.x, target.x, Mathf.Clamp(ball.x, -HalfWidth, HalfWidth), _carryVx,
+                    MaxBallOffset * 0.7f, FollowDamping, dt);
+                _focus.y = 0f;
+            }
 
             Vector3 pos;
             Vector3 look;

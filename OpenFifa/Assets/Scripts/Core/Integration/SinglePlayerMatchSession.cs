@@ -371,7 +371,9 @@ namespace OpenFifa.Core
                     _aiKickUntil[id] = -1;
                     continue;
                 }
-                var intent = SimTeamAIAdapter.ToIntent(Director.Commands[id], state.Players[id], decided);
+                var cmd = Director.Commands[id];
+                AI.ApplyRecoveryRun(ref cmd, id); // a defender caught upfield sprints back whatever the phase's tempo
+                var intent = SimTeamAIAdapter.ToIntent(cmd, state.Players[id], decided);
                 // A latched shot is a commitment: a later decision tick that merely prefers to carry (decision noise flips
                 // close calls) does not cancel it; only a new kick replaces it, and losing the ball ends it.
                 bool shotCommitted = _aiKickUntil[id] >= state.Tick && PlayerIntent.IsShotAction(_aiKick[id].Action) &&

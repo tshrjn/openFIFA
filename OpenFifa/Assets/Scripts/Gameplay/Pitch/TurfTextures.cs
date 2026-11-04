@@ -11,7 +11,11 @@ namespace OpenFifa.Gameplay
     /// - _BumpMap (512 x 256): ground undulation and per-stripe blade lean (view-dependent stripe sheen).
     /// - _DetailAlbedoMap / _DetailNormalMap (512 x 512, linear, tiling every ~3 m): blade speckle; their mips fade to
     ///   neutral, which is the distance blend.
-    /// All textures are mipmapped, trilinear, anisotropic 8, made non-readable after upload (no CPU copy kept).
+    /// All textures are mipmapped, trilinear, made non-readable after upload (no CPU copy kept). Sizes, anisotropy and
+    /// compression follow the render quality tier (<see cref="BroadcastLighting.Quality"/>): desktop keeps the sizes
+    /// above with aniso 4 on the base maps and 2 on the detail maps, and block-compresses the two albedo maps at runtime
+    /// (Texture2D.Compress: DXT5; turf GPU memory 6.0 MiB -> 3.0 MiB); mobile halves every size (no runtime ASTC on iOS, so the
+    /// maps stay small instead: 1.5 MiB) with aniso 2.
     /// Keyword variants (_NORMALMAP, _DETAIL_MULX2, _SMOOTHNESS_TEXTURE_ALBEDO_CHANNEL_A) ship in player builds via the
     /// template material Resources/OpenFootball/ShaderKeep/KeepTurfLit.mat, which this clones.
     /// </summary>
@@ -45,8 +49,9 @@ namespace OpenFifa.Gameplay
         public static Material GetMaterial(float surfaceLength, float surfaceWidth, float fieldLength, float fieldWidth, TurfSettings settings)
         {
             settings = settings ?? new TurfSettings();
-            string key = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}x{1}/{2}x{3}/{4}",
-                surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings.CacheKey());
+            var q = BroadcastLighting.Quality;
+            string key = string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0}x{1}/{2}x{3}/{4}/{5}",
+                surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings.CacheKey(), q.Tier);
             if (Cache.TryGetValue(key, out var cached) && cached != null) return cached;
 
             var mat = CreateBaseMaterial();
@@ -54,14 +59,17 @@ namespace OpenFifa.Gameplay
             mat.name = "ProceduralTurf";
             bool ax = NormalAlphaHoldsX;
 
-            var baseMap = MakeTexture("TurfBase", BaseWidth, BaseHeight, false, TextureWrapMode.Clamp,
-                TurfMath.BaseMap(BaseWidth, BaseHeight, surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings));
-            var normal = MakeTexture("TurfNormal", NormalWidth, NormalHeight, true, TextureWrapMode.Clamp,
-                TurfMath.BaseNormalMap(NormalWidth, NormalHeight, surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings, ax));
-            var detail = MakeTexture("TurfDetail", DetailSize, DetailSize, true, TextureWrapMode.Repeat,
-                TurfMath.DetailAlbedo(DetailSize, settings));
-            var detailN = MakeTexture("TurfDetailNormal", DetailSize, DetailSize, true, TextureWrapMode.Repeat,
-                TurfMath.DetailNormal(DetailSize, settings, ax));
+            int bw = q.TurfBaseWidth, bh = q.TurfBaseHeight, nw = q.TurfNormalWidth, nh = q.TurfNormalHeight, ds = q.TurfDetailSize;
+            bool compress = q.CompressTurf && SystemInfo.SupportsTextureFormat(TextureFormat.DXT5);
+            var baseMap = MakeTexture("TurfBase", bw, bh, false, TextureWrapMode.Clamp, q.TurfBaseAniso, compress,
+                TurfMath.BaseMap(bw, bh, surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings));
+            // Normal maps stay RGBA32: block compression bands the gentle undulation and the stripe lean.
+            var normal = MakeTexture("TurfNormal", nw, nh, true, TextureWrapMode.Clamp, q.TurfBaseAniso, false,
+                TurfMath.BaseNormalMap(nw, nh, surfaceLength, surfaceWidth, fieldLength, fieldWidth, settings, ax));
+            var detail = MakeTexture("TurfDetail", ds, ds, true, TextureWrapMode.Repeat, q.TurfDetailAniso, compress,
+                TurfMath.DetailAlbedo(ds, settings));
+            var detailN = MakeTexture("TurfDetailNormal", ds, ds, true, TextureWrapMode.Repeat, q.TurfDetailAniso, false,
+                TurfMath.DetailNormal(ds, settings, ax));
 
             SetTex(mat, "_BaseMap", baseMap);
             SetTex(mat, "_MainTex", baseMap);
@@ -99,17 +107,29 @@ namespace OpenFifa.Gameplay
             return shader != null ? new Material(shader) : null;
         }
 
-        private static Texture2D MakeTexture(string name, int w, int h, bool linear, TextureWrapMode wrap, byte[] data)
+        private static Texture2D MakeTexture(string name, int w, int h, bool linear, TextureWrapMode wrap, int aniso, bool compress,
+            byte[] data)
         {
             var tex = new Texture2D(w, h, TextureFormat.RGBA32, true, linear)
             {
                 name = name,
                 wrapMode = wrap,
                 filterMode = FilterMode.Trilinear,
-                anisoLevel = 8,
+                anisoLevel = aniso,
             };
             tex.SetPixelData(data, 0);
-            tex.Apply(true, true);
+            if (compress)
+            {
+                // Build the mips on the CPU copy, block-compress them all (DXT5 keeps the smoothness alpha), then upload
+                // and drop the CPU copy.
+                tex.Apply(true, false);
+                tex.Compress(true);
+                tex.Apply(false, true);
+            }
+            else
+            {
+                tex.Apply(true, true);
+            }
             return tex;
         }
 

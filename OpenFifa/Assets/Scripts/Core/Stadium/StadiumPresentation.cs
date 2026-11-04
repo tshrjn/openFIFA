@@ -63,6 +63,23 @@ namespace OpenFifa.Core
         /// <summary>Idle sway amplitude and the extra bob at full excitement, in texture pixels of a 64 px band.</summary>
         public const float IdleBobPx = 1.2f, ExcitedBobPx = 5f;
 
+        // Crowd card layout (px within one 64 px band, y up), shared with StadiumTextures so the padding is checked here.
+        /// <summary>Band height (px) of one crowd card row in the texture.</summary>
+        public const int CardBandPx = 64;
+        /// <summary>Shoulder line: base height plus up to <see cref="ShoulderJitterPx"/>.</summary>
+        public const int ShoulderBasePx = 34, ShoulderJitterPx = 3;
+        public const int HeadRadiusMaxPx = 8;
+        /// <summary>
+        /// Background rows kept clear at the top of every card. The bob shifts the cards' V down, so a card's bottom edge
+        /// samples the top rows of the band below: they must be background for the whole bob plus the bilinear footprint.
+        /// </summary>
+        public const int CardTopPadPx = 8;
+        /// <summary>Largest bob (px): the top pad minus a pixel for bilinear filtering and one for the first mip.</summary>
+        public const float MaxBobPx = CardTopPadPx - 2;
+
+        /// <summary>First row (exclusive top) any figure reaches: tallest shoulder + neck gap + the largest head.</summary>
+        public static int ContentTopPx => ShoulderBasePx + ShoulderJitterPx + 1 + 2 * HeadRadiusMaxPx + 1;
+
         public static float GroupPhase(int group) => group * 1.7f + 0.4f;
 
         /// <summary>
@@ -78,7 +95,8 @@ namespace OpenFifa.Core
             float idle = IdleBobPx * (0.5f + 0.5f * (float)Math.Sin(0.7 * t + ph * 1.3));
             float hz = 1.1f + 1.2f * e;
             float bounce = ExcitedBobPx * e * (float)Math.Sqrt(e) * Math.Abs((float)Math.Sin(Math.PI * hz * t + ph));
-            float px = idle + bounce;
+            // Clamped inside the cards' top padding: the bob never shows the neighbouring band.
+            float px = Math.Min(idle + bounce, MaxBobPx);
             dv = -px / Math.Max(1, texHeightPx);
             du = 0.0012f * (0.3f + e) * (float)Math.Sin(0.9 * t + ph);
         }
