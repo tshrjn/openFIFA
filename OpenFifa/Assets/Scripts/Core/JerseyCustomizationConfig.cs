@@ -14,7 +14,8 @@ namespace OpenFifa.Core
         HalfAndHalf = 3,
         Gradient = 4,
         Pinstripes = 5,
-        Chevron = 6
+        Chevron = 6,
+        Sash = 7
     }
 
     /// <summary>
