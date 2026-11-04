@@ -64,6 +64,7 @@ namespace OpenFifa.Core
                 case MatchState.FullTime: return "FULL TIME";
                 case MatchState.GoalCelebration: return "GOAL!";
                 case MatchState.Paused: return "PAUSED";
+                case MatchState.Stoppage: return "FREE KICK";
                 default: return "";
             }
         }

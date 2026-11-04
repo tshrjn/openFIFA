@@ -68,11 +68,13 @@ namespace OpenFifa.Audio
         {
             // Subscribe to kick contact events
             Gameplay.PlayerKicker.OnKickContactEvent += PlayKick;
+            Gameplay.OffsidePresentation.OnWhistle += PlayWhistle;
         }
 
         private void OnDisable()
         {
             Gameplay.PlayerKicker.OnKickContactEvent -= PlayKick;
+            Gameplay.OffsidePresentation.OnWhistle -= PlayWhistle;
         }
 
         /// <summary>
