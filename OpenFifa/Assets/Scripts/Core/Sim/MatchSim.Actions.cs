@@ -641,7 +641,7 @@ namespace OpenFifa.Core
         /// </summary>
         private void SeparatePlayers()
         {
-            float minD = 2f * _cfg.Actions.PlayerBodyRadius;
+            float minD = 2f * _cfg.Actions.PlayerSeparationRadius;
             float minD2 = minD * minD;
             int taker = _s.Phase == SimMatchPhase.AwaitingRestart ? _s.RestartTakerId : -1;
             for (int i = 0; i < MatchSimState.PlayerCount; i++)

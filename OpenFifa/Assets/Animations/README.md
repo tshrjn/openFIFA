@@ -19,6 +19,7 @@ Assets/Animations/Controllers/Footballer.controller created by the builder
 - strips the `Rig|` and `Armature|` prefixes from clip names (`Armature|Slide_Start` becomes `Slide_Start`);
 - loops every `*_Loop` clip;
 - turns on **Bake Into Pose** for root rotation, Y and XZ (root motion stays off; the sim owns position);
+- sets root rotation **Based Upon: Original** with a **180 deg offset** (`OrientationOffsetDeg`). The Quaternius takes travel along -Z; without the offset every locomotion clip ran backwards relative to the player root (fixed 2026-11-04). "Body Orientation" is not used because it skews the jog/sprint travel 20-30 deg off the axis;
 - adds the `OnActionContact` event to `Slide_Start` and `OverhandThrow` at the contact times in `ActionClipLibrary`.
 
 It reapplies on every reimport, so edit the script rather than the Inspector.
@@ -49,13 +50,13 @@ Run **OpenFifa > Animation > Build Footballer Animator**. In batch mode, use `-e
    - **Base layer:** IK Pass is on.
    - **`Locomotion` state:** a 2D Freeform Directional blend tree on (`Strafe`, `Forward`) in m/s:
      - idle at (0, 0);
-     - walk at (0, 1.4);
-     - jog at (0, 3.4);
-     - sprint at (0, 6.5);
-     - backpedal at (0, -1.4), which is the walk clip reversed;
-     - jockey at (±1.4, 0), with the left side mirrored.
+     - walk at (0, 1.0);
+     - jog at (0, 5.9);
+     - sprint at (0, 8.5);
+     - backpedal at (0, -1.0), which is the walk clip reversed;
+     - jockey at (±0.7, 0), with the left side mirrored.
 
-     The state's speed multiplier is `LocoRate`.
+     The positions are the clips' **measured natural ground speeds** (`OpenFifa.Core.LocomotionGaitTable`, measured by `LocomotionClipMeasure` from the planted foot on the UAL2 mannequin). The state's speed multiplier is `LocoRate`; `LocomotionGaitSolver` sets it to ground speed / blended natural speed, so the feet do not slide. The jog clip covers the sim's whole non-sprint range (time-scaled); the sprint clip blends in only from 6.2 m/s (full at 7.6 m/s, capped at 35% unless the sim flags a sprint). After `BuildAll` the log prints each measured speed against the table and a runtime facing check; a mismatch over 12% or a backwards clip is reported.
    - **Action states,** each using the `ActionRate` speed multiplier and the `Mirror` parameter. Each returns to `Locomotion` through an exit-time transition:
      - `Pass`, `Shot`, `Cross`, `FirstTouch`, `Header` and `TackleStand`;
      - `TackleSlide`, then `TackleSlideExit`;
@@ -106,9 +107,9 @@ The driver then sends locomotion to motion matching instead of the blend tree. M
 
 ## 5. Verify on first open
 
-- Run EditMode tests in category `FID-ANIM`: these are the timing, warp, stride, IK and trajectory solvers.
+- Run EditMode tests in category `FID_ANIM`: these are the timing, warp, stride, IK and trajectory solvers.
 - Put the mannequin in a scene with a stub `IPlayerAnimSource` and check four things:
-  1. no foot skating at 1.4, 3.4 and 6.5 m/s; if the feet skate, tune `authoredSpeeds` on the driver and the blend-tree positions together;
+  1. no foot skating at 1.0, 5.9 and 8.5 m/s; if the feet skate, re-measure (OpenFootball > Animation > Measure Locomotion Clips) and update `LocomotionGaitTable`, then rebuild;
   2. a scheduled pass hits `ContactReached` with |error| < 1 frame;
   3. the strike foot visibly meets the ball;
   4. a left-footed action plays mirrored.
