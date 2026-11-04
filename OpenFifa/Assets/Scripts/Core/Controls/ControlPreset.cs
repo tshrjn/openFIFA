@@ -19,13 +19,13 @@ namespace OpenFifa.Core
         public ControlAction ShotWithRight;
         /// <summary>Shot with both shoulders held.</summary>
         public ControlAction ShotWithBoth;
-        /// <summary>Shot with the left trigger held (overrides the shoulders). Knuckleball in both presets.</summary>
+        /// <summary>Shot with the left trigger pressed during the charge (overrides the shoulders). Knuckleball in both presets.</summary>
         public ControlAction ShotWithLeftTrigger = ControlAction.KnuckleShot;
 
         /// <summary>
         /// Default. Follows the FC 26 Classic table in the research note (FIFPlay source):
         /// South pass, West lob/cross, North through, East shoot; LB+shoot chip, RB+shoot finesse,
-        /// LB+RB+shoot power (driven) shot; shoot twice = low shot. LT+shoot = knuckleball (a combo the reference
+        /// LB+RB+shoot power (driven) shot; shoot twice = low shot. shoot then LT (pressed during the charge) = knuckleball (a combo the reference
         /// layout leaves free: LT is shield/jockey and not a shot modifier there).
         /// </summary>
         public static ControlPreset Classic() => new ControlPreset

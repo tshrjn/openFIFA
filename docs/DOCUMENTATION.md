@@ -111,6 +111,7 @@ Possible next steps:
 **Changes**:
 - OpenFifa/Assets/Scripts/Gameplay/MatchOrchestrator.cs — full runtime bootstrapper (pitch, players, ball, goals, camera, HUD, AI)
 - OpenFifa/Assets/Scenes/Match.unity — minimal scene with MatchOrchestrator auto-bootstrap
+- Build scene order: every player build (BuildScript.BuildIOS/BuildMacOSDev, IosBuild exports, the SinglePlayerSceneBootstrap wrappers) uses `BuildSceneOrder.For`: SinglePlayerMatch.unity first (the scene the app boots into), LocalMultiplayerMatch.unity second, then the other enabled EditorBuildSettings scenes (Match.unity). The committed EditorBuildSettings.asset is unchanged; the order is applied at build time.
 - OpenFifa/Assets/Scripts/Core/FormationLayoutData.cs — added CreateRush4v4() factory (4 slots: 2 Def, CM, Fwd)
 - OpenFifa/Assets/Tests/Editor/RushFormationTests.cs — 9 EditMode tests
 - OpenFifa/Assets/Editor/ScreenshotCapture.cs — updated for Rush 4v4 formation
@@ -1086,6 +1087,7 @@ Possible next steps:
 
 ## Match weather and pitch condition (single player)
 
-- `SinglePlayerMatchOptions.Weather` (`WeatherType`, default `Clear`) picks the pitch condition through `PitchSurfaces.ForWeather` (rain = Wet, snow = Heavy, else Normal); `Options.Surface` overrides it (e.g. `Dry`). The session applies it with `MatchSimConfig.ForSurface` (a copy whose ball is `BallSimConfig.WithSurface(...)`) before building the `MatchSim` and the `TeamAIBallModel`, so the AI predicts with the ball it plays. The caller's config is not changed.
-- `SinglePlayerMatchController`: inspector `Weather` / `SurfaceOverride`, or `-spWeather dry|normal|wet|rain|heavy|clear|lightrain|heavyrain|snow|fog|overcast` (`MatchWeatherOption`). No visual weather is driven from it yet.
+- `SinglePlayerMatchOptions.Weather` (`WeatherType`, default `Clear`) picks the pitch condition through `PitchSurfaces.ForWeather` (rain = Wet, snow = Heavy, else Normal); `Options.Surface` overrides it (e.g. `Dry`). The session applies it with `MatchSimConfig.ForSurface` (a copy whose ball is `BallSimConfig.WithSurface(...)`) before building the `MatchSim` and the `TeamAIBallModel`, so the AI predicts with the ball it plays. The caller's config is not changed. The requested surface always wins: `ForSurface` on a config whose ball was already made for another surface re-surfaces it from its Normal source (`BallSimConfig.NormalSource`), and throws if the ball's `Surface` was set by hand with no source.
+- Every AI timing path uses the brain's `BallModel` (open play, `TeamAISetPieces.Model` for routines, the keeper's no-trajectory fallback via `TeamAIMath.PredictBall(..., model)`, and support-spot lane timing). The static `TeamAIOnBall.GroundPassTime/LobPassTime/CrossTime` and 3-argument `TeamAIMath.PredictBall` remain default-ball helpers for tests and tools.
+- `SinglePlayerMatchController`: inspector `Weather` / `SurfaceOverride`, or `-spWeather dry|normal|wet|rain|heavy|clear|lightrain|heavyrain|snow|fog|overcast` (`MatchWeatherOption`). Non-clear weather also drives the visuals: a `WeatherSystem` (rain/snow particles as stretched streaks kept 30 m in front of the broadcast camera, fog, pitch wetness) and a cloudier sky with a softer sun and shadows from `MatchWeatherOption.LookFor` (`WeatherLook`). Clear weather leaves the broadcast look untouched.
 - Tests: `Tests/Editor/Integration/SinglePlayerWeatherTests.cs`.

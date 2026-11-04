@@ -60,7 +60,12 @@ namespace OpenFifa.Core
         /// Returns true when the keeper should commit to the ball (sweep/claim).
         /// </summary>
         public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
-            ref AIPlayerCommand cmd) => Decide(world, gkIndex, backLineDepth, teamHasPossession, null, ref cmd);
+            ref AIPlayerCommand cmd) => Decide(world, gkIndex, backLineDepth, teamHasPossession, null, null, ref cmd);
+
+        /// <summary>As the full overload, with the default ball model for the no-trajectory fallback.</summary>
+        public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
+            TeamAIBallTrajectory trajectory, ref AIPlayerCommand cmd) =>
+            Decide(world, gkIndex, backLineDepth, teamHasPossession, trajectory, null, ref cmd);
 
         /// <summary>Goal-line spot for a penalty against: on the line between the posts until the kick (Law 14).</summary>
         public static SimVec3 PenaltyLineTarget(int attackSign, PitchSpec pitch) =>
@@ -68,10 +73,11 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Out-of-possession keeper behaviour. <paramref name="trajectory"/> is this tick's sim-matched free-ball
-        /// prediction (null falls back to <see cref="TeamAIMath.PredictBall"/>).
+        /// prediction (null falls back to predicting with <paramref name="model"/>, the brain's sim-matched ball model;
+        /// a null model means <see cref="TeamAIBallModel.Default"/>).
         /// </summary>
         public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
-            TeamAIBallTrajectory trajectory, ref AIPlayerCommand cmd)
+            TeamAIBallTrajectory trajectory, TeamAIBallModel model, ref AIPlayerCommand cmd)
         {
             var gk = world.Players[gkIndex];
             int sign = world.AttackSign(gk.Team);
@@ -144,7 +150,7 @@ namespace OpenFifa.Core
                 for (int k = 0; k <= 12; k++)
                 {
                     float t = k * 0.25f;
-                    var bp = trajectory != null ? trajectory.At(t) : TeamAIMath.PredictBall(ball.Position, ball.Velocity, t);
+                    var bp = trajectory != null ? trajectory.At(t) : TeamAIMath.PredictBall(ball.Position, ball.Velocity, t, model);
                     float depth = TeamAIMath.Depth(bp.Z, sign, pitch);
                     if (depth > backLineDepth || TeamAIMath.FlatDistance(bp, ownGoal) > 32f) continue;
                     float tg = TeamAIMath.TimeToIntercept(gk, bp, 0.2f);

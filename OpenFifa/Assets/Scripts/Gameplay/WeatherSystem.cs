@@ -27,6 +27,16 @@ namespace OpenFifa.Gameplay
         [SerializeField] private int _maxRainParticles = 2000;
         [SerializeField] private int _maxSnowParticles = 1500;
 
+        /// <summary>
+        /// Optional camera to keep the precipitation in front of (broadcast view). Null = emitters stay where they
+        /// are under this object.
+        /// </summary>
+        public Transform FollowCamera;
+        /// <summary>Metres in front of <see cref="FollowCamera"/> (flat) that the precipitation box is centred on.</summary>
+        public float FollowDistance = 30f;
+        /// <summary>Multiplier on the preset's droplet/flake rate (a wide broadcast view needs denser rain to read).</summary>
+        public float EmissionScale = 1f;
+
         private WeatherLogic _logic;
         private MaterialPropertyBlock _pitchPropertyBlock;
 
@@ -60,6 +70,55 @@ namespace OpenFifa.Gameplay
             EnsureRainParticleSystem();
             EnsureSnowParticleSystem();
             ApplyInitialState();
+        }
+
+        /// <summary>
+        /// Sets the particle material and look for a far broadcast camera: stretched rain streaks, larger flakes and a
+        /// bigger box. Call after the component has woken (e.g. right after AddComponent).
+        /// </summary>
+        public void ConfigureForBroadcast(Material particleMaterial, float boxSize = 90f)
+        {
+            if (_rainParticleSystem != null)
+            {
+                var rr = _rainParticleSystem.GetComponent<ParticleSystemRenderer>();
+                if (particleMaterial != null) rr.sharedMaterial = particleMaterial;
+                rr.renderMode = ParticleSystemRenderMode.Stretch;
+                rr.velocityScale = 0.04f;
+                rr.lengthScale = 1f;
+                var main = _rainParticleSystem.main;
+                main.startSize = 0.05f;
+                main.maxParticles = Mathf.Max(_maxRainParticles, 6000);
+                var shape = _rainParticleSystem.shape;
+                shape.scale = new Vector3(boxSize, boxSize * 0.7f, 1f);
+                var collision = _rainParticleSystem.collision;
+                collision.enabled = false; // no colliders on the procedural pitch; saves the per-particle raycasts
+                var subs = _rainParticleSystem.subEmitters;
+                subs.enabled = false;
+            }
+            if (_snowParticleSystem != null)
+            {
+                var sr = _snowParticleSystem.GetComponent<ParticleSystemRenderer>();
+                if (particleMaterial != null) sr.sharedMaterial = particleMaterial;
+                var main = _snowParticleSystem.main;
+                main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
+                main.maxParticles = Mathf.Max(_maxSnowParticles, 5000);
+                var shape = _snowParticleSystem.shape;
+                shape.scale = new Vector3(boxSize, boxSize * 0.7f, 1f);
+            }
+            ApplyInitialState();
+        }
+
+        private void LateUpdate()
+        {
+            if (FollowCamera == null) return;
+            Vector3 fwd = FollowCamera.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+            fwd.Normalize();
+            Vector3 c = FollowCamera.position + fwd * FollowDistance;
+            // The emitters sit 25-30 m above this object: keep it at the camera's height minus that, but not below
+            // the pitch, so the drops fall through the camera's view.
+            transform.position = new Vector3(c.x, Mathf.Max(0f, FollowCamera.position.y - 15f), c.z);
         }
 
         private void Update()
@@ -143,8 +202,8 @@ namespace OpenFifa.Gameplay
 
             var shape = _rainParticleSystem.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(60f, 1f, 40f);
-            shape.rotation = new Vector3(0f, 0f, 0f);
+            shape.scale = new Vector3(60f, 40f, 1f); // local Y becomes world Z once pitched down
+            shape.rotation = new Vector3(90f, 0f, 0f); // emit downwards (a Box emits along its local +Z)
 
             // Collision for splash effect
             var collision = _rainParticleSystem.collision;
@@ -236,7 +295,8 @@ namespace OpenFifa.Gameplay
 
             var shape = _snowParticleSystem.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(60f, 1f, 40f);
+            shape.scale = new Vector3(60f, 40f, 1f); // local Y becomes world Z once pitched down
+            shape.rotation = new Vector3(90f, 0f, 0f); // emit downwards (a Box emits along its local +Z)
 
             // Noise module for flutter/drift
             var noise = _snowParticleSystem.noise;
@@ -285,14 +345,15 @@ namespace OpenFifa.Gameplay
 
             if (shouldRain)
             {
-                emission.rateOverTime = particleParams.RainDropletCount;
+                emission.rateOverTime = particleParams.RainDropletCount * EmissionScale;
 
                 var main = _rainParticleSystem.main;
                 main.startSpeed = particleParams.RainSpeed;
 
                 // Apply rain angle from wind
                 var shape = _rainParticleSystem.shape;
-                shape.rotation = new Vector3(particleParams.RainAngle, 0f, 0f);
+                // A Box shape emits along its local +Z: pitch it 90 deg so drops leave downwards, tilted by the wind angle.
+                shape.rotation = new Vector3(90f - particleParams.RainAngle, 0f, 0f);
 
                 if (!_rainParticleSystem.isPlaying)
                     _rainParticleSystem.Play();
@@ -314,7 +375,7 @@ namespace OpenFifa.Gameplay
 
             if (shouldSnow)
             {
-                emission.rateOverTime = particleParams.SnowFlakeCount;
+                emission.rateOverTime = particleParams.SnowFlakeCount * EmissionScale;
 
                 var main = _snowParticleSystem.main;
                 main.startSpeed = particleParams.SnowSpeed;
