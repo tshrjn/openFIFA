@@ -7,7 +7,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-COMMENTARY")]
+    [Category("FID_COMMENTARY")]
     public class CommentaryBankTests
     {
         private static CommentaryLineBank LoadShipped()
@@ -94,10 +94,38 @@ namespace OpenFifa.Tests.Editor
             StringAssert.Contains("start or the end", err);
         }
 
+        private const string MinimalCategories =
+            ",\"schemaVersion\":1,\"categories\":[{\"id\":\"foul\",\"event\":\"Foul\",\"lines\":[\"A foul.\"]}]}";
+
+        [Test]
+        public void ShippedBank_FormatTag_IsOpenFootball()
+        {
+            Assert.AreEqual("openfootball-commentary-lines", CommentaryLineBank.FormatTag);
+            var root = JsonParser.Parse(File.ReadAllText(RosterTestData.LinesPath));
+            Assert.AreEqual(CommentaryLineBank.FormatTag, root.GetString("format"));
+        }
+
+        [Test]
+        public void Load_LegacyOpenFifaFormatTag_Loads()
+        {
+            Assert.AreEqual("openfifa-commentary-lines", CommentaryLineBank.LegacyFormatTag);
+            var bank = CommentaryLineBank.Load("{\"format\":\"openfifa-commentary-lines\"" + MinimalCategories, out var errors);
+            Assert.IsNotNull(bank, string.Join("\n", errors.ToArray()));
+            Assert.AreEqual(0, errors.Count);
+        }
+
+        [Test]
+        public void Load_WrongFormatTag_ErrorNamesCurrentTag()
+        {
+            var bank = CommentaryLineBank.Load("{\"format\":\"something-else\"" + MinimalCategories, out var errors);
+            Assert.IsNull(bank);
+            StringAssert.Contains("openfootball-commentary-lines", string.Join("\n", errors.ToArray()));
+        }
+
         [Test]
         public void Load_BadBank_CollectsErrors()
         {
-            const string json = "{\"format\":\"openfifa-commentary-lines\",\"schemaVersion\":1,\"categories\":[" +
+            const string json = "{\"format\":\"openfootball-commentary-lines\",\"schemaVersion\":1,\"categories\":[" +
                 "{\"id\":\"a\",\"event\":\"Nope\",\"lines\":[\"x\"]}," +
                 "{\"id\":\"b\",\"event\":\"Foul\",\"voice\":\"analyst\",\"lines\":[\"{name} fouls\"]}," +
                 "{\"id\":\"c\",\"event\":\"Foul\",\"lines\":[]}]}";

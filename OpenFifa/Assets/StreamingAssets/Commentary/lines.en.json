@@ -1,5 +1,5 @@
 {
-  "format": "openfifa-commentary-lines",
+  "format": "openfootball-commentary-lines",
   "schemaVersion": 1,
   "language": "en",
   "notes": "Original lines written for OpenFifa. Line ids are categoryId.NN by position: append new lines, do not reorder, or re-render the clips. {name} may appear once, at the start or end.",

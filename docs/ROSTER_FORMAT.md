@@ -64,7 +64,7 @@ warning, so newer files still load in older builds.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `format` | string | must be `"openfootball-roster"` |
+| `format` | string | must be `"openfootball-roster"`. The legacy tag `"openfifa-roster"` is still accepted on load. |
 | `schemaVersion` | int | `1`. Older versions are migrated. Newer versions are rejected with an "update OpenFifa" message. |
 | `league.id` | id | lower-case letters, digits, `-`, `_`, `.`; up to 48 characters |
 | `league.name` / `shortName` | string | up to 60 / 8 characters |

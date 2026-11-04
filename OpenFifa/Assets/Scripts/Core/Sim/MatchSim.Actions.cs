@@ -147,13 +147,30 @@ namespace OpenFifa.Core
             Emit(MatchEventType.KickWindup, p.Id, target, p.Team, p.Position, detail: p.ContactTick, action: act);
         }
 
+        /// <summary>
+        /// Resolves every wind-up and slide whose contact frame has come. Contacts due on the same tick are taken in
+        /// a seeded random order (drawn only when two or more coincide), so simultaneous challenges do not always
+        /// favour the lower player id (Home).
+        /// </summary>
         private void ResolveContacts()
         {
+            int n = 0;
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
+                if (ContactDue(i)) _scratchContacts[n++] = i;
+            for (int k = n - 1; k > 0; k--)
             {
+                int j = _s.Rng.Range(0, k + 1);
+                int tmp = _scratchContacts[k];
+                _scratchContacts[k] = _scratchContacts[j];
+                _scratchContacts[j] = tmp;
+            }
+
+            for (int k = 0; k < n; k++)
+            {
+                int i = _scratchContacts[k];
+                if (!ContactDue(i)) continue; // an earlier contact this tick changed his state
                 ref SimPlayer p = ref _s.Players[i];
-                if (p.SentOff) continue;
-                if (p.ActionState == SimPlayerActionState.WindUp && _s.Tick >= p.ContactTick)
+                if (p.ActionState == SimPlayerActionState.WindUp)
                 {
                     IntentAction act = p.PendingAction;
                     p.PendingAction = IntentAction.None;
@@ -162,14 +179,22 @@ namespace OpenFifa.Core
                     if (act == IntentAction.Tackle) ResolveTackle(i, false);
                     else ResolveKick(i, act);
                 }
-                else if (p.ActionState == SimPlayerActionState.Sliding && p.PendingAction == IntentAction.SlideTackle
-                         && _s.Tick >= p.ContactTick && _s.Phase == SimMatchPhase.InPlay)
+                else
                 {
                     TrySlideContact(i);
                 }
 
                 if (_s.Phase != SimMatchPhase.InPlay && _s.Phase != SimMatchPhase.AwaitingRestart) return;
             }
+        }
+
+        private bool ContactDue(int i)
+        {
+            ref SimPlayer p = ref _s.Players[i];
+            if (p.SentOff) return false;
+            if (p.ActionState == SimPlayerActionState.WindUp) return _s.Tick >= p.ContactTick;
+            return p.ActionState == SimPlayerActionState.Sliding && p.PendingAction == IntentAction.SlideTackle
+                   && _s.Tick >= p.ContactTick && _s.Phase == SimMatchPhase.InPlay;
         }
 
         private float PressureOn(int id)
@@ -239,7 +264,7 @@ namespace OpenFifa.Core
                 receiver = ChoosePassTarget(id, aim, p.PendingTarget);
                 if (receiver >= 0)
                 {
-                    req.TargetPoint = PassLeadPoint(id, receiver, act);
+                    req.TargetPoint = PassLeadPoint(id, receiver, act, req.Power, throwIn);
                     req.HasTarget = true;
                 }
             }
@@ -336,21 +361,74 @@ namespace OpenFifa.Core
             return best;
         }
 
-        private SimVec3 PassLeadPoint(int passer, int receiver, IntentAction act)
+        /// <summary>
+        /// Where to play the pass so it meets the receiver: his position after the ball's real flight time, from
+        /// <see cref="KickSolver.PassFlightTime"/> (the same launch speed the solver will use), plus the through-ball
+        /// lead into his path. The meeting time t solves flightTime(|lead(t) - ball|) = t, found with a bracketed
+        /// secant (regula falsi, Illinois) so it also converges when the receiver runs away as fast as the ball
+        /// slows down. A receiver the ball cannot catch is led by the longest search time.
+        /// </summary>
+        private SimVec3 PassLeadPoint(int passer, int receiver, IntentAction act, float power, bool throwIn)
         {
             SimPlayer r = _s.Players[receiver];
-            float d = SimMath.FlatDistance(r.Position, _s.Ball.Position);
-            float t = SimMath.Clamp(d / 14f, 0.2f, 2.5f);
-            SimVec3 lead = r.Position + r.Velocity.Flat * t;
+            SimVec3 vel = r.Velocity.Flat;
+            SimVec3 extra = SimVec3.Zero;
             if (act == IntentAction.ThroughPass)
             {
-                SimVec3 dir = r.Speed > 1f ? r.Velocity.Flat.Normalized : new SimVec3(0f, 0f, AttackSign(r.Team));
-                lead += dir * _cfg.Actions.ThroughLeadDistance;
+                SimVec3 dir = r.Speed > 1f ? vel.Normalized : new SimVec3(0f, 0f, AttackSign(r.Team));
+                extra = dir * _cfg.Actions.ThroughLeadDistance;
             }
 
+            const float maxT = 6f;
+            float lo = 0f, glo = LeadResidual(r.Position, vel, extra, 0f, act, power, throwIn, out SimVec3 lead);
+            if (glo <= 0f || vel.SqrMagnitude < 1e-4f) return lead; // static receiver: the first point is exact
+
+            // Fixed-point guess, then bracket.
+            float hi = SimMath.Min(maxT, glo);
+            float ghi = LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+            while (ghi > 0f && hi < maxT)
+            {
+                lo = hi; glo = ghi;
+                hi = SimMath.Min(maxT, hi + SimMath.Max(ghi, 0.5f));
+                ghi = LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+            }
+
+            if (ghi > 0f) return lead; // cannot catch him inside the search window
+
+            int side = 0;
+            for (int i = 0; i < 8 && hi - lo > 0.01f; i++)
+            {
+                float t = (lo * ghi - hi * glo) / (ghi - glo);
+                float g = LeadResidual(r.Position, vel, extra, t, act, power, throwIn, out lead);
+                if (SimMath.Abs(g) < 0.005f) return lead;
+                if (g > 0f)
+                {
+                    lo = t; glo = g;
+                    if (side == 1) ghi *= 0.5f;
+                    side = 1;
+                }
+                else
+                {
+                    hi = t; ghi = g;
+                    if (side == -1) glo *= 0.5f;
+                    side = -1;
+                }
+            }
+
+            LeadResidual(r.Position, vel, extra, hi, act, power, throwIn, out lead);
+            return lead;
+        }
+
+        /// <summary>Flight time to the receiver's lead point at time t, minus t (positive: the ball is late).</summary>
+        private float LeadResidual(SimVec3 pos, SimVec3 vel, SimVec3 extra, float t, IntentAction act, float power,
+            bool throwIn, out SimVec3 lead)
+        {
+            SimVec3 p = pos + vel * t + extra;
             float mx = _cfg.Pitch.HalfWidth - 1f;
             float mz = _cfg.Pitch.HalfLength - 1f;
-            return new SimVec3(SimMath.Clamp(lead.X, -mx, mx), 0f, SimMath.Clamp(lead.Z, -mz, mz));
+            lead = new SimVec3(SimMath.Clamp(p.X, -mx, mx), 0f, SimMath.Clamp(p.Z, -mz, mz));
+            float d = SimMath.FlatDistance(lead, _s.Ball.Position);
+            return KickSolver.PassFlightTime(act, power, d, throwIn, _cfg.Actions, _cfg.Ball) - t;
         }
 
         private void StepSlide(ref SimPlayer p, float dt)
@@ -532,7 +610,8 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Keeps players at least two body radii apart (one deterministic pass in id order). A restart taker stands
-        /// still at the ball, so the other player takes the whole correction.
+        /// still at the ball, so the other player takes the whole correction. Everyone is then re-clamped to the
+        /// playing area plus the run-off margin (<see cref="ClampToArea"/>).
         /// </summary>
         private void SeparatePlayers()
         {
@@ -557,6 +636,10 @@ namespace OpenFifa.Core
                     _s.Players[j].Position += n * (push * (1f - wi));
                 }
             }
+
+            // A push must not carry anyone past the run-off margin around the pitch.
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+                if (!_s.Players[i].SentOff) ClampToArea(ref _s.Players[i]);
         }
     }
 }

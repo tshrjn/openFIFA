@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor.Sim
 {
     [TestFixture]
-    [Category("FID-SIM")]
+    [Category("FID_SIM")]
     public class PossessionTests
     {
         private const float HL = 52.5f;

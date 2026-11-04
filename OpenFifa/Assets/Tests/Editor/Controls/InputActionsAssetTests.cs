@@ -10,7 +10,7 @@ namespace OpenFifa.Tests.Editor
     /// action -> binding pairs for both control schemes. Unity runs EditMode tests from the project root.
     /// </summary>
     [TestFixture]
-    [Category("FID-CONTROLS")]
+    [Category("FID_CONTROLS")]
     public class InputActionsAssetTests
     {
         private const string AssetPath = "Assets/Settings/Input/OpenFifaControls.inputactions";

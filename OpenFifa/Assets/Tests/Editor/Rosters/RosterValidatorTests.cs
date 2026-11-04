@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-DATA")]
+    [Category("FID_DATA")]
     public class RosterValidatorTests
     {
         private sealed class RenameSquadMigration : IRosterMigration
@@ -144,6 +144,17 @@ namespace OpenFifa.Tests.Editor
             var root = RosterTestData.SmallLeague();
             root.Set("format", JsonNode.FromString("something-else"));
             Assert.IsTrue(RosterTestData.HasError(RosterTestData.Load(root), "format", "openfootball-roster"));
+        }
+
+        [Test]
+        public void Validate_LegacyOpenFifaFormatTag_LoadsWithoutErrors()
+        {
+            var root = RosterTestData.SmallLeague();
+            root.Set("format", JsonNode.FromString(RosterSchema.LegacyFormatTag));
+            Assert.AreEqual("openfifa-roster", RosterSchema.LegacyFormatTag);
+            var r = RosterTestData.Load(root);
+            Assert.IsTrue(r.Success, r.Describe());
+            Assert.IsFalse(RosterTestData.HasError(r, "format", ""));
         }
 
         [Test]

@@ -6,7 +6,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
 {
     /// <summary>Review item 3: the AI's ball timing must match the sim's integrator.</summary>
     [TestFixture]
-    [Category("FID-TEAMAI")]
+    [Category("FID_TEAMAI")]
     public class TeamAIBallTimingTests
     {
         private static readonly PitchSpec Free = new PitchSpec(10000f, 10000f, 7.32f, 2.44f, 16.5f, 40.32f);

@@ -142,7 +142,8 @@ namespace OpenFifa.Core
             WarnUnknownKeys(root, RootKeys, "");
 
             var format = root.Get("format");
-            if (format == null || !format.IsString || format.StringValue != RosterSchema.FormatTag)
+            if (format == null || !format.IsString
+                || (format.StringValue != RosterSchema.FormatTag && format.StringValue != RosterSchema.LegacyFormatTag))
                 Error("format", "must be \"" + RosterSchema.FormatTag + "\" (got " + Describe(format) + ")", format ?? root);
 
             RequireInt(root, "schemaVersion", "", RosterSchema.CurrentVersion, RosterSchema.CurrentVersion);

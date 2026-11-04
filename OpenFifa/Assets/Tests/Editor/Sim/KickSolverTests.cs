@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor.Sim
 {
     [TestFixture]
-    [Category("FID-SIM")]
+    [Category("FID_SIM")]
     public class KickSolverTests
     {
         private static readonly BallSimConfig Ball = new BallSimConfig();

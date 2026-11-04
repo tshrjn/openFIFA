@@ -5,7 +5,7 @@ namespace OpenFifa.Tests.Editor.Sim
 {
     /// <summary>Ball-flight regression tests for the PR #5 review (items 2, 11, 12, 13) and the AI prediction API.</summary>
     [TestFixture]
-    [Category("FID-SIM")]
+    [Category("FID_SIM")]
     public class BallFlightTests
     {
         private static readonly BallSimConfig Ball = new BallSimConfig();

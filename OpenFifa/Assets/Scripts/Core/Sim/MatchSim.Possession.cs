@@ -261,12 +261,28 @@ namespace OpenFifa.Core
             _s.Ball.Grounded = _s.Ball.Position.Y <= r + 1e-3f && vOut.Y <= 0.01f;
 
             int previous = _s.LastTouchPlayer;
+            SimTeam previousTeam = _s.LastTouchTeam;
             SimTeam team = hp.Team;
             if (_s.ShotLive && _s.Shooter >= 0 && TeamOf(_s.Shooter) == team) _s.Shooter = hitId;
+            if (_s.PassLive && _s.PassTeam != team)
+            {
+                // Deflected by an opponent: whoever gets it next did not receive a pass (no completion, no assist).
+                _s.PassLive = false;
+                _s.AssistCandidate = -1;
+            }
+
             _s.LastTouchPlayer = hitId;
             _s.LastTouchTeam = team;
             NoteTouch(hitId);
             Emit(MatchEventType.Deflection, hitId, previous, team, _s.Ball.Position, vOut.Magnitude);
+
+            if (team == previousTeam && _s.Phase == SimMatchPhase.InPlay)
+            {
+                // Touched by a team-mate (Law 11): a player in an offside position who touches it is penalised;
+                // otherwise offside is judged afresh from this touch, as if he had played a new pass.
+                if ((_s.OffsideMask & (1 << hitId)) != 0) CallOffside(hitId);
+                else EvaluateOffside(hitId, RestartType.None);
+            }
         }
 
         private void UpdateDribble()

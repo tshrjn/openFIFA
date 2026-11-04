@@ -14,7 +14,7 @@ Rules for every agent:
   if you need more math, add a static helper in your own folder).
 - Determinism: no unseeded System.Random, no DateTime, no unordered Dictionary iteration in sim logic.
 - Tests: NUnit EditMode tests in OpenFifa/Assets/Tests/Editor/<YourArea>/, named Method_Scenario_Expected,
-  [Category("FID-<AREA>")]. Unity is not licensed yet, so also prove behaviour now:
+  [Category("FID_<AREA>")] (underscore: Unity NUnit rejects "-" in category names). Unity is not licensed yet, so also prove behaviour now:
   - compile check:
     `D=~/Unity/6000.3.10f1/Editor/Data/MonoBleedingEdge; cd OpenFifa/Assets/Scripts/Core && $D/bin/mono $D/lib/mono/4.5/csc.exe -nologo -langversion:9 -target:library -out:<scratch>/core.dll -recurse:*.cs`
   - logic check: write a throwaway console Main in YOUR scratch dir that references core.dll

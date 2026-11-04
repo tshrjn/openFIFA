@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-ANIM")]
+    [Category("FID_ANIM")]
     public class KickWarpSolverTests
     {
         private static ActionClipProfile Pass => ActionClipLibrary.Default(AnimActionKind.Pass);

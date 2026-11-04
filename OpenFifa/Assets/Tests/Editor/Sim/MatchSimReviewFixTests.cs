@@ -5,7 +5,7 @@ namespace OpenFifa.Tests.Editor.Sim
 {
     /// <summary>Regression tests for the PR #5 review findings (docs/review/PR5_REVIEW.md) in the match sim.</summary>
     [TestFixture]
-    [Category("FID-SIM")]
+    [Category("FID_SIM")]
     public class MatchSimReviewFixTests
     {
         private const float HL = 52.5f;

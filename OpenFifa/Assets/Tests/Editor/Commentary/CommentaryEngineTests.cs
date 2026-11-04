@@ -6,7 +6,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-COMMENTARY")]
+    [Category("FID_COMMENTARY")]
     public class CommentaryEngineTests
     {
         private static CommentaryLineBank Shipped()
@@ -186,7 +186,7 @@ namespace OpenFifa.Tests.Editor
         [Test]
         public void NameLines_StitchNameClipWithIntonation()
         {
-            const string json = "{\"format\":\"openfifa-commentary-lines\",\"schemaVersion\":1,\"categories\":[" +
+            const string json = "{\"format\":\"openfootball-commentary-lines\",\"schemaVersion\":1,\"categories\":[" +
                 "{\"id\":\"g\",\"event\":\"Goal\",\"priority\":90,\"resolution\":true,\"tone\":\"excited\",\"nameTone\":\"excited\",\"lines\":[\"{name} scores!\"]}," +
                 "{\"id\":\"t\",\"event\":\"ThroughBall\",\"nameTone\":\"question\",\"lines\":[\"Clever pass from {name}\"]}]}";
             var bank = CommentaryLineBank.Load(json, out var errors);

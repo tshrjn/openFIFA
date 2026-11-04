@@ -6,7 +6,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
 {
     /// <summary>Review items 10 and 15: keeper on his line for a penalty, corner / penalty / free-kick routines.</summary>
     [TestFixture]
-    [Category("FID-TEAMAI")]
+    [Category("FID_TEAMAI")]
     public class TeamAISetPieceTests
     {
         private static readonly PitchSpec Pitch = PitchSpec.Standard;

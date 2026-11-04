@@ -30,7 +30,7 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
 ## Line bank format
 
 ```json
-{"format": "openfifa-commentary-lines", "schemaVersion": 1, "language": "en", "categories": [
+{"format": "openfootball-commentary-lines", "schemaVersion": 1, "language": "en", "categories": [
   {"id": "shot.saved", "event": "ShotSaved", "voice": "pbp", "priority": 75, "interruptible": true,
    "resolution": true, "cooldown": 0, "maxCrowd": 1, "tone": "excited", "nameTone": "neutral",
    "context": null, "situation": null,
@@ -38,6 +38,7 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
 ]}
 ```
 
+- `format` must be `"openfootball-commentary-lines"`. Banks with the legacy tag `"openfifa-commentary-lines"` still load.
 - A line's id is `<categoryId>.<NN>`, taken from its position in the list. You can override it with `"id"`.
   Add new lines at the end. Reordering changes the clip ids, and the clips then have to be rendered again.
 - Optional conditions on a line: `minQuality`/`maxQuality` (shot quality 0-1), `minDistance`/`maxDistance`

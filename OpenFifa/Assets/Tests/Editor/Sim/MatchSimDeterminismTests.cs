@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor.Sim
 {
     [TestFixture]
-    [Category("FID-SIM")]
+    [Category("FID_SIM")]
     public class MatchSimDeterminismTests
     {
         private static ulong RunBots(ulong seed, int ticks, out int events, out int goals)

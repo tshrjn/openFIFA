@@ -10,7 +10,10 @@ namespace OpenFifa.Core
     /// </summary>
     public sealed class CommentaryLineBank
     {
-        public const string FormatTag = "openfifa-commentary-lines";
+        public const string FormatTag = "openfootball-commentary-lines";
+
+        /// <summary>Format tag of line banks from before the OpenFootball rename; still accepted on load.</summary>
+        public const string LegacyFormatTag = "openfifa-commentary-lines";
         public const int CurrentVersion = 1;
         public const string NameToken = "{name}";
 
@@ -58,7 +61,8 @@ namespace OpenFifa.Core
             catch (JsonParseException ex) { errors.Add(ex.Message); return null; }
 
             if (!root.IsObject) { errors.Add("top level must be an object"); return null; }
-            if (root.GetString("format") != FormatTag) errors.Add("format must be \"" + FormatTag + "\"");
+            string format = root.GetString("format");
+            if (format != FormatTag && format != LegacyFormatTag) errors.Add("format must be \"" + FormatTag + "\"");
             int version = root.GetInt("schemaVersion", -1);
             if (version != CurrentVersion)
                 errors.Add("schemaVersion " + version + " is not supported (expected " + CurrentVersion + ")");

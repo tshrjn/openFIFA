@@ -6,7 +6,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
 {
     /// <summary>Review item 7: the difficulty ladder (including OpponentReactionBonus) changes how the AI plays.</summary>
     [TestFixture]
-    [Category("FID-TEAMAI")]
+    [Category("FID_TEAMAI")]
     public class TeamAIDifficultyBehaviourTests
     {
         private static readonly PitchSpec Pitch = PitchSpec.Standard;

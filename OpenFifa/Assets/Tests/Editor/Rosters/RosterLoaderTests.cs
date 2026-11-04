@@ -6,7 +6,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-DATA")]
+    [Category("FID_DATA")]
     public class RosterLoaderTests
     {
         [Test]

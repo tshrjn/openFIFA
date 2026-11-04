@@ -15,6 +15,9 @@ namespace OpenFifa.Core
         /// <summary>Format tag every roster file must carry in its "format" member.</summary>
         public const string FormatTag = "openfootball-roster";
 
+        /// <summary>Format tag written by builds from before the OpenFootball rename; still accepted on load.</summary>
+        public const string LegacyFormatTag = "openfifa-roster";
+
         public const int AttributeMin = 1;
         public const int AttributeMax = 20;
         public const int StarMin = 1;

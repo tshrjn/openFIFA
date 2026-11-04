@@ -192,8 +192,57 @@ namespace OpenFifa.Core
 
         private static readonly PitchSpec FreeFlight = new PitchSpec(10000f, 10000f, 7.32f, 2.44f, 16.5f, 40.32f);
 
+        /// <summary>
+        /// Seconds an assisted pass of <paramref name="action"/> at <paramref name="power"/> takes to reach a target
+        /// <paramref name="distance"/> metres away, using the same launch speed <see cref="Solve"/> picks (before the
+        /// error cone): ground passes roll there (<see cref="BallFlight.GroundPassTime"/>), lobs, crosses and
+        /// throw-ins fly to their first landing. A ground pass capped short of the target returns its full roll time.
+        /// </summary>
+        public static float PassFlightTime(IntentAction action, float power, float distance, bool throwIn,
+            SimActionConfig cfg, BallSimConfig ball)
+        {
+            if (distance <= 0f) return 0f;
+            power = SimMath.Clamp01(power);
+            switch (action)
+            {
+                case IntentAction.Lob:
+                {
+                    float e = cfg.LobElevationDeg * SimMath.Deg2Rad;
+                    return LoftedTime(LoftedSpeed(distance, e, -8f, ball), e, -8f, ball);
+                }
+                case IntentAction.Cross:
+                {
+                    float e = cfg.CrossElevationDeg * SimMath.Deg2Rad;
+                    return LoftedTime(LoftedSpeed(distance, e, -5f, ball), e, -5f, ball);
+                }
+            }
+
+            if (throwIn)
+            {
+                float e = 25f * SimMath.Deg2Rad;
+                return LoftedTime(SimMath.Min(LoftedSpeed(SimMath.Max(distance, 5f), e, 0f, ball), 15f), e, 0f, ball);
+            }
+
+            float arrive = cfg.PassArrivalSpeedMin + cfg.PassArrivalSpeedRange * power;
+            float speed = SimMath.Min(BallFlight.GroundPassSpeedFor(ball, distance, arrive), cfg.PassMaxSpeed);
+            float t = BallFlight.GroundPassTime(ball, distance, speed);
+            if (float.IsPositiveInfinity(t))
+                t = BallFlight.GroundPassTime(ball, BallFlight.GroundRollDistance(ball, speed) * 0.999f, speed);
+            return t;
+        }
+
+        /// <summary>Seconds from launch to the first ground contact (120 Hz integration).</summary>
+        public static float LoftedTime(float speed, float elevation, float topSpin, BallSimConfig ball)
+        {
+            Carry(speed, elevation, topSpin, ball, out float time);
+            return time;
+        }
+
         /// <summary>Horizontal distance to the first ground contact for a launch (120 Hz integration).</summary>
-        public static float Carry(float speed, float elevation, float topSpin, BallSimConfig ball)
+        public static float Carry(float speed, float elevation, float topSpin, BallSimConfig ball) =>
+            Carry(speed, elevation, topSpin, ball, out _);
+
+        private static float Carry(float speed, float elevation, float topSpin, BallSimConfig ball, out float time)
         {
             float cp = (float)Math.Cos(elevation);
             var b = new SimBall
@@ -202,12 +251,15 @@ namespace OpenFifa.Core
                 Velocity = new SimVec3(0f, speed * (float)Math.Sin(elevation), speed * cp),
                 Spin = new SimVec3(topSpin, 0f, 0f),
             };
+            int steps = 0;
             for (int i = 0; i < 1200; i++)
             {
+                steps++;
                 BallStepFlags f = BallIntegrator.Step(ref b, ball, FreeFlight, 1f / 120f);
                 if ((f & (BallStepFlags.Bounced | BallStepFlags.StartedRolling)) != 0) break;
             }
 
+            time = steps / 120f;
             return b.Position.Z;
         }
 

@@ -5,7 +5,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor.TeamAI
 {
     [TestFixture]
-    [Category("FID-TEAMAI")]
+    [Category("FID_TEAMAI")]
     public class TeamAITests
     {
         private static readonly PitchSpec Pitch = PitchSpec.Standard;

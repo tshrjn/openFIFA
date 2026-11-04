@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-CONTROLS")]
+    [Category("FID_CONTROLS")]
     public class ChargeAndAssistTests
     {
         [Test]

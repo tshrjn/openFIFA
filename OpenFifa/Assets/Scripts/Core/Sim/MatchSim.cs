@@ -22,6 +22,7 @@ namespace OpenFifa.Core
         private readonly MatchSetup _setup;
         private readonly List<MatchEvent> _events = new List<MatchEvent>(32);
         private readonly float[] _scratchCoords = new float[MatchSetup.PlayersPerTeam];
+        private readonly int[] _scratchContacts = new int[MatchSimState.PlayerCount];
         private MatchSimState _s;
 
         public MatchSim(MatchSimConfig config, MatchSetup setup)

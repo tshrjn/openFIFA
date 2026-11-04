@@ -6,7 +6,7 @@ using OpenFifa.Gameplay;
 namespace OpenFifa.Tests.Editor
 {
     [TestFixture]
-    [Category("FID-ANIM")]
+    [Category("FID_ANIM")]
     public class AnimSnapshotInterpolatorTests
     {
         private const float Dt = 1f / 60f;
