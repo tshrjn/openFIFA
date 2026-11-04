@@ -140,18 +140,19 @@ namespace OpenFifa.Core
                 }
             }
 
-            // Compute average luminance
-            float avg = 0f;
+            // Compute average luminance (double: a float sum of 64 equal values can land just above the value itself)
+            double avg = 0.0;
             for (int i = 0; i < 64; i++)
                 avg += gray8x8[i];
-            avg /= 64f;
+            avg /= 64.0;
 
-            // Build hash: bit = 1 if pixel luminance >= average
+            // Build hash: bit = 1 if pixel luminance >= average. Cells within half a grey level of the average count
+            // as "at" it, so flat or near-flat images hash the same instead of flipping every bit on rounding noise.
+            const double tolerance = 0.5;
             long hash = 0;
             for (int i = 0; i < 64; i++)
             {
-                // Tolerance: on flat images float summation puts avg a hair off each pixel, flipping bits at random.
-                if (gray8x8[i] >= avg - 0.5f)
+                if (gray8x8[i] >= avg - tolerance)
                     hash |= (1L << i);
             }
 
@@ -169,7 +170,7 @@ namespace OpenFifa.Core
             int distance = 0;
             while (xor != 0)
             {
-                distance += (int)(xor & 1);
+                distance += (int)(xor & 1UL);
                 xor >>= 1;
             }
             return distance;

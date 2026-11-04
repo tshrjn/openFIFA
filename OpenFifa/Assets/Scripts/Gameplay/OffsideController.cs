@@ -272,7 +272,7 @@ namespace OpenFifa.Gameplay
                 Teleport(taker, new Vector3(spot.x - defendSign * 0.8f, taker.transform.position.y, spot.z));
             }
 
-            if (_tracker != null) _tracker.SetPendingRestart(RestartType.FreeKick);
+            if (_tracker != null) _tracker.SetPendingRestart(RestartType.IndirectFreeKick);
             _restartPending = false;
             if (_stateMachine != null) _stateMachine.EndStoppage();
             OnFreeKickAwarded?.Invoke(decision);

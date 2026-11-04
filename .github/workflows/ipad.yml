@@ -1,0 +1,214 @@
+# iPad build + simulator smoke test + TestFlight upload. Dispatched from the VPS by ci/ipad/ship.sh.
+# Job 1 (Linux) exports the Xcode projects with Unity; jobs 2-3 (macOS, Xcode 26) never run Unity.
+# See docs/IPAD_PIPELINE.md.
+name: ipad
+run-name: "ipad #${{ inputs.build_number || github.run_id }} (${{ inputs.upload && 'testflight' || 'check' }})"
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: CFBundleVersion (ci/ipad/ship.sh passes 10-second ticks since the epoch; empty = run id)
+        type: string
+        default: ""
+      upload:
+        description: archive, sign and upload to TestFlight
+        type: boolean
+        default: false
+      screenshots:
+        description: simulator build, launch check, screenshots and video
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ipad-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PROJECT_PATH: OpenFifa
+  BUILD_NUMBER: ${{ inputs.build_number || github.run_id }}
+
+jobs:
+  export:
+    name: Unity iOS export (Linux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Fetch commentary clips (release asset matching audio/en/index.json)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/commentary/fetch_clips.sh || echo "::warning::commentary clips not installed; the build will show subtitles only"
+
+      - name: Free disk space (the Unity iOS image is large)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.PROJECT_PATH }}/Library
+          key: Library-iOS-${{ hashFiles('OpenFifa/Packages/packages-lock.json', 'OpenFifa/ProjectSettings/ProjectVersion.txt') }}
+          restore-keys: |
+            Library-iOS-
+
+      - name: Pick exports
+        id: kinds
+        run: |
+          k=""
+          [ "${{ inputs.upload }}" = "true" ] && k="device"
+          [ "${{ inputs.screenshots }}" = "true" ] && k="${k:+$k,}simulator"
+          [ -n "$k" ] || { echo "::error::nothing to do: upload and screenshots are both off"; exit 1; }
+          echo "exports=$k" >> "$GITHUB_OUTPUT"
+
+      - name: Export Xcode projects
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: ${{ env.PROJECT_PATH }}
+          targetPlatform: iOS
+          buildMethod: OpenFifa.Editor.IosBuild.ExportFromCommandLine
+          versioning: None
+          customParameters: >-
+            -ipadExports ${{ steps.kinds.outputs.exports }}
+            -ipadOutDir build/ipad
+            -ipadBuildNumber ${{ env.BUILD_NUMBER }}
+            -appleTeamId ${{ vars.APPLE_TEAM_ID }}
+
+      # tar keeps exec bits and symlinks that upload-artifact would drop.
+      - name: Pack Xcode projects
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" build
+          for k in device simulator; do
+            [ -d "build/ipad/$k" ] && tar -czf "build/xcode-$k.tgz" -C "build/ipad/$k" .
+          done
+          ls -lh build/*.tgz
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.upload
+        with:
+          name: xcode-device-${{ env.BUILD_NUMBER }}
+          path: build/xcode-device.tgz
+          retention-days: 1
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.screenshots
+        with:
+          name: xcode-simulator-${{ env.BUILD_NUMBER }}
+          path: build/xcode-simulator.tgz
+          retention-days: 1
+          compression-level: 0
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-logs-export-${{ env.BUILD_NUMBER }}
+          path: |
+            build/ipad/*/openfifa-export.env
+          if-no-files-found: ignore
+          retention-days: 7
+
+  simulator:
+    name: iPad simulator smoke test (macOS)
+    needs: export
+    if: inputs.screenshots
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci/ipad
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcode-simulator-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}
+
+      - name: Select Xcode 26
+        run: ci/ipad/select-xcode.sh
+
+      - name: Prepare Xcode project
+        run: ci/ipad/prepare-xcode.sh "$RUNNER_TEMP/xcode-simulator.tgz" "$RUNNER_TEMP/xcode-sim"
+
+      - name: Build, launch, screenshots, video
+        run: ci/ipad/sim-smoke.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-shots-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}/shots
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-logs-sim-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+  upload:
+    name: Archive, sign, upload to TestFlight (macOS)
+    needs: [export, simulator]
+    # Upload only if the smoke test passed or was skipped.
+    if: >-
+      always() && inputs.upload && needs.export.result == 'success' &&
+      (needs.simulator.result == 'success' || needs.simulator.result == 'skipped')
+    runs-on: macos-26
+    timeout-minutes: 75
+    env:
+      APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: ci/ipad
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: xcode-device-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}
+
+      - name: Select Xcode 26
+        run: ci/ipad/select-xcode.sh
+
+      - name: Prepare Xcode project
+        run: ci/ipad/prepare-xcode.sh "$RUNNER_TEMP/xcode-device.tgz" "$RUNNER_TEMP/xcode-device"
+
+      - name: Install signing assets
+        env:
+          DIST_P12_B64: ${{ secrets.DIST_P12_B64 }}
+          DIST_P12_PASSWORD: ${{ secrets.DIST_P12_PASSWORD }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_KEY_P8_B64: ${{ secrets.ASC_KEY_P8_B64 }}
+          IOS_PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: ci/ipad/signing.sh
+
+      - name: Archive and upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: ci/ipad/archive-upload.sh
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-logs-upload-${{ env.BUILD_NUMBER }}
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/openfifa.keychain-db" 2>/dev/null || true

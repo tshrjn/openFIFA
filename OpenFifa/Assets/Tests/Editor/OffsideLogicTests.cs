@@ -403,7 +403,7 @@ namespace OpenFifa.Tests.Editor
 
         [TestCase(RestartType.GoalKick)]
         [TestCase(RestartType.ThrowIn)]
-        [TestCase(RestartType.CornerKick)]
+        [TestCase(RestartType.Corner)]
         public void RegisterTouch_ExemptRestart_NoOffenceDirectly(RestartType restart)
         {
             var logic = CreateLogic();
@@ -412,7 +412,8 @@ namespace OpenFifa.Tests.Editor
             Assert.IsFalse(decision.IsOffence, $"No offside offence directly from a {restart}");
         }
 
-        [TestCase(RestartType.FreeKick)]
+        [TestCase(RestartType.IndirectFreeKick)]
+        [TestCase(RestartType.DirectFreeKick)]
         [TestCase(RestartType.KickOff)]
         [TestCase(RestartType.None)]
         public void RegisterTouch_NonExemptRestart_OffsideApplies(RestartType restart)
@@ -530,9 +531,10 @@ namespace OpenFifa.Tests.Editor
 
         [TestCase(RestartType.GoalKick, true)]
         [TestCase(RestartType.ThrowIn, true)]
-        [TestCase(RestartType.CornerKick, true)]
-        [TestCase(RestartType.FreeKick, false)]
-        [TestCase(RestartType.PenaltyKick, false)]
+        [TestCase(RestartType.Corner, true)]
+        [TestCase(RestartType.DirectFreeKick, false)]
+        [TestCase(RestartType.IndirectFreeKick, false)]
+        [TestCase(RestartType.Penalty, false)]
         [TestCase(RestartType.DropBall, false)]
         public void IsExemptRestart_MatchesLaw11(RestartType restart, bool expected)
         {

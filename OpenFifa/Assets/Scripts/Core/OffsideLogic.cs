@@ -205,12 +205,7 @@ namespace OpenFifa.Core
         }
 
         /// <summary>Law 11.3: no offside offence directly from these restarts.</summary>
-        public static bool IsExemptRestart(RestartType restart)
-        {
-            return restart == RestartType.GoalKick
-                || restart == RestartType.ThrowIn
-                || restart == RestartType.CornerKick;
-        }
+        public static bool IsExemptRestart(RestartType restart) => !OffsideRule.AppliesToRestart(restart);
 
         private static void FindPosition(IReadOnlyList<OffsidePlayerSnapshot> players,
             TeamIdentifier team, int playerId, float fallbackX, float fallbackZ,
