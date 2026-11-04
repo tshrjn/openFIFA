@@ -16,6 +16,15 @@ namespace OpenFifa.Core
         public const float ArriveDeceleration = 5f;
         /// <summary>Throttle while braking: low enough to shed speed, non-zero so the player keeps turning to the spot.</summary>
         public const float BrakeThrottle = 0.05f;
+        /// <summary>Once settled (slower than <see cref="SettledSpeed"/>), a player only moves again beyond this distance (m).</summary>
+        public const float ResumeRadius = 1.2f;
+        /// <summary>Speed (m/s) under which a player counts as settled on his spot.</summary>
+        public const float SettledSpeed = 0.6f;
+        /// <summary>Throttle that turns a standing player to face the ball without moving him (under 2 cm/s).</summary>
+        public const float FaceThrottle = 0.002f;
+        /// <summary>Fastest sprint the sim allows (6.6 + 3.1 m/s) and the jog fraction, for the arrival speed cap.</summary>
+        public const float MaxSprintSpeed = 9.7f;
+        public const float MaxJogFraction = 0.62f;
         /// <summary>A move target slower than this (m/s) is treated as a fixed spot.</summary>
         public const float MovingTargetSpeed = 0.5f;
         /// <summary>
@@ -210,28 +219,32 @@ namespace OpenFifa.Core
             SimVec3 tv = cmd.MoveTargetVelocity.Flat;
             float tvSpeed = tv.Magnitude;
             bool moving = tvSpeed > MovingTargetSpeed;
-            if (dist > ArriveRadius)
+            float speed = player.Velocity.Flat.Magnitude;
+            // Dead zone with hysteresis: a player who has settled (slow) only sets off again once the spot is more than
+            // ResumeRadius away, so a target that jitters by a few tens of cm between decisions does not have him
+            // stepping back and forth (and his body flipping) every 0.1 s.
+            // Only for plain movement: an action's own small step (shielding 1 m away from the presser) still runs.
+            bool plainMove = cmd.Action == TeamAIAction.None;
+            float radius = plainMove && !moving && speed < SettledSpeed ? ResumeRadius : ArriveRadius;
+            if (dist > radius)
             {
                 SimVec3 dir = to / dist;
                 float throttle = cmd.Sprint ? 1f : SimMath.Clamp((dist - ArriveRadius) / SlowRadius, 0.25f, 1f);
                 bool sprint = cmd.Sprint;
-                float speed = player.Velocity.Flat.Magnitude;
-                float closing = speed;
+                float recede = 0f;
                 if (moving)
                 {
                     // Keep pace with a target running away along the approach, then close on top of that.
-                    float recede = SimMath.Max(0f, SimVec3.Dot(tv, dir));
+                    recede = SimMath.Max(0f, SimVec3.Dot(tv, dir));
                     if (recede > AssumedJogSpeed * 0.9f) { sprint = true; throttle = 1f; }
                     else if (!sprint) throttle = SimMath.Max(throttle, SimMath.Min(1f, recede / AssumedJogSpeed + 0.25f));
-                    closing = SimVec3.Dot(player.Velocity.Flat, dir) - recede;
                 }
-                // Arrive: brake when the stopping distance at a sure deceleration reaches the spot.
+                // Arrive: cap the speed so the closing speed never exceeds what a sure deceleration can shed before the
+                // spot. The cap is continuous in the distance (no brake/release toggling between ticks) and assumes the
+                // fastest top speed, so no player is let in faster than the profile allows.
                 float allowed = (float)Math.Sqrt(2f * ArriveDeceleration * SimMath.Max(0f, dist - ArriveRadius * 0.5f));
-                if (closing > allowed + 0.25f)
-                {
-                    throttle = BrakeThrottle;
-                    sprint = false;
-                }
+                float cap = (allowed + 0.25f + recede) / (sprint ? MaxSprintSpeed : MaxSprintSpeed * MaxJogFraction);
+                if (cap < throttle) throttle = SimMath.Max(cap, BrakeThrottle);
                 intent.Move = dir * throttle;
                 intent.Sprint = sprint;
             }
@@ -241,6 +254,13 @@ namespace OpenFifa.Core
                 bool sprint = tvSpeed > AssumedJogSpeed * 0.9f;
                 intent.Move = tv / tvSpeed * SimMath.Clamp01(tvSpeed / (sprint ? AssumedSprintSpeed : AssumedJogSpeed));
                 intent.Sprint = sprint;
+            }
+            else if (cmd.FaceLookAt && plainMove)
+            {
+                // Holding the spot: no micro-steering, just turn to face the ball. A throttle this small turns the body
+                // (the sim faces the move direction below 0.3 m/s) while asking for under 2 cm/s.
+                SimVec3 look = (cmd.LookAt - player.Position).Flat;
+                if (look.SqrMagnitude > 0.25f) intent.Move = look.Normalized * FaceThrottle;
             }
 
             IntentAction act = MapAction(cmd.Action);

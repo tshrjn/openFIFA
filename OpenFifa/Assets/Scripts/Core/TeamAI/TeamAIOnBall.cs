@@ -537,6 +537,13 @@ namespace OpenFifa.Core
             }
         }
 
+        /// <summary>
+        /// Shot composure for the low end of the ladder: 0.55 at theta 0 rising to 1 at theta 0.5 and above. It scales the
+        /// shot's utility (a weak side passes up half-chances) and how far toward the post it aims (a weak side puts it
+        /// nearer the keeper). Professional and above are unaffected.
+        /// </summary>
+        public static float ShotComposure(float theta) => TeamAIMath.Lerp(0.55f, 1f, TeamAIMath.Clamp01(theta / 0.5f));
+
         private void EvaluateShot(TeamAIWorld world, int ownerIndex, int sign, in TeamAIDifficulty diff, TeamAIRandom rng)
         {
             var pitch = world.Pitch;
@@ -567,11 +574,12 @@ namespace OpenFifa.Core
             float atFoot = BlockRisk(world, owner.Team, from, TeamAIMath.FlatDirection(from, goal), ShotLaunchDelay);
             if (atFoot > block) block = atFoot;
 
-            float score = xg * (0.6f + 0.6f * owner.Shooting) * (1f - block) * ShotWeight;
+            float composure = ShotComposure(diff.Theta);
+            float score = xg * (0.6f + 0.6f * owner.Shooting) * (1f - block) * ShotWeight * composure;
             score += rng.NextSigned() * diff.DecisionNoise;
 
-            // Aim at the side with the bigger gap to the keeper.
-            float hw = pitch.GoalWidth * 0.5f - 0.45f;
+            // Aim at the side with the bigger gap to the keeper; a nervous side aims closer to him.
+            float hw = (pitch.GoalWidth * 0.5f - 0.45f) * TeamAIMath.Lerp(0.45f, 1f, (composure - 0.55f) / 0.45f);
             float side = (gkX - goal.X) > 0f ? -1f : 1f;
             if (TeamAIMath.Abs(gkX - goal.X) < 0.2f) side = from.X >= goal.X ? -1f : 1f; // far post
             var aim = new SimVec3(goal.X + side * hw, 0f, goal.Z);

@@ -196,12 +196,20 @@ namespace OpenFifa.Tests.Editor.Integration
         /// <summary>
         /// Behaviour-level difficulty check: the AI's threat must rise with the level and the user's scoring fall, over
         /// seeds, against the same scripted user. Counts are totals over <c>seeds</c> matches of two 4-minute halves;
-        /// thresholds sit well inside the 10-seed full-length numbers (AI shots per match 3.2 / 7.6 / 16, AI goals
-        /// 0.4 / 1.4 / 2.3, user goals 2.1 / 0.7 / 0.1 for Beginner / Professional / Ultimate) so they hold across
-        /// seeds and tuning noise. Pass completion and possession are logged, not asserted: a stronger AI plays more
+        /// thresholds sit well inside the 10-seed full-length numbers (AI shots per match 3.3 / 13.0 / 20.8, AI goals
+        /// 0.4 / 2.2 / 2.4, user goals 2.1 / 1.0 / 0.6 for Beginner / Professional / Ultimate, after the moving-target
+        /// and Beginner retune of Nov 2026) so they hold across seeds and tuning noise. This 5-seed, 4-minute-half run
+        /// gave balances -12.0 / 12.4 / 21.0. Pass completion and possession are logged, not asserted: a stronger AI plays more
         /// forward passes, so its completion rate is not a measure of threat.
         /// </summary>
+        /// <remarks>
+        /// Fifteen 8-minute matches: about 5.5 minutes under Mono and far longer in the Unity editor, so it is tagged
+        /// Slow (skip it in the fast suite with a category filter) and given a 30-minute timeout instead of Unity's
+        /// default 180 s. Fewer seeds or shorter halves would make the ordering assertions flaky.
+        /// </remarks>
         [Test]
+        [Category("Slow")]
+        [Timeout(1800000)]
         public void Difficulty_BeginnerProfessionalUltimate_AIThreatRisesAndUserScoringFallsOverSeeds()
         {
             const int seeds = 5;

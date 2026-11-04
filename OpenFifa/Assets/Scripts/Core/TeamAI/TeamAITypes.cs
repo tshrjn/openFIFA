@@ -121,6 +121,9 @@ namespace OpenFifa.Core
         /// closing speed relative to it, so a player chasing a moving target does not pull up short of it.
         /// </summary>
         public SimVec3 MoveTargetVelocity;
+        /// <summary>Where a player holding his spot looks (the ball); only used when <see cref="FaceLookAt"/>.</summary>
+        public SimVec3 LookAt;
+        public bool FaceLookAt;
         public bool Sprint;
         public TeamAIAction Action;
         /// <summary>Point the action is aimed at (pass target, shot aim point, tackle point).</summary>

@@ -183,6 +183,8 @@ namespace OpenFifa.Core
                 if (p.Team != Team) continue;
                 ref var cmd = ref output[i];
                 cmd = AIPlayerCommand.Idle(p.Id, p.Position);
+                cmd.LookAt = ball;
+                cmd.FaceLookAt = true;
                 if (!p.Active || p.HumanControlled) continue; // humans move themselves; the adapter ignores their command
 
                 var anchor = AnchorFor(p);
@@ -922,11 +924,22 @@ namespace OpenFifa.Core
         private SimVec3 LineVelocity(int sign) => new SimVec3(0f, 0f, sign * _lineSpeed);
 
         /// <summary>SetMove for a target that moves with <paramref name="targetVelocity"/> (see <see cref="AIPlayerCommand.MoveTargetVelocity"/>).</summary>
-        private static void SetMoveTracking(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, SimVec3 targetVelocity,
+        /// <remarks>
+        /// Reading a moving target is a skill: only <see cref="TargetVelocityRead"/> of its velocity is passed on, so a
+        /// weak side brakes early and pulls up short of a carrier running away while a strong one runs onto him.
+        /// </remarks>
+        private void SetMoveTracking(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, SimVec3 targetVelocity,
             bool sprint, TeamAIIntent intent)
         {
             SetMove(ref cmd, p, target, sprint, intent);
-            cmd.MoveTargetVelocity = new SimVec3(targetVelocity.X, 0f, targetVelocity.Z);
+            float read = TargetVelocityRead(Difficulty.Theta);
+            cmd.MoveTargetVelocity = new SimVec3(targetVelocity.X * read, 0f, targetVelocity.Z * read);
         }
+
+        /// <summary>
+        /// Share (0..1) of a moving target's velocity the AI tracks: 0.35 + 1.3 x theta, so about 0.4 for Beginner,
+        /// 0.85 for SemiPro and all of it from theta 0.5 up (Professional and above, and every AI teammate of the user).
+        /// </summary>
+        public static float TargetVelocityRead(float theta) => TeamAIMath.Clamp01(0.35f + 1.3f * theta);
     }
 }

@@ -560,11 +560,15 @@ namespace OpenFifa.Core
             {
                 case TeamAISetPieceKind.PenaltyFor:
                 {
-                    float x = PenaltySide * (hgw - 0.75f);
+                    // A nervous (low-difficulty) taker places it nearer the keeper (TeamAIOnBall.ShotComposure).
+                    float nerve = (TeamAIOnBall.ShotComposure(diff.Theta) - 0.55f) / 0.45f;
+                    float placement = TeamAIMath.Lerp(0.1f, 1f, nerve);
+                    float x = PenaltySide * (hgw - 0.75f) * placement;
                     best = new TeamAIOption
                     {
                         Action = TeamAIAction.Shoot, Intent = TeamAIIntent.Shoot, Target = new SimVec3(x, 0f, _goalZ),
-                        TargetIndex = -1, Score = 1f, Power = PenaltySide == 0 ? 0.6f : 0.78f
+                        TargetIndex = -1, Score = 1f,
+                        Power = (PenaltySide == 0 ? 0.6f : 0.78f) * TeamAIMath.Lerp(0.8f, 1f, nerve)
                     };
                     return true;
                 }

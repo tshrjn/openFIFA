@@ -189,5 +189,85 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.LessOrEqual(overshoot, 0.8f, "ran past the goal-side point");
             Assert.Less(final, 2.2f, "did not settle at the carrier");
         }
+
+        [Test]
+        public void ToIntent_SettlingOnAJitteringFormationSpot_DoesNotReverseMoreThanOnce()
+        {
+            // The spot is recomputed at 10 Hz and jitters by up to ~0.6 m (anchors follow the ball). Arriving from 6 m at
+            // a jog, the player must settle and hold: at most one reversal of his run, and his body must not flip.
+            var sim = new MatchSim(new MatchSimConfig(), MatchSetup.CreateDefault(3));
+            var s = sim.State;
+            s.Phase = SimMatchPhase.InPlay;
+            s.PendingRestart = RestartType.None;
+            s.RestartTakerId = -1;
+            s.Owner = -1;
+            s.KeeperHolding = false;
+            s.PassLive = false;
+            s.ShotLive = false;
+            for (int i = 0; i < MatchSimState.PlayerCount; i++)
+            {
+                s.Players[i].Position = new SimVec3(-30f + i * 2.5f, 0f, 50f);
+                s.Players[i].Velocity = SimVec3.Zero;
+            }
+            var b = s.Ball;
+            b.Position = new SimVec3(-20f, 0.11f, 30f);
+            b.Velocity = SimVec3.Zero;
+            b.Spin = SimVec3.Zero;
+            b.Grounded = true;
+            b.InNet = 0;
+            s.Ball = b;
+            const int id = 5;
+            var spot = new SimVec3(0f, 0f, -10f);
+            s.Players[id].Position = new SimVec3(0f, 0f, -16f);
+            s.Players[id].Velocity = SimVec3.Zero;
+            var intents = new PlayerIntent[MatchSimState.PlayerCount];
+            for (int i = 0; i < intents.Length; i++) intents[i] = PlayerIntent.Idle;
+            var cmd = AIPlayerCommand.Idle(id, s.Players[id].Position);
+            float[] jitterX = { 0.45f, -0.3f, 0.15f, -0.45f, 0.35f, 0f, -0.25f, 0.45f };
+            float[] jitterZ = { -0.35f, 0.4f, -0.15f, 0.3f, -0.45f, 0.25f, 0f, -0.4f };
+            int reversals = 0, flips = 0;
+            SimVec3 lastRun = SimVec3.Zero;
+            float lastFacing = s.Players[id].Facing;
+            int lastTurnSign = 0;
+            int ticks = sim.Config.SecondsToTicks(5f);
+            for (int t = 0; t < ticks; t++)
+            {
+                var p = s.Players[id];
+                if (t % 6 == 0)
+                {
+                    int k = (t / 6) % jitterX.Length;
+                    var target = spot + new SimVec3(jitterX[k], 0f, jitterZ[k]);
+                    float d = SimMath.FlatDistance(p.Position, target);
+                    cmd.MoveTarget = target;
+                    cmd.MoveDirection = d > 0.6f ? (target - p.Position).Flat.Normalized : SimVec3.Zero;
+                    cmd.Sprint = false;
+                    cmd.Intent = TeamAIIntent.HoldShape;
+                    cmd.LookAt = s.Ball.Position.Flat;
+                    cmd.FaceLookAt = true;
+                }
+                intents[id] = SimTeamAIAdapter.ToIntent(cmd, p, t % 6 == 0);
+                sim.Step(intents);
+                var v = s.Players[id].Velocity.Flat;
+                if (v.Magnitude > 0.1f)
+                {
+                    var run = v.Normalized;
+                    if (lastRun.SqrMagnitude > 0f && SimVec3.Dot(run, lastRun) < -0.3f) reversals++;
+                    lastRun = run;
+                }
+                if (t >= sim.Config.SecondsToTicks(3f))
+                {
+                    // Over the last 2 s (settled): the body may turn toward the ball, but never swing back and forth.
+                    float turn = SimMath.DeltaAngle(lastFacing, s.Players[id].Facing);
+                    int sign = turn > 0.002f ? 1 : (turn < -0.002f ? -1 : 0);
+                    if (sign != 0 && lastTurnSign != 0 && sign != lastTurnSign) flips++;
+                    if (sign != 0) lastTurnSign = sign;
+                }
+                lastFacing = s.Players[id].Facing;
+            }
+            Assert.LessOrEqual(reversals, 1, "reversed his run more than once while settling");
+            Assert.AreEqual(0, flips, "body flipped while holding the spot");
+            Assert.LessOrEqual(SimMath.FlatDistance(s.Players[id].Position, spot), SimTeamAIAdapter.ResumeRadius + 0.35f);
+            Assert.Less(s.Players[id].Velocity.Flat.Magnitude, 0.3f, "still moving after settling");
+        }
     }
 }
