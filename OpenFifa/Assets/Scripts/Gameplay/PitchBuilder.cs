@@ -18,6 +18,12 @@ namespace OpenFifa.Gameplay
         /// <summary>Grass beyond the touch and goal lines (m). 0 keeps the surface exactly the size of the pitch.</summary>
         public float RunOffMetres { get; set; }
 
+        /// <summary>Runtime-generated broadcast turf (TurfTextures). Off = flat striped fallback material.</summary>
+        public bool ProceduralTurf { get; set; } = true;
+
+        /// <summary>Turf look (colours, stripe width / contrast, cross mow, wear). Set before BuildPitch.</summary>
+        public TurfSettings Turf { get; set; } = new TurfSettings();
+
         /// <summary>Painted line width (m). Markings are flat strips lying on the grass (normal up), not camera-facing ribbons.</summary>
         public float LineWidth { get; set; } = 0.12f;
 
@@ -60,49 +66,56 @@ namespace OpenFifa.Gameplay
             float runOff = Mathf.Max(0f, RunOffMetres);
             pitch.transform.localScale = new Vector3(_config.PitchLength + 2f * runOff, 0.1f, _config.PitchWidth + 2f * runOff);
 
-            // Assign grass band material (lit, responds to stadium lighting)
+            // Broadcast turf: the visible surface is just the cube's top face (UV0 spans pitch + run-off once), with a
+            // runtime-generated URP/Lit material. The cube's BoxCollider stays as the ground.
+            float surfaceLength = _config.PitchLength + 2f * runOff, surfaceWidth = _config.PitchWidth + 2f * runOff;
             var renderer = pitch.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = CreateGrassBandMaterial();
+            var turf = ProceduralTurf
+                ? TurfTextures.GetMaterial(surfaceLength, surfaceWidth, _config.PitchLength, _config.PitchWidth, Turf)
+                : null;
+            if (turf != null)
+            {
+                pitch.GetComponent<MeshFilter>().sharedMesh = TopQuad;
+                renderer.sharedMaterial = turf;
+            }
+            else
+            {
+                renderer.sharedMaterial = CreateGrassBandMaterial();
+            }
             renderer.receiveShadows = true;
+            renderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off; // flat ground: nothing to shadow
 
             // Set layer
             int pitchLayer = LayerMask.NameToLayer("Pitch");
             pitch.layer = pitchLayer != -1 ? pitchLayer : 0;
         }
 
+        private static Mesh _topQuad;
+        private static Mesh TopQuad => _topQuad != null ? _topQuad : (_topQuad = TurfTextures.BuildTopQuad());
+
         /// <summary>
-        /// Creates a URP/Lit material with procedural grass band texture.
-        /// Alternating light/dark green stripes mimic freshly mowed pitch.
+        /// Plain fallback when the procedural turf is off or URP/Lit is unavailable: flat olive with soft-contrast
+        /// stripes from the same maths (TurfMath), no detail maps.
         /// </summary>
         private Material CreateGrassBandMaterial()
         {
-            int texWidth = 512;
-            int texHeight = 512;
-            int bandCount = 10; // Number of stripe pairs across the pitch width
-            int bandHeight = texHeight / (bandCount * 2);
-
-            var lightGreen = new Color(0.22f, 0.55f, 0.18f);
-            var darkGreen = new Color(0.16f, 0.42f, 0.13f);
-
-            var tex = new Texture2D(texWidth, texHeight, TextureFormat.RGB24, true);
-            var pixels = new Color[texWidth * texHeight];
-
-            for (int y = 0; y < texHeight; y++)
+            const int texWidth = 256, texHeight = 4;
+            var s = Turf ?? new TurfSettings();
+            var tex = new Texture2D(texWidth, texHeight, TextureFormat.RGBA32, true);
+            float runOff = Mathf.Max(0f, RunOffMetres);
+            float surfaceLength = _config.PitchLength + 2f * runOff;
+            var px = new Color32[texWidth * texHeight];
+            float k = TurfMath.StripeHalfAmplitude(s.StripeContrast);
+            for (int x = 0; x < texWidth; x++)
             {
-                // Determine which band this row falls in
-                int bandIndex = y / bandHeight;
-                bool isLight = (bandIndex % 2 == 0);
-                Color bandColor = isLight ? lightGreen : darkGreen;
-
-                for (int x = 0; x < texWidth; x++)
-                {
-                    pixels[y * texWidth + x] = bandColor;
-                }
+                float wx = ((x + 0.5f) / texWidth - 0.5f) * surfaceLength;
+                float m = TurfMath.StripeMask(wx, 0f, _config.PitchLength, _config.PitchWidth, s);
+                var c = new Color(s.BaseR * (1f + k * m), s.BaseG * (1f + k * m), s.BaseB * (1f + k * m), 1f);
+                for (int y = 0; y < texHeight; y++) px[y * texWidth + x] = c;
             }
-
-            tex.SetPixels(pixels);
+            tex.SetPixels32(px);
             tex.Apply(true);
-            tex.wrapMode = TextureWrapMode.Repeat;
+            tex.wrapMode = TextureWrapMode.Clamp;
             tex.filterMode = FilterMode.Bilinear;
 
             // Use URP/Lit for proper lighting response
@@ -112,8 +125,9 @@ namespace OpenFifa.Gameplay
 
             var mat = new Material(shader);
             mat.mainTexture = tex;
-            mat.SetFloat("_Smoothness", 0.15f); // Grass is matte
-            mat.SetFloat("_Metallic", 0f);
+            mat.color = new Color(0.985f, 1f, 0.985f);
+            if (mat.HasProperty("_Smoothness")) mat.SetFloat("_Smoothness", 0.2f);
+            if (mat.HasProperty("_Metallic")) mat.SetFloat("_Metallic", 0f);
 
             return mat;
         }
