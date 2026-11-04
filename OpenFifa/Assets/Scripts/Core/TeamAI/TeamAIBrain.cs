@@ -65,6 +65,11 @@ namespace OpenFifa.Core
         /// <summary>Cover-shadow point: this far from the ball toward the receiver (0.4), up to 0.75 at full squeeze.</summary>
         public const float ShadowFraction = 0.4f;
         public const float SqueezeShadowFraction = 0.75f;
+        /// <summary>
+        /// How much lower a win chance a squeezing presser accepts before tackling (at full squeeze). 0.12 gave the
+        /// lowest PPDA but 1.8x the fouls of a balanced side; 0.05 keeps fouls at 1.4x and PPDA at 0.7x Balanced.
+        /// </summary>
+        public const float SqueezeTackleShift = 0.05f;
         public TeamAIDifficulty Difficulty { get; private set; }
         public readonly TeamAIRandom Rng;
         public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
@@ -766,7 +771,7 @@ namespace OpenFifa.Core
             float success = TackleWinChance(p, owner, TeamAIMath.FlatDistance(p.Position, ball)) +
                             (exposed ? 0.1f : 0f) + (facingAway ? 0.05f : 0f);
             success += Rng.NextSigned() * Difficulty.DecisionNoise;
-            if (goalSide && success > TackleThreshold(Difficulty.Theta) - 0.12f * PressSqueeze)
+            if (goalSide && success > TackleThreshold(Difficulty.Theta) - SqueezeTackleShift * PressSqueeze)
             {
                 SetMoveTracking(ref cmd, p, ball, owner.Velocity, false, TeamAIIntent.Tackle);
                 cmd.Action = TeamAIAction.Tackle;

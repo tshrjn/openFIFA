@@ -332,14 +332,24 @@ namespace OpenFifa.Tests.Editor.TeamAI
     
         // ------------------------------------------------------------------ pressing (PPDA)
 
-        /// <summary>
-        /// PPDA of the home side over AI-vs-AI matches (home = <paramref name="style"/>, away = a balanced 4-3-3, both on
-        /// Professional, no human input): opponent passes made in their own defensive 60% of the pitch per home defensive
-        /// action (tackle, interception, foul) in that zone. Lower = a more intense press.
-        /// </summary>
-        public static float Ppda(TeamAIStyle style, int seeds, float half)
+        /// <summary>Pressing numbers of the home side over AI-vs-AI matches (see <see cref="Press"/>).</summary>
+        public struct PressStats
         {
-            int passes = 0, actions = 0;
+            /// <summary>Opponent passes in their own defensive 60% of the pitch.</summary>
+            public int Passes;
+            /// <summary>Home tackles and interceptions in that zone (fouls excluded: a foul is not a press won).</summary>
+            public int Actions;
+            /// <summary>Home fouls anywhere.</summary>
+            public int Fouls;
+            public float Ppda => Passes / (float)System.Math.Max(1, Actions);
+        }
+
+        /// <summary>
+        /// Home = <paramref name="style"/>, away = a balanced 4-3-3, both on Professional, no human input.
+        /// </summary>
+        public static PressStats Press(TeamAIStyle style, int seeds, float half)
+        {
+            var st = new PressStats();
             for (int seed = 1; seed <= seeds; seed++)
             {
                 var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
@@ -358,33 +368,38 @@ namespace OpenFifa.Tests.Editor.TeamAI
                     for (int i = 0; i < ev.Count; i++)
                     {
                         var e = ev[i];
+                        if (e.Type == MatchEventType.Foul && e.Team == SimTeam.Home) st.Fouls++;
                         float depthFromHomeGoal = (e.Position.Z * sign + hl) / (2f * hl);
                         if (depthFromHomeGoal <= 0.4f) continue;
-                        if (e.Type == MatchEventType.Pass && e.Team == SimTeam.Away) passes++;
-                        else if (e.Team == SimTeam.Home && (e.Type == MatchEventType.Tackle ||
-                                 e.Type == MatchEventType.Interception || e.Type == MatchEventType.Foul)) actions++;
+                        if (e.Type == MatchEventType.Pass && e.Team == SimTeam.Away) st.Passes++;
+                        else if (e.Team == SimTeam.Home && (e.Type == MatchEventType.Tackle || e.Type == MatchEventType.Interception))
+                            st.Actions++;
                     }
                 }
             }
-            return passes / (float)System.Math.Max(1, actions);
+            return st;
         }
 
         /// <summary>
-        /// The press is visible in the numbers: HighPress allows the fewest passes per defensive action, ParkTheBus the
-        /// most. Measured (8 seeds, 4-minute halves, after the ball-physics retune): HighPress 2.0, Balanced 3.5,
-        /// ParkTheBus 9.5.
+        /// The press is visible in the numbers and is not bought with fouls: HighPress allows the fewest opponent passes
+        /// per tackle or interception (fouls excluded), ParkTheBus the most, and HighPress commits at most 1.5x the
+        /// fouls of a balanced side. Measured (8 seeds, 4-minute halves): PPDA without fouls 3.09 / 4.27 / 11.45,
+        /// fouls 48 / 35 / 27 (HighPress / Balanced / ParkTheBus); this test's
+        /// 6 seeds of 3-minute halves gave 3.74 / 5.06 / 9.98 and fouls 27 / 24 / 14.
         /// </summary>
         [Test]
         [Category("Slow")]
         [Timeout(1800000)]
-        public void Ppda_HighPress_Below_Balanced_Below_ParkTheBus()
+        public void Ppda_HighPress_Below_Balanced_Below_ParkTheBus_WithoutExtraFouls()
         {
-            float press = Ppda(TeamAIStyle.HighPress, 4, 180f);
-            float bal = Ppda(TeamAIStyle.Balanced, 4, 180f);
-            float bus = Ppda(TeamAIStyle.ParkTheBus, 4, 180f);
-            System.Console.WriteLine($"PPDA HighPress {press:F2}, Balanced {bal:F2}, ParkTheBus {bus:F2}");
-            Assert.Less(press, bal * 0.8f, "high press should allow clearly fewer passes per defensive action");
-            Assert.Less(bal, bus, "park the bus should press least");
+            var press = Press(TeamAIStyle.HighPress, 6, 180f);
+            var bal = Press(TeamAIStyle.Balanced, 6, 180f);
+            var bus = Press(TeamAIStyle.ParkTheBus, 6, 180f);
+            System.Console.WriteLine($"PPDA (no fouls) HighPress {press.Ppda:F2}, Balanced {bal.Ppda:F2}, ParkTheBus {bus.Ppda:F2}; " +
+                                     $"fouls {press.Fouls} / {bal.Fouls} / {bus.Fouls}");
+            Assert.Less(press.Ppda, bal.Ppda * 0.85f, "high press should allow clearly fewer passes per defensive action");
+            Assert.Less(bal.Ppda, bus.Ppda, "park the bus should press least");
+            Assert.LessOrEqual(press.Fouls, 1.5f * bal.Fouls + 2f, "the press should not be won by fouling");
         }
 
         [Test]
