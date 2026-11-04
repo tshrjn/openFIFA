@@ -31,7 +31,8 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 PROJECT="$REPO/OpenFifa"
 UNITY="${UNITY:-$HOME/Unity/6000.3.10f1/Editor/Unity}"
 mkdir -p "$OUT/frames"
-rm -f "$PROJECT/Temp/UnityLockfile"
+# Only clear a stale lock: never one held by a live editor on this project.
+if ! pgrep -f "projectPath $PROJECT" >/dev/null; then rm -f "$PROJECT/Temp/UnityLockfile"; fi
 
 if [ "$LEGACY" = 1 ]; then
   PLAYER="$PROJECT/build/LinuxCapture/OpenFootball.x86_64"
@@ -42,7 +43,10 @@ else
   PLAYER="$PROJECT/build/SPCapture/OpenFootball.x86_64"
   METHOD=OpenFifa.Gameplay.SinglePlayer.Editor.SinglePlayerSceneBootstrap.BuildLinuxCapture
   BUILD_ARGS=(-spBuildOut "$PLAYER")
-  RUN_ARGS=(-force-glcore -spBot -spLevel 3 -spSeed 2 -spCapture "$OUT/frames"
+  # SinglePlayerCapture treats -spCapture as its output root: it writes frames/, capture.txt, commentary.txt,
+  # tactics.txt, sequences/ and named stills there. EXTRA args come later on the command line, and the player's
+  # parser keeps the last value, so e.g. "-- -spSeed 1 -spHome arsenal" overrides these defaults.
+  RUN_ARGS=(-force-glcore -spBot -spLevel 3 -spSeed 2 -spCapture "$OUT"
             -spCaptureSeconds "$SECONDS_TO_RECORD" -spCaptureFps 30)
 fi
 
@@ -58,7 +62,7 @@ xvfb-run -a -s "-screen 0 1280x720x24" "$PLAYER" \
   -screen-width 1280 -screen-height 720 -screen-fullscreen 0 \
   "${RUN_ARGS[@]}" "${EXTRA[@]}" -logFile "$OUT/player.log" || true
 
-N=$(find "$OUT/frames" -name '*.png' | wc -l)
+N=$(find "$OUT/frames" -maxdepth 1 -name '*.png' | wc -l)
 echo "[capture] $N frames"
 [ "$N" -gt 0 ] || { echo "no frames captured, see $OUT/player.log"; exit 1; }
 
@@ -67,7 +71,7 @@ python3 - "$OUT" <<'PY'
 import sys, glob, shutil
 from PIL import Image
 out = sys.argv[1]
-frames = sorted(glob.glob(out + "/frames/**/*.png", recursive=True))
+frames = sorted(glob.glob(out + "/frames/frame_*.png"))
 ims = [Image.open(f).convert("RGB").resize((640, 360)) for f in frames[::3]]
 ims[0].save(out + "/gameplay.webp", save_all=True, append_images=ims[1:], duration=100, loop=0, quality=70)
 for k in range(5):
