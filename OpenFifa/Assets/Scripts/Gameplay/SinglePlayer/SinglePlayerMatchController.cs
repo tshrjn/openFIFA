@@ -192,6 +192,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 BroadcastCamera != null ? BroadcastCamera.GetComponent<Camera>() : Camera.main,
                 suspendCameraDriver: null, assistantOnFarSide: true, bannerView: banner);
             Offside.SkipOnAnyInput = true;
+            // Cut back: hard cut to the live broadcast framing, whose follow restarts from rest and eases in.
+            if (BroadcastCamera != null) Offside.CameraCut.OnRestored += BroadcastCamera.ResumeFollow;
             Offside.OnCue += HandleOffsideCue;
             OffsideSource.OnOffence += PlayOffside;
         }
@@ -860,7 +862,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             SyncVisuals();
             UpdateBallScale(Time.unscaledDeltaTime);
             RotateBall(advancing ? Time.deltaTime : 0f);
-            if (!Frozen) UpdateCrowd(advancing ? Time.deltaTime : 0f);
+            // Crowd excitement settles in real time (not slowed by the offside slow motion); held frames stop it.
+            if (!Frozen) UpdateCrowd(advancing ? Time.unscaledDeltaTime : 0f);
         }
 
         /// <summary>
