@@ -34,7 +34,7 @@ namespace OpenFifa.Gameplay
         public const int PaletteCellPx = 8;
         public const int CrowdSeatPx = 32;
         public const int CrowdSeatsPerTile = 32;
-        public const int CrowdBandPx = 64;
+        public const int CrowdBandPx = CrowdVariation.CardBandPx;
         /// <summary>Card height in metres that one crowd band covers (tread to above the heads).</summary>
         public const float CrowdCardHeight = 1.3f;
         public const float SeatWidth = 0.5f;
@@ -123,7 +123,7 @@ namespace OpenFifa.Gameplay
         /// Seated spectators: <see cref="StadiumCrowd.BandCount"/> crowd mixes x <see cref="CrowdVariation.VariantsPerBand"/>
         /// variant rows, each a 64 px card (<see cref="CrowdCardHeight"/> m) of 32 seats x 32 px. Figures are drawn big and
         /// flat (wide shirt blocks, 16 px heads, little dark gap) so they read as people, not 1-2 px noise, at broadcast
-        /// distance. The bottom 6 px and top 6 px of every card are background so the bob never shows a neighbouring row.
+        /// distance. The top CrowdVariation.CardTopPadPx (8) px of every card are background and the bob is clamped inside them, so a card never shows a neighbouring row.
         /// </summary>
         public static void FillCrowd(Texture2D tex, Color home, Color away, uint seed)
         {
@@ -160,17 +160,18 @@ namespace OpenFifa.Gameplay
                     shirt = Shade(shirt, 0.85f + 0.3f * r1);
                     int jx = cx + (int)((r2 - 0.5f) * 4f);
                     int halfW = 11 + (int)(r3 * 3f);
-                    int shoulder = y0 + 34 + (int)(r4 * 4f);
-                    int headR = 7 + (r5 > 0.6f ? 1 : 0);
+                    int shoulder = y0 + CrowdVariation.ShoulderBasePx + Mathf.Min(CrowdVariation.ShoulderJitterPx, (int)(r4 * 4f));
+                    int headR = CrowdVariation.HeadRadiusMaxPx - 1 + (r5 > 0.6f ? 1 : 0);
                     int headY = shoulder + headR + 1;
                     var skin = SkinTones[(int)(r1 * 97f) % SkinTones.Length];
                     var hair = HairTones[(int)(r0 * 53f) % HairTones.Length];
 
-                    // Raised arms on a few spectators (kept below the top 6 px pad).
+                    // Raised arms on a few spectators (kept below the top pad, CrowdVariation.CardTopPadPx).
                     if (r5 < 0.08f)
                     {
-                        FillRect(px, w, h, jx - halfW - 2, shoulder - 6, jx - halfW + 3, y0 + CrowdBandPx - 7, shirt * 0.9f, shirt, 0f);
-                        FillRect(px, w, h, jx + halfW - 3, shoulder - 6, jx + halfW + 2, y0 + CrowdBandPx - 7, shirt * 0.9f, shirt, 0f);
+                        int armTop = y0 + CrowdBandPx - CrowdVariation.CardTopPadPx;
+                        FillRect(px, w, h, jx - halfW - 2, shoulder - 6, jx - halfW + 3, armTop, shirt * 0.9f, shirt, 0f);
+                        FillRect(px, w, h, jx + halfW - 3, shoulder - 6, jx + halfW + 2, armTop, shirt * 0.9f, shirt, 0f);
                     }
                     // Torso: one strong colour block with rounded shoulders.
                     FillRect(px, w, h, jx - halfW, y0 + 6, jx + halfW, shoulder, shirt * 0.82f, shirt, 5f);

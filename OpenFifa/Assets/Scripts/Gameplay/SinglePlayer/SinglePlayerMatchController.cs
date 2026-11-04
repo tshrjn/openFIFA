@@ -14,6 +14,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// frame. Rosters come from StreamingAssets (plus user files in persistentDataPath); commentary is shown as subtitles.
     ///
     /// Command line (player or batch editor): -spLevel 0..6, -spSeed N, -spHalf seconds, -spAutoStart, -spAiVsAi,
+    /// -spHome clubId, -spAway clubId, -spLeague leagueId (ids from the roster JSON; both clubs from one league),
     /// -spCapture dir (see <see cref="SinglePlayerCapture"/>).
     /// </summary>
     [DefaultExecutionOrder(-50)]
@@ -47,6 +48,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public List<string> RosterProblems { get; } = new List<string>();
         public int HomeClubIndex { get; set; }
         public int AwayClubIndex { get; set; } = 1;
+        /// <summary>League the clubs are picked from (index into <see cref="Leagues"/>; -spLeague/-spHome/-spAway set it).</summary>
+        public int LeagueIndex { get; set; }
+        /// <summary>Club ids asked for on the command line (null = default), resolved after the rosters load.</summary>
+        public string ArgLeague, ArgHome, ArgAway;
+        private int _defaultLeague, _defaultHome, _defaultAway = 1;
         public RosterClub HomeClub { get; private set; }
         public RosterClub AwayClub { get; private set; }
         public string[] Names { get; private set; } = new string[MatchSimState.PlayerCount];
@@ -83,6 +89,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             ParseCommandLine();
             BuildEnvironment();
             LoadRosters();
+            ApplyClubSelection();
             LoadCommentary();
         }
 
@@ -104,6 +111,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spAutoStart") AutoStart = true;
                 else if (a == "-spAiVsAi") AiVsAi = true;
                 else if (a == "-spBot") ScriptedHuman = true;
+                else if (a == "-spHome" && next != null) ArgHome = next;
+                else if (a == "-spAway" && next != null) ArgAway = next;
+                else if (a == "-spLeague" && next != null) ArgLeague = next;
             }
         }
 
@@ -144,6 +154,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     BroadcastLighting.ConfigureSun(l); // warm tint, shadow strength 0.8, high soft-shadow filter
                 }
             BroadcastLighting.ApplyAmbient(); // trilight fill so shaded sides are not black
+            BroadcastLighting.ApplyQualityTier(); // iPad/mobile (or -spQuality low): lighter AA, shadows, no SSAO
 
             var cam = Camera.main;
             if (cam == null)
@@ -440,6 +451,26 @@ namespace OpenFifa.Gameplay.SinglePlayer
             foreach (var p in RosterProblems) Debug.LogWarning("[" + ProductName + "] " + p);
         }
 
+        /// <summary>Applies -spLeague/-spHome/-spAway; these become the defaults the menu returns to.</summary>
+        private void ApplyClubSelection()
+        {
+            int l = LeagueIndex, h = HomeClubIndex, w = AwayClubIndex;
+            if (RosterSelection.TryResolve(Leagues, ArgLeague, ArgHome, ArgAway, ref l, ref h, ref w, RosterProblems))
+            {
+                LeagueIndex = l;
+                HomeClubIndex = h;
+                AwayClubIndex = w;
+            }
+            else
+            {
+                Debug.LogWarning("[" + ProductName + "] club selection ignored: " + RosterProblems[RosterProblems.Count - 1] +
+                                 "\n" + RosterSelection.Describe(Leagues));
+            }
+            _defaultLeague = LeagueIndex;
+            _defaultHome = HomeClubIndex;
+            _defaultAway = AwayClubIndex;
+        }
+
         private void LoadCommentary()
         {
             try
@@ -460,7 +491,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
         }
 
-        public IReadOnlyList<RosterClub> Clubs => Leagues.Count > 0 ? Leagues[0].Clubs : null;
+        public IReadOnlyList<RosterClub> Clubs => Leagues.Count > 0 ? Leagues[Mathf.Clamp(LeagueIndex, 0, Leagues.Count - 1)].Clubs : null;
 
         // ------------------------------------------------------------------ match
 
@@ -558,13 +589,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
             StartMatch(level);
         }
 
-        /// <summary>Back to the picker with the launch defaults (level, first two clubs).</summary>
+        /// <summary>Back to the picker with the launch defaults (level, the command-line clubs or the first two).</summary>
         public void QuitToMenu()
         {
             EndMatch();
             Level = _defaultLevel;
-            HomeClubIndex = 0;
-            AwayClubIndex = 1;
+            LeagueIndex = _defaultLeague;
+            HomeClubIndex = _defaultHome;
+            AwayClubIndex = _defaultAway;
         }
 
         public static ulong NextSeed(ulong seed) => seed * 6364136223846793005UL + 1442695040888963407UL;
@@ -620,6 +652,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     }
                     var driver = p.gameObject.AddComponent<PlayerAnimationDriver>();
                     driver.Source = new SimPlayerAnimSource(Session, id);
+                    driver.Ball = _ball; // explicit: no scene lookup by name or tag
+                    driver.VisualBallRadius = VisualBallRadius;
                     _drivers[id] = driver;
                 }
                 else
@@ -682,6 +716,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 _drivers[id].FreezePose = freezePose;
             }
             SyncVisuals();
+            UpdateBallScale(Time.unscaledDeltaTime);
             RotateBall(advancing ? Time.deltaTime : 0f);
             if (!Frozen) UpdateCrowd(advancing ? Time.deltaTime : 0f);
         }
@@ -694,7 +729,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             if (dt <= 0f) return;
             var b = Session.Sim.State.Ball;
-            SimVec3 w = b.Grounded ? BallIntegrator.RollingSpin(b.Velocity, _ballRadius, b.Spin.Y) : b.Spin;
+            SimVec3 w = b.Grounded ? BallIntegrator.RollingSpin(b.Velocity, VisualBallRadius, b.Spin.Y) : b.Spin; // rolls without slip as drawn
             float mag = w.Magnitude;
             if (mag < 1e-3f) return;
             var axis = new Vector3(w.X / mag, w.Y / mag, w.Z / mag);
@@ -774,23 +809,48 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// Smallest on-screen ball diameter (px at the current resolution) before the visual is scaled up. Set above the
         /// 6 px target because the shaded underside and MSAA eat about a pixel (6 px requested measured 3-5 px).
         /// </summary>
-        public const float MinBallPixels = 7.5f, MaxBallScale = 3f;
+        /// <remarks>
+        /// The cap was 3x: a 0.33 m ball next to feet whose IK aimed at the 0.11 m sim ball. 1.8x keeps it readable on
+        /// the broadcast camera (the camera is 30-50 m away) without dwarfing the boots.
+        /// </remarks>
+        public const float MinBallPixels = 7.5f, MaxBallScale = 1.8f;
+        /// <summary>Time constant (s) of the visual ball scale: the camera dollying and zooming no longer makes it pulse.</summary>
+        public const float BallScaleSmoothing = 0.6f;
+
+        private float _ballScale = 1f;
+        private bool _ballScaleInit;
+
+        /// <summary>Radius (m) the ball is drawn at: the sim radius times the readability scale. Foot IK aims at this surface.</summary>
+        public float VisualBallRadius => _ballRadius * _ballScale;
 
         /// <summary>
-        /// Ball readability at broadcast distance: scales the visual ball up (never below its true size, at most 2.2x)
-        /// so it stays at least <see cref="MinBallPixels"/> across, keeps it resting on the grass, and places the
-        /// contact shadow blob under it (larger and fainter with height).
+        /// Visual ball scale for readability (never below true size, at most <see cref="MaxBallScale"/>), smoothed over
+        /// time. Runs in Update, before the animation drivers' IK, so the feet aim at the ball as it is drawn this frame.
         /// </summary>
-        private void UpdateBallVisual()
+        private void UpdateBallScale(float dt)
         {
             var cam = BroadcastCamera != null ? BroadcastCamera.GetComponent<Camera>() : null;
             if (cam == null || _ball == null) return;
-            Vector3 p = _ball.position;
-            float d = Vector3.Distance(cam.transform.position, p);
-            float px = 2f * _ballRadius * Screen.height / (2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
+            float d = Vector3.Distance(cam.transform.position, _ball.position);
+            float px = 2f * _ballRadius * Screen.height / (2f * Mathf.Max(0.1f, d) * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
             float k = BroadcastFraming.BallScale(px, MinBallPixels, MaxBallScale);
-            _ball.localScale = Vector3.one * (2f * _ballRadius * k);
-            float r = _ballRadius * k;
+            if (!_ballScaleInit) { _ballScale = k; _ballScaleInit = true; }
+            else if (dt > 0f) _ballScale += (k - _ballScale) * (1f - Mathf.Exp(-dt / BallScaleSmoothing));
+            float r = VisualBallRadius;
+            for (int id = 0; id < _drivers.Length; id++)
+                if (_drivers[id] != null) _drivers[id].VisualBallRadius = r;
+        }
+
+        /// <summary>
+        /// Ball readability at broadcast distance: draws the ball at the smoothed scale (<see cref="UpdateBallScale"/>),
+        /// keeps it resting on the grass, and places the contact shadow blob under it (larger and fainter with height).
+        /// </summary>
+        private void UpdateBallVisual()
+        {
+            if (_ball == null) return;
+            Vector3 p = _ball.position;
+            float r = VisualBallRadius;
+            _ball.localScale = Vector3.one * (2f * r);
             if (p.y < r) _ball.position = new Vector3(p.x, r, p.z);
 
             if (_ballShadow != null)

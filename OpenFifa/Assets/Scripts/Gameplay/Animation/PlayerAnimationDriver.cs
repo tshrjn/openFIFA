@@ -89,6 +89,7 @@ namespace OpenFifa.Gameplay
         private static readonly int LocomotionHash = Animator.StringToHash(AnimStateNames.Locomotion);
         private static readonly int IdleVariantHash = Animator.StringToHash(AnimStateNames.ParamIdleVariant);
         private static readonly int ReadyHash = Animator.StringToHash(AnimStateNames.ParamReady);
+        private static readonly int GuardHash = Animator.StringToHash(AnimStateNames.ParamGuard);
 
         private IPlayerAnimSource _source;
         private readonly AnimSnapshotInterpolator _interpolator = new AnimSnapshotInterpolator();
@@ -124,6 +125,8 @@ namespace OpenFifa.Gameplay
         private float _speedBeforeFreeze = 1f;
 
         private IdleVariety _idle;
+        private bool _guardParam, _guardChecked;
+        private float _guard = 1f;
         private bool _idleParams;
         private bool _idlePhaseApplied;
         private bool _actionLookAt;
@@ -189,14 +192,27 @@ namespace OpenFifa.Gameplay
         public Animator Animator => animator;
 
         /// <summary>
-        /// Ball transform for the idle look-at and ready stance. When unset, the driver uses the scene object named or
-        /// tagged "Ball" (looked up once and shared by all drivers).
+        /// Ball transform for the idle look-at and ready stance. The match controller sets it on every driver. When unset,
+        /// the driver falls back to the scene object named "Ball" (looked up at most once a second, shared by all
+        /// drivers; no tag lookup, which throws when the tag is not defined).
         /// </summary>
         public Transform Ball
         {
             get => _ball != null ? _ball : FindSharedBall();
             set => _ball = value;
         }
+
+        /// <summary>
+        /// Radius (m) the ball is drawn at (the controller scales it up for readability). Contact IK is planned against
+        /// the sim ball; the strike and plant targets are moved onto this ball's surface (<see cref="VisualBallContact"/>).
+        /// Defaults to the sim radius.
+        /// </summary>
+        public float VisualBallRadius
+        {
+            get => _visualBallRadius > 0f ? _visualBallRadius : ballRadius;
+            set => _visualBallRadius = value;
+        }
+        private float _visualBallRadius;
 
         /// <summary>Idle variety state (diagnostics, tests); null when disabled.</summary>
         public IdleVariety Idle => _idle;
@@ -207,8 +223,7 @@ namespace OpenFifa.Gameplay
             if (Time.unscaledTime < s_nextBallSearch) return null;
             s_nextBallSearch = Time.unscaledTime + 1f; // retry at most once a second until the ball exists
             GameObject go = null;
-            try { go = GameObject.FindWithTag("Ball"); } catch (UnityException) { /* tag not defined */ }
-            if (go == null) go = GameObject.Find("Ball");
+            try { go = GameObject.Find("Ball"); } catch (Exception) { /* never let a lookup break the frame */ }
             s_sharedBall = go != null ? go.transform : null;
             return s_sharedBall;
         }
@@ -720,6 +735,18 @@ namespace OpenFifa.Gameplay
             animator.SetFloat(ForwardHash, gaitForward, damp, dt);
             animator.SetFloat(StrafeHash, gaitStrafe, damp, dt);
             animator.SetFloat(TurnRateHash, Halted ? 0f : _yawRate, damp, dt);
+            if (!_guardChecked && animator.runtimeAnimatorController != null)
+            {
+                _guardParam = HasFloatParam(animator, GuardHash); // controllers built before the side-step clip lack it
+                _guardChecked = true;
+            }
+            if (_guardParam)
+            {
+                // Side-on posture: the defensive jockey only out of possession, an upright side-step otherwise.
+                bool defending = !(_source is IPlayerAnimPossession possession) || possession.OutOfPossession;
+                _guard = StrafePosture.Step(_guard, defending, dt);
+                animator.SetFloat(GuardHash, _guard);
+            }
 
             // Rate from the blend the tree shows NOW (damped), so the feet match the ground through every transition.
             float shownF = animator.GetFloat(ForwardHash), shownS = animator.GetFloat(StrafeHash);
@@ -781,13 +808,19 @@ namespace OpenFifa.Gameplay
                 // Dribble touch: short in/out envelope around the contact tick, capped so the run cycle still shows.
                 float ws = ik.StrikeWeightAt(_simTime) * (layered ? dribbleTouchIkWeight : 1f);
                 if (layered && ws > 0f) ws *= StrikeFootSwingScale(ik.StrikeEffector);
-                if (ws > 0f) ApplyEffector(ik.StrikeEffector, ik.StrikeTarget.ToUnity(), ws);
+                // Aim at the ball as drawn (scaled up and resting on the grass), not inside it at the sim ball's surface.
+                SimVec3 simBall = _plan.Request.BallAtContact;
+                float vr = VisualBallRadius;
+                bool foot = ik.StrikeEffector == ContactEffector.LeftFoot || ik.StrikeEffector == ContactEffector.RightFoot;
+                SimVec3 strike = foot ? VisualBallContact.StrikeTarget(ik.StrikeTarget, simBall, ballRadius, vr) : ik.StrikeTarget;
+                if (ws > 0f) ApplyEffector(ik.StrikeEffector, strike.ToUnity(), ws);
                 float wp = ik.PlantWeightAt(_simTime);
-                if (wp > 0f) ApplyEffector(ik.PlantEffector, ik.PlantTarget.ToUnity(), wp);
+                SimVec3 plant = VisualBallContact.PlantTarget(ik.PlantTarget, simBall, ballRadius, vr);
+                if (wp > 0f) ApplyEffector(ik.PlantEffector, plant.ToUnity(), wp);
                 if (_plan.Request.Kind != AnimActionKind.Header && ws > 0f)
                 {
                     animator.SetLookAtWeight(ws * lookAtWeight * (layered ? dribbleTouchLookAtScale : 1f), 0.2f, 0.9f, 0f, 0.5f);
-                    animator.SetLookAtPosition(_plan.Request.BallAtContact.ToUnity());
+                    animator.SetLookAtPosition(VisualBallContact.VisualCentre(simBall, ballRadius, vr).ToUnity());
                     _actionLookAt = true;
                 }
             }

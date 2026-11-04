@@ -388,9 +388,17 @@ def build_player(club_id, ln, parts):
     if len(look) != 5:
         raise SystemExit("line %d: look needs 5 parts (skin hair colour facial build)" % ln)
     skin, hair, hcol, facial, build = look
-    if hair not in HAIR_STYLES or facial not in FACIAL or build not in BUILDS or hcol not in HAIR_COLOURS:
+    if (hair != "?" and hair not in HAIR_STYLES) or (facial != "?" and facial not in FACIAL) \
+            or build not in BUILDS or hcol not in HAIR_COLOURS:
         raise SystemExit("line %d: bad look %s" % (ln, " ".join(look)))
     boot = BOOT_COLOURS[hashlib.sha256(pid.encode()).digest()[1] % len(BOOT_COLOURS)]
+    appearance = {"skinTone": round((int(skin) - 1) / 8.0, 3)}
+    if hair != "?":
+        appearance["hairStyle"] = hair
+    appearance["hairColor"] = HAIR_COLOURS[hcol]
+    if facial != "?":
+        appearance["facialHair"] = facial
+    appearance.update({"heightCm": int(cm), "build": build, "bootColor": boot})
     return {
         "id": pid,
         "firstName": first,
@@ -407,15 +415,7 @@ def build_player(club_id, ln, parts):
         "weakFoot": stars(traits, "wf", 3),
         "skillMoves": stars(traits, "sm", skill_default),
         "attributes": attrs,
-        "appearance": {
-            "skinTone": round((int(skin) - 1) / 8.0, 3),
-            "hairStyle": hair,
-            "hairColor": HAIR_COLOURS[hcol],
-            "facialHair": facial,
-            "heightCm": int(cm),
-            "build": build,
-            "bootColor": boot,
-        },
+        "appearance": appearance,
     }
 
 

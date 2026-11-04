@@ -84,6 +84,14 @@ namespace OpenFifa.Core
                     }
 
                     spinLocal = new SimVec3(cfg.ShotTopSpin, 0f, 0f);
+                    if (req.Style == KickStyle.Knuckle)
+                    {
+                        // Through the valve: extra pace, almost no spin (the residual spin keeps it knuckling).
+                        speed *= cfg.KnuckleShotSpeedFactor;
+                        spinLocal = new SimVec3(cfg.KnuckleShotResidualSpin, 0f, 0f);
+                        result.Knuckle = true;
+                    }
+
                     break;
                 }
                 case IntentAction.FinesseShot:
@@ -95,7 +103,7 @@ namespace OpenFifa.Core
                     float sideSpin = foot == SimFoot.Right ? -s : s;
                     spinLocal = new SimVec3(5f, sideSpin, 0f);
                     float d = req.HasTarget ? distance : 20f;
-                    curlPreAim = CurlPreAim(sideSpin, d, speed, ball);
+                    curlPreAim = CurlPreAim(sideSpin, d, speed, ball, spinLocal.Magnitude);
                     break;
                 }
                 case IntentAction.DrivenShot:
@@ -128,6 +136,7 @@ namespace OpenFifa.Core
                 elevation = PlayerIntent.IsShotAction(req.Action) ? -4f * SimMath.Deg2Rad : elevation * 0.6f + 0.1f;
                 spinLocal = SimVec3.Zero;
                 curlPreAim = 0f;
+                result.Knuckle = false;
             }
 
             // Error cone.
@@ -345,10 +354,13 @@ namespace OpenFifa.Core
         /// Yaw offset (radians) to aim outside the target so that a ball with side spin curls back onto the line.
         /// Small-angle estimate: theta = 0.5 * a_lateral * T / v with a_lateral = S * w * v / m, T = d / v.
         /// </summary>
-        public static float CurlPreAim(float sideSpin, float distance, float speed, BallSimConfig ball)
+        /// <param name="totalSpin">|w| including any top spin (the lift depends on the whole spin parameter);
+        /// defaults to |sideSpin|.</param>
+        public static float CurlPreAim(float sideSpin, float distance, float speed, BallSimConfig ball, float totalSpin = -1f)
         {
             if (speed < 1f) return 0f;
-            float theta = 0.5f * ball.MagnusCoefficient * sideSpin * distance / (ball.Mass * speed);
+            float magnus = BallIntegrator.EffectiveMagnusCoefficient(ball, totalSpin >= 0f ? totalSpin : SimMath.Abs(sideSpin), speed);
+            float theta = 0.5f * magnus * sideSpin * distance / (ball.Mass * speed);
             // Positive side spin curls toward +right, so pre-aim to the left (negative yaw) and vice versa.
             return -theta * 0.85f;
         }
@@ -367,7 +379,8 @@ namespace OpenFifa.Core
 
             private float _elevation, _spin;
             private float _mass, _radius, _gravity, _rho, _cdLow, _cdHigh, _crisisStart, _crisisEnd, _magnus, _spinDecay,
-                _restV, _max, _maxSpin;
+                _restV, _max, _maxSpin, _liftSat, _liftLin, _liftScale, _dragSpin, _knuckle, _knMin, _knFull, _knSp, _knWave;
+            private bool _liftModel;
             private float[] _carry;
             private float[] _time;
             private int _n;
@@ -412,7 +425,11 @@ namespace OpenFifa.Core
                 && _cdLow == c.DragCoefficientLowSpeed && _cdHigh == c.DragCoefficientHighSpeed
                 && _crisisStart == c.DragCrisisStartSpeed && _crisisEnd == c.DragCrisisEndSpeed
                 && _magnus == c.MagnusCoefficient && _spinDecay == c.AirSpinDecayTime
-                && _restV == c.RestVerticalSpeed && _max == c.MaxSpeed && _maxSpin == c.MaxSpin;
+                && _restV == c.RestVerticalSpeed && _max == c.MaxSpeed && _maxSpin == c.MaxSpin
+                && _liftModel == c.UseSpinParameterLift && _liftSat == c.LiftSaturation && _liftLin == c.LiftLinear
+                && _liftScale == c.LiftScale && _dragSpin == c.DragSpinFactor && _knuckle == c.KnuckleForceCoefficient
+                && _knMin == c.KnuckleMinSpeed && _knFull == c.KnuckleFullSpeed && _knSp == c.KnuckleMaxSpinParameter
+                && _knWave == c.KnuckleWavelength;
 
             private static LoftTable Build(BallSimConfig c, float elevation, float topSpin)
             {
@@ -424,6 +441,10 @@ namespace OpenFifa.Core
                     _crisisStart = c.DragCrisisStartSpeed, _crisisEnd = c.DragCrisisEndSpeed,
                     _magnus = c.MagnusCoefficient, _spinDecay = c.AirSpinDecayTime,
                     _restV = c.RestVerticalSpeed, _max = c.MaxSpeed, _maxSpin = c.MaxSpin,
+                    _liftModel = c.UseSpinParameterLift, _liftSat = c.LiftSaturation, _liftLin = c.LiftLinear,
+                    _liftScale = c.LiftScale, _dragSpin = c.DragSpinFactor, _knuckle = c.KnuckleForceCoefficient,
+                    _knMin = c.KnuckleMinSpeed, _knFull = c.KnuckleFullSpeed, _knSp = c.KnuckleMaxSpinParameter,
+                    _knWave = c.KnuckleWavelength,
                 };
                 int n = (int)((c.MaxSpeed - MinSpeed) / SpeedStep) + 2;
                 if (n < 2) n = 2;

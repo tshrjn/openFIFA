@@ -110,7 +110,7 @@ namespace OpenFifa.Core
             private float _dt;
 
             // Fingerprint of the config values the table depends on.
-            private float _mass, _radius, _gravity, _rho, _cdLow, _cdHigh, _crisisStart, _crisisEnd, _roll, _stop, _max;
+            private float _mass, _radius, _gravity, _rho, _cdLow, _cdHigh, _crisisStart, _crisisEnd, _roll, _rollDrag, _stop, _max;
 
             public float TotalDistance => _dist[_n - 1];
 
@@ -127,7 +127,7 @@ namespace OpenFifa.Core
                 _mass == c.Mass && _radius == c.Radius && _gravity == c.Gravity && _rho == c.AirDensity
                 && _cdLow == c.DragCoefficientLowSpeed && _cdHigh == c.DragCoefficientHighSpeed
                 && _crisisStart == c.DragCrisisStartSpeed && _crisisEnd == c.DragCrisisEndSpeed
-                && _roll == c.RollingResistance && _stop == c.StopSpeed && _max == c.MaxSpeed;
+                && _roll == c.RollingResistance && _rollDrag == c.RollingDragPerSpeed && _stop == c.StopSpeed && _max == c.MaxSpeed;
 
             private static RollTable Build(BallSimConfig cfg)
             {
@@ -136,7 +136,7 @@ namespace OpenFifa.Core
                     _mass = cfg.Mass, _radius = cfg.Radius, _gravity = cfg.Gravity, _rho = cfg.AirDensity,
                     _cdLow = cfg.DragCoefficientLowSpeed, _cdHigh = cfg.DragCoefficientHighSpeed,
                     _crisisStart = cfg.DragCrisisStartSpeed, _crisisEnd = cfg.DragCrisisEndSpeed,
-                    _roll = cfg.RollingResistance, _stop = cfg.StopSpeed, _max = cfg.MaxSpeed,
+                    _roll = cfg.RollingResistance, _rollDrag = cfg.RollingDragPerSpeed, _stop = cfg.StopSpeed, _max = cfg.MaxSpeed,
                     _dt = DefaultDt,
                 };
 

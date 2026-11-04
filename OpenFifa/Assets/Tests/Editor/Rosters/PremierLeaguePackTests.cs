@@ -57,6 +57,7 @@ namespace OpenFifa.Tests.Editor
         [Test]
         public void Pack_EveryPlayer_HasShirtNameSquadNumberAndAppearance()
         {
+            int unknownHair = 0, players = 0;
             foreach (var c in League.Clubs)
                 foreach (var p in c.Players)
                 {
@@ -66,11 +67,27 @@ namespace OpenFifa.Tests.Editor
                     var a = p.Appearance;
                     Assert.IsNotNull(a, p.Id);
                     Assert.That(a.SkinTone, Is.InRange(0f, 1f), p.Id);
-                    Assert.IsTrue(RosterAppearance.IsToken(RosterAppearance.HairStyles, a.HairStyle), p.Id);
-                    Assert.IsTrue(RosterAppearance.IsToken(RosterAppearance.FacialHairStyles, a.FacialHair), p.Id);
+                    // Unknown hair / facial hair stays null so the appearance pipeline picks a seeded look.
+                    if (a.HairStyle != null) Assert.IsTrue(RosterAppearance.IsToken(RosterAppearance.HairStyles, a.HairStyle), p.Id);
+                    if (a.FacialHair != null) Assert.IsTrue(RosterAppearance.IsToken(RosterAppearance.FacialHairStyles, a.FacialHair), p.Id);
+                    if (a.HairStyle == null) unknownHair++;
                     Assert.IsTrue(RosterAppearance.IsToken(RosterAppearance.Builds, a.Build), p.Id);
                     Assert.AreEqual(p.HeightCm, a.HeightCm, p.Id);
+                    players++;
                 }
+            // No blanket default: a known style is written, everything else is left for the pipeline.
+            Assert.Greater(unknownHair, 0);
+            Assert.Less(unknownHair, players);
+        }
+
+        [Test]
+        public void Pack_KnownAs_KeepsOriginalSpelling()
+        {
+            var odegaard = League.FindPlayer("arsenal-martin-odegaard");
+            Assert.AreEqual("Ødegaard", odegaard.KnownAs);
+            Assert.AreEqual("ODEGAARD", odegaard.ShirtName);
+            Assert.AreEqual("Gvardiol", League.FindPlayer("man-city-josko-gvardiol").KnownAs);
+            Assert.AreEqual("Šeško", League.FindPlayer("man-united-benjamin-sesko").KnownAs);
         }
 
         [Test]

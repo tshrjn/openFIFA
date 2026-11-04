@@ -46,6 +46,7 @@ namespace OpenFifa.Core
             SimVec3 pos = dist <= maxStep ? hold : from + to * (maxStep / dist);
             _s.Ball.Position = pos;
             _s.Ball.Velocity = dist <= maxStep ? k.Velocity : (pos - from) / dt;
+            _s.Ball.ClearKnuckle();
             _s.Ball.Spin = SimVec3.Zero;
             _s.Ball.Grounded = false;
             if (!InOwnPenaltyArea(k.Team, k.Position))
@@ -129,6 +130,7 @@ namespace OpenFifa.Core
                 _s.LastTouchPlayer = gk;
                 _s.LastTouchTeam = team;
                 _s.Ball.Position = new SimVec3(ca.X, SimMath.Max(ca.Y, _cfg.Ball.Radius), ca.Z);
+                _s.Ball.ClearKnuckle();
                 // A save is not a deliberate play: the offside mask stays (Law 11).
                 if (caught)
                 {
@@ -269,7 +271,12 @@ namespace OpenFifa.Core
             SimVec3 pos = q + nrm * hitRadius;
             _s.Ball.Position = new SimVec3(pos.X, SimMath.Max(pos.Y, r), pos.Z);
             _s.Ball.Velocity = vOut;
-            _s.Ball.Spin *= 0.5f;
+            _s.Ball.ClearKnuckle();
+            // Glancing friction at the contact point (-nrm * r from the centre) slows the tangential motion and spins the
+            // ball: J_t = -m (1 - keep) v_t, dw = (arm x J_t) / I.
+            SimVec3 frictionImpulse = tangential * (-(1f - ac.BodyTangentialKeep) * _cfg.Ball.Mass * ac.BodyDeflectionSpinTransfer);
+            SimVec3 spinKick = SimVec3.Cross(nrm * -r, frictionImpulse) / _cfg.Ball.MomentOfInertia;
+            _s.Ball.Spin = SimVec3.ClampMagnitude(_s.Ball.Spin * 0.5f + spinKick, _cfg.Ball.MaxSpin);
             _s.Ball.Grounded = _s.Ball.Position.Y <= r + 1e-3f && vOut.Y <= 0.01f;
 
             int previous = _s.LastTouchPlayer;
@@ -311,7 +318,9 @@ namespace OpenFifa.Core
             }
 
             if (!p.IsFree && p.ActionState != SimPlayerActionState.Recovery) return;
-            if (_s.Ball.Position.Y > 0.5f) return;
+            // Wait for a dropping or bobbling ball to come (nearly) down: the touch puts it on the turf, so meeting it
+            // higher would snap it down visibly.
+            if (!DribbleBallLowEnough(_s.Ball.Position.Y)) return;
 
             SimVec3 dir = p.Speed > 0.5f ? p.Velocity.Flat.Normalized : p.FacingDir;
             float dirYaw = SimMath.Yaw(dir);
@@ -343,7 +352,9 @@ namespace OpenFifa.Core
 
             SimVec3 target = p.Position + p.Velocity.Flat * interval + dir * lead;
             SimVec3 disp = (target - _s.Ball.Position).Flat;
-            float decel = _cfg.Ball.RollingResistance * _cfg.Ball.Gravity;
+            // Average roll speed over the interval sets the speed-proportional (wet/heavy turf) part of the decel.
+            float decel = _cfg.Ball.RollingResistance * _cfg.Ball.Gravity
+                          + _cfg.Ball.RollingDragPerSpeed * (disp.Magnitude / interval);
             SimVec3 v = disp / interval + disp.Normalized * (0.5f * decel * interval);
             // Attachment cap: the ball can never be pushed faster than the player can follow (no magnet dribbling).
             v = SimVec3.ClampMagnitude(v, p.Speed + ac.MaxTouchSpeedOverPlayer);
@@ -356,6 +367,7 @@ namespace OpenFifa.Core
             _s.Ball.Velocity = v;
             _s.Ball.Spin = BallIntegrator.RollingSpin(v, _cfg.Ball.Radius, 0f);
             _s.Ball.Grounded = true;
+            _s.Ball.ClearKnuckle();
             _s.LastTouchPlayer = id;
             _s.LastTouchTeam = p.Team;
             p.NextTouchTick = _s.Tick + SimMath.Clamp(_cfg.SecondsToTicks(interval), 1, 10000);
@@ -363,6 +375,40 @@ namespace OpenFifa.Core
             p.LastTouchTick = _s.Tick;
             float quality = SimMath.Clamp01(1f - SimMath.Abs(err) * 6f - (sprint ? 0.25f * (1f - drib) : 0f));
             Emit(MatchEventType.DribbleTouch, id, -1, p.Team, _s.Ball.Position, v.Magnitude, quality);
+        }
+
+        /// <summary>
+        /// Sets the ball after a first touch with flat velocity <paramref name="flatV"/> and touch error
+        /// <paramref name="err"/>. A ball met in the air (chest, thigh, a bounce) is cushioned down from where it was
+        /// met, with a little backspin so it checks up at the feet; a heavy touch pops it up instead. A ground ball is
+        /// killed flat and rolling unless the touch is heavy enough to make it bobble.
+        /// </summary>
+        private void ApplyFirstTouchHeight(SimVec3 flatV, float err)
+        {
+            var ac = _cfg.Actions;
+            float r = _cfg.Ball.Radius;
+            SimVec3 pos = _s.Ball.Position;
+            _s.Ball.ClearKnuckle();
+            bool aerial = pos.Y > r + 0.05f;
+            float pop = aerial
+                ? err * ac.FirstTouchPopPerError
+                : SimMath.Max(0f, err - ac.FirstTouchGroundPopThreshold) * ac.FirstTouchPopPerError;
+            if (!aerial && pop <= 0f)
+            {
+                _s.Ball.Position = new SimVec3(pos.X, r, pos.Z);
+                _s.Ball.Velocity = flatV;
+                _s.Ball.Spin = BallIntegrator.RollingSpin(flatV, r, 0f);
+                _s.Ball.Grounded = true;
+                return;
+            }
+
+            float vy = aerial ? pop - ac.FirstTouchCushionDropSpeed : pop;
+            _s.Ball.Position = new SimVec3(pos.X, SimMath.Max(pos.Y, r), pos.Z);
+            _s.Ball.Velocity = new SimVec3(flatV.X, vy, flatV.Z);
+            float flat = flatV.Magnitude;
+            SimVec3 right = flat > 1e-4f ? SimVec3.Cross(SimVec3.Up, flatV / flat) : SimVec3.Zero;
+            _s.Ball.Spin = right * -ac.FirstTouchCushionBackSpin;
+            _s.Ball.Grounded = false;
         }
 
         private int NearestOpponent(int id)
@@ -382,6 +428,12 @@ namespace OpenFifa.Core
         }
 
         private const float TieEpsilon = 1e-4f;
+
+        /// <summary>Highest the ball's underside may be (m) for a dribble touch to play it along the ground.</summary>
+        public const float DribbleMaxHeightAboveTurf = 0.1f;
+
+        /// <summary>Shared by <see cref="UpdateDribble"/> and <see cref="TryPredictDribbleTouch"/> so prediction matches.</summary>
+        private bool DribbleBallLowEnough(float ballY) => ballY <= _cfg.Ball.Radius + DribbleMaxHeightAboveTurf;
 
         /// <summary>Loose-ball pickup. The owner keeps priority while the ball is within his control radius.</summary>
         private void UpdatePossession()
@@ -484,6 +536,7 @@ namespace OpenFifa.Core
                 _s.KeeperHolding = true;
                 _s.Ball.Velocity = SimVec3.Zero;
                 _s.Ball.Spin = SimVec3.Zero;
+                _s.Ball.ClearKnuckle();
                 Emit(MatchEventType.FirstTouch, id, -1, team, _s.Ball.Position, 0f, 1f);
                 return;
             }
@@ -503,10 +556,7 @@ namespace OpenFifa.Core
             SimVec3 ahead = p.Speed > 0.5f ? p.Velocity.Flat.Normalized : p.FacingDir;
             SimVec3 randomDir = SimMath.FromYaw(_s.Rng.Range(-SimMath.Pi, SimMath.Pi));
             SimVec3 v = p.Velocity.Flat + ahead * 0.6f + randomDir * (err * 1.5f);
-            _s.Ball.Position = new SimVec3(_s.Ball.Position.X, _cfg.Ball.Radius, _s.Ball.Position.Z);
-            _s.Ball.Velocity = v;
-            _s.Ball.Spin = BallIntegrator.RollingSpin(v, _cfg.Ball.Radius, 0f);
-            _s.Ball.Grounded = true;
+            ApplyFirstTouchHeight(v, err);
             p.NextTouchTick = _s.Tick + _cfg.SecondsToTicks(0.25f + (1f - quality) * 0.3f);
             p.LastTouchYaw = SimMath.Yaw(ahead);
             p.LastTouchTick = _s.Tick;

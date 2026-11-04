@@ -126,8 +126,13 @@ namespace OpenFifa.Tests.Editor.TeamAI
             }
             Assert.Greater(traj.HeightAt(1f), 3f, "a lofted ball is over head height mid-flight");
             // The old flat model treated a lofted ball as rolling and decayed it; the static helper now flies it.
+            // The static helper has no spin input: it must fly the ball exactly as the integrator flies a spinless one,
+            // and the spin it ignores (8 rad/s of backspin here) only moves the ball a little.
             var flat = TeamAIMath.PredictBall(w.Ball.Position, w.Ball.Velocity, 1.5f);
-            Assert.AreEqual(BallIntegrator.PredictBall(b, cfg, w.Pitch, 1.5f).Position.Z, flat.Z, 0.3f);
+            var spinless = new SimBall { Position = b.Position, Velocity = b.Velocity };
+            float spinlessZ = BallIntegrator.PredictBall(spinless, cfg, w.Pitch, 1.5f).Position.Z;
+            Assert.AreEqual(spinlessZ, flat.Z, 0.01f, "spinless helper matches the spinless integrator");
+            Assert.AreEqual(BallIntegrator.PredictBall(b, cfg, w.Pitch, 1.5f).Position.Z, spinlessZ, 0.6f, "spin effect stays small");
         }
 
         [Test]
