@@ -16,11 +16,27 @@ env:
   PROJECT_PATH: ./OpenFifa
 
 jobs:
+  # ─── GATE: skip Unity jobs cleanly until a license secret exists ──
+  license-check:
+    name: Unity license present
+    runs-on: ubuntu-latest
+    outputs:
+      ok: ${{ steps.check.outputs.ok }}
+    steps:
+      - id: check
+        run: |
+          if [ -n "$UNITY_LICENSE" ] || { [ -n "$UNITY_EMAIL" ] && [ -n "$UNITY_PASSWORD" ]; }; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No Unity license secrets (UNITY_LICENSE or UNITY_EMAIL+UNITY_PASSWORD); Unity jobs skipped."
+          fi
   # ─── FAST: EditMode Tests (< 2 minutes) ────────────────────────
   editmode-tests:
     name: EditMode Tests
     runs-on: ubuntu-latest
-    if: github.event_name != 'schedule'
+    needs: license-check
+    if: needs.license-check.outputs.ok == 'true' && github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -45,8 +61,8 @@ jobs:
   playmode-tests:
     name: PlayMode Tests
     runs-on: ubuntu-latest
-    needs: editmode-tests
-    if: github.event_name != 'schedule'
+    needs: [license-check, editmode-tests]
+    if: needs.license-check.outputs.ok == 'true' && github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -73,8 +89,8 @@ jobs:
   platform-builds:
     name: Platform Builds (macOS + iPad)
     runs-on: macos-latest
-    needs: playmode-tests
-    if: github.event_name != 'schedule'
+    needs: [license-check, playmode-tests]
+    if: needs.license-check.outputs.ok == 'true' && github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,37 +101,38 @@ jobs:
         with:
           projectPath: ${{ env.PROJECT_PATH }}
           targetPlatform: StandaloneOSX
-          buildMethod: BuildScript.BuildMacOS
+          buildMethod: OpenFifa.Editor.BuildScript.BuildMacOSDev
 
       - name: Build iPad
         uses: game-ci/unity-builder@v4
         with:
           projectPath: ${{ env.PROJECT_PATH }}
           targetPlatform: iOS
-          buildMethod: BuildScript.BuildIPad
+          buildMethod: OpenFifa.Editor.BuildScript.BuildIOS
 
       - name: Verify platform builds
         run: |
           chmod +x ./scripts/verify-build.sh
-          ./scripts/verify-build.sh ./build/macOS ./build/iOS
+          ./scripts/verify-build.sh ./OpenFifa/build/macOS ./OpenFifa/build/iOS
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: macos-build
-          path: build/macOS
+          path: OpenFifa/build/macOS
 
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: ipad-build
-          path: build/iOS
+          path: OpenFifa/build/iOS
 
   # ─── NIGHTLY: Performance + Visual Regression ──────────────────
   performance-tests:
     name: Performance & Visual Regression
     runs-on: macos-latest
-    if: github.event_name == 'schedule'
+    needs: license-check
+    if: needs.license-check.outputs.ok == 'true' && github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -141,7 +158,8 @@ jobs:
   asset-integrity:
     name: Asset Integrity
     runs-on: ubuntu-latest
-    if: github.event_name == 'schedule'
+    needs: license-check
+    if: needs.license-check.outputs.ok == 'true' && github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
         with:
