@@ -360,5 +360,55 @@ namespace OpenFifa.Tests.Editor
             Assert.Greater(a.Length, 100);
             Assert.AreEqual(a, b);
         }
+
+        /// <summary>"Gómez" -> "Gomez": the name with accents stripped (same sound, so sharing a clip is fine).</summary>
+        private static string Unaccented(string s)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (char ch in s.Normalize(System.Text.NormalizationForm.FormD))
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(ch) != System.Globalization.UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            return sb.ToString().ToLowerInvariant();
+        }
+
+        [Test]
+        public void BundledLeagues_NoTwoDifferentNamesInAFixtureShareANameClip()
+        {
+            // Two players can share a name clip only when they are spoken the same (spelling differs by accents alone,
+            // e.g. Gomez and Gómez). Anything else would make the commentator say the wrong name in some fixture.
+            var problems = new List<string>();
+            var clashes = new List<string>();
+            foreach (var league in RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems))
+            {
+                var bySlug = new Dictionary<string, string>();
+                foreach (var club in league.Clubs) // every fixture pairs two clubs of one league, so check league-wide
+                    foreach (var p in club.Players)
+                    {
+                        string slug = RosterSchema.Slug(p.KnownAs);
+                        if (bySlug.TryGetValue(slug, out var other) && Unaccented(other) != Unaccented(p.KnownAs))
+                            clashes.Add(other + " / " + p.KnownAs + " -> " + slug);
+                        else if (!bySlug.ContainsKey(slug)) bySlug[slug] = p.KnownAs;
+                    }
+            }
+            Assert.IsEmpty(clashes, string.Join("; ", clashes.ToArray()));
+        }
+
+        [Test]
+        public void AnalystOnAGoal_HoldsTheFloor_RestartCallWaits()
+        {
+            var e = new CommentaryEngine(Shipped(), new CommentaryConfig { AnalystChance = 1, LullSeconds = 0 }, 8);
+            e.Push(Ev(CommentaryEventType.KickOff, 0));
+            var goal = Started(e.Push(Goal(30, "Okafor", 1, 0)), CommentaryVoice.PlayByPlay);
+            var analyst = Started(e.Tick(goal.EndTime + e.Config.AnalystLeadIn + 0.01), CommentaryVoice.Analyst);
+            Assert.IsNotNull(analyst);
+            Assert.IsFalse(analyst.Interruptible);
+            // Kick-off while he is talking: he is not cut, and the kick-off call is not started over him.
+            var cues = e.Push(Ev(CommentaryEventType.KickOff, analyst.StartTime + 0.3));
+            Assert.IsNull(Started(cues, CommentaryVoice.PlayByPlay));
+            Assert.AreSame(analyst, e.CurrentAnalyst);
+            // A shot (resolution) still breaks in.
+            var shot = e.Push(Ev(CommentaryEventType.ShotTaken, analyst.StartTime + 0.6));
+            Assert.IsNotNull(Started(shot, CommentaryVoice.PlayByPlay));
+        }
     }
 }

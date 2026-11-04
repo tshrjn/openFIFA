@@ -604,7 +604,7 @@
       ]
     },
     {
-      "id": "analyst.goal", "event": "Goal", "voice": "analyst", "priority": 60, "tone": "neutral",
+      "id": "analyst.goal", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral",
       "lines": [
         "The movement before that was the key. He found a yard and that's all you need.",
         "Look at the weight of the final pass. It made the finish easy.",
@@ -621,7 +621,7 @@
       ]
     },
     {
-      "id": "analyst.goal.equaliser", "event": "Goal", "voice": "analyst", "context": "equaliser", "priority": 62, "tone": "neutral",
+      "id": "analyst.goal.equaliser", "event": "Goal", "voice": "analyst", "context": "equaliser", "priority": 62, "interruptible": false, "tone": "neutral",
       "lines": [
         "Deserved. They've had the better of the last ten minutes.",
         "That changes the whole mood. The momentum is with them now.",
@@ -633,6 +633,51 @@
         "Both teams will think they can win it now.",
         "That goal has woken the whole place up.",
         "Great character to come back into it."
+      ]
+    },
+    {
+      "id": "analyst.goal.penalty", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "penalty",
+      "lines": [
+        "No mistake from the spot. That takes nerve.",
+        "He picked his corner and never changed his mind.",
+        "The keeper had a go, but you can't stop that.",
+        "Penalties are all about composure, and that was ice cool.",
+        "He waited for the keeper to move. Textbook.",
+        "Pressure on, and he delivers. Exactly what you want.",
+        "That's the hardest part of the job done for him.",
+        "Hit with real conviction. The keeper had no chance.",
+        "You'll never see a better penalty than that.",
+        "The defender gave him the chance, and he took it."
+      ]
+    },
+    {
+      "id": "analyst.goal.own_goal", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "own_goal",
+      "lines": [
+        "Unfortunate. He was only trying to clear it.",
+        "That's a horrible moment for the defender.",
+        "He's had to react so quickly there. Nothing he could do.",
+        "The cross was dangerous, and it's found the wrong body.",
+        "You feel for him. He'll want the ground to swallow him up.",
+        "Credit to the delivery. It forced the error.",
+        "Sometimes the ball just doesn't go your way.",
+        "His head goes down, but there's a long way to go.",
+        "They won't care how it went in.",
+        "Put the ball in that area and things happen."
+      ]
+    },
+    {
+      "id": "analyst.goal.free_kick", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "free_kick",
+      "lines": [
+        "What a free kick. Up and over the wall, and down again.",
+        "The wall jumped, and he went where it wasn't.",
+        "That's pure technique. You practise that for hours.",
+        "Lovely contact. The keeper barely moved.",
+        "Over the wall and dipping. Unstoppable.",
+        "He's been threatening that all afternoon.",
+        "Dead-ball delivery like that wins you matches.",
+        "The keeper set his wall, and it didn't help him.",
+        "Bend, dip, pace. It had everything.",
+        "From that range, it's a special strike."
       ]
     },
     {
@@ -667,7 +712,7 @@
       ]
     },
     {
-      "id": "analyst.red", "event": "RedCard", "voice": "analyst", "priority": 55, "tone": "neutral",
+      "id": "analyst.red", "event": "RedCard", "voice": "analyst", "priority": 55, "interruptible": false, "tone": "neutral",
       "lines": [
         "He's let his team down there. They'll have to dig in now.",
         "That's reckless. Studs up, out of control. It had to be red.",
@@ -728,7 +773,7 @@
       ]
     },
     {
-      "id": "analyst.half_time", "event": "HalfTime", "voice": "analyst", "priority": 60, "tone": "neutral",
+      "id": "analyst.half_time", "event": "HalfTime", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral",
       "lines": [
         "An entertaining half. Both sides have had moments.",
         "The midfield battle has been the story so far.",
@@ -744,7 +789,7 @@
       ]
     },
     {
-      "id": "analyst.full_time", "event": "FullTime", "voice": "analyst", "priority": 65, "tone": "neutral",
+      "id": "analyst.full_time", "event": "FullTime", "voice": "analyst", "priority": 65, "interruptible": false, "tone": "neutral",
       "lines": [
         "On the balance of play, I think that's a fair result.",
         "They'll learn a lot from that performance.",
@@ -947,7 +992,7 @@
       ]
     },
     {
-      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.brace", "event": "Goal", "context": "brace",
+      "voice": "analyst", "priority": 40, "interruptible": false, "live": false, "tone": "neutral", "id": "analyst.goal.brace", "event": "Goal", "context": "brace",
       "lines": [
         "He's in the mood today. Everything he touches is turning to gold.",
         "Two goals, and he could easily have more.",
@@ -962,7 +1007,7 @@
       ]
     },
     {
-      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.hat_trick", "event": "Goal", "context": "hat_trick",
+      "voice": "analyst", "priority": 40, "interruptible": false, "live": false, "tone": "neutral", "id": "analyst.goal.hat_trick", "event": "Goal", "context": "hat_trick",
       "lines": [
         "A hat-trick! You don't see that very often. Remarkable.",
         "That's a performance people will talk about for a long time.",
@@ -977,7 +1022,7 @@
       ]
     },
     {
-      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.late_winner", "event": "Goal", "context": "late_winner",
+      "voice": "analyst", "priority": 40, "interruptible": false, "live": false, "tone": "neutral", "id": "analyst.goal.late_winner", "event": "Goal", "context": "late_winner",
       "lines": [
         "That's character. They kept going right to the end.",
         "Heartbreak for the other side. They looked like they'd held on.",
