@@ -50,6 +50,10 @@ namespace OpenFifa.Gameplay
         [SerializeField] private bool enableContactIk = true;
         [SerializeField, Range(0f, 1f)] private float lookAtWeight = 0.8f;
         [SerializeField] private float ballRadius = ContactIkSolver.DefaultBallRadius;
+        [Tooltip("Peak strike-foot IK weight of a running dribble touch (layered on locomotion). Below 1 keeps some of the run cycle in the leg.")]
+        [SerializeField, Range(0f, 1f)] private float dribbleTouchIkWeight = 0.85f;
+        [Tooltip("Look-at weight multiplier during a dribble touch (a glance at the ball, not a full head turn).")]
+        [SerializeField, Range(0f, 1f)] private float dribbleTouchLookAtScale = 0.5f;
 
         private static readonly int SpeedHash = Animator.StringToHash(AnimStateNames.ParamSpeed);
         private static readonly int ForwardHash = Animator.StringToHash(AnimStateNames.ParamForward);
@@ -73,6 +77,9 @@ namespace OpenFifa.Gameplay
         private bool _actionStarted;
         private bool _contactFired;
         private float _simTime;
+        private bool _hasLastTouchFoot;
+        private ActionSide _lastTouchFoot;
+        private float _lastTouchEnd = float.NegativeInfinity;
 
         private Vector3 _prevVelocity;
         private Vector3 _acceleration;
@@ -150,6 +157,8 @@ namespace OpenFifa.Gameplay
         public bool FreezePose { get; set; }
         public ActionSyncPlan CurrentPlan => _plan;
         public bool IsActionActive => _plan != null;
+        /// <summary>True while a running dribble touch (IK layered on locomotion) is planned or playing.</summary>
+        public bool IsLayeredActionActive => _plan != null && _plan.Profile.LayeredOnLocomotion;
         /// <summary>Last measured contact error (s): positive = the animation reached contact late.</summary>
         public float LastContactError { get; private set; }
         /// <summary>Current warp translation (world) of the visual relative to the sim root. Backends that place the body themselves (motion matching) add this.</summary>
@@ -262,12 +271,28 @@ namespace OpenFifa.Gameplay
             PlayerAnimAction a = _source.CurrentAction;
             if (a.IsNone || a.Id == _planActionId) return;
 
+            bool layered = _planner.ProfileFor(a.Kind).LayeredOnLocomotion;
+            // A running touch never cuts a full-body clip that is still playing (e.g. the first-touch or pass clip);
+            // it is picked up on a later frame if the source still reports it.
+            if (layered && _plan != null && !_plan.Profile.LayeredOnLocomotion && _actionStarted) return;
+            ActionSide side = a.Side;
+            if (layered)
+            {
+                // A dribble without touches in between (another action, or a long gap) starts a new alternation.
+                if (_plan == null || !_plan.Profile.LayeredOnLocomotion) _hasLastTouchFoot &= _simTime - _lastTouchEnd < 0.6f;
+                bool hasSwing = TryEstimateNextFootfall(out ActionSide swing);
+                side = DribbleTouchSolver.ChooseFoot(hasSwing, swing, a.ContactTime - _simTime, vel.magnitude,
+                    _hasLastTouchFoot, _lastTouchFoot, a.Side, _planner.Stride);
+                _hasLastTouchFoot = true;
+                _lastTouchFoot = side;
+            }
+
             Vector3 rootAtContact = a.HasRootAtContact
                 ? a.RootAtContact
                 : pos + vel * Mathf.Max(0f, a.ContactTime - _simTime);
             float yawAtContact = a.HasRootAtContact ? SimYawToDegrees(a.YawAtContact) : yaw;
 
-            var request = new ActionSyncRequest(a.Kind, a.Side, _simTime, a.ContactTime, pos.ToSim(),
+            var request = new ActionSyncRequest(a.Kind, side, _simTime, a.ContactTime, pos.ToSim(),
                 rootAtContact.ToSim(), yawAtContact, a.BallAtContact.ToSim(), a.Direction.ToSim(), vel.magnitude,
                 EstimateNextFootfall(), pos.y);
 
@@ -282,6 +307,12 @@ namespace OpenFifa.Gameplay
         {
             if (_plan == null) return;
             ActionTimingPlan timing = _plan.Timing;
+
+            if (_plan.Profile.LayeredOnLocomotion)
+            {
+                UpdateLayeredAction();
+                return;
+            }
 
             if (!_actionStarted && _simTime >= timing.StartTime)
             {
@@ -303,10 +334,30 @@ namespace OpenFifa.Gameplay
             if (_simTime > _plan.EndTime) EndAction();
         }
 
+        /// <summary>
+        /// Running dribble touch: the Animator (or motion-matching backend) stays in locomotion; the touch is only the
+        /// strike-foot IK envelope applied in <see cref="HandleAnimatorIK"/>. There is no clip contact event, so the
+        /// contact is reported on the first frame at or past the contact tick.
+        /// </summary>
+        private void UpdateLayeredAction()
+        {
+            if (!_actionStarted && _simTime >= _plan.Ik.StrikeRampStart)
+            {
+                _actionStarted = true;
+                ActionStarted?.Invoke(this, _plan);
+            }
+            if (_actionStarted && !_contactFired && _simTime >= _plan.Request.ContactTime) HandleContactEvent();
+            if (_simTime > _plan.EndTime)
+            {
+                _lastTouchEnd = _simTime;
+                EndAction();
+            }
+        }
+
         private void EndAction()
         {
             if (_plan == null) return;
-            if (_actionStarted && _backend != null && _backend.IsActive)
+            if (_actionStarted && !_plan.Profile.LayeredOnLocomotion && _backend != null && _backend.IsActive)
                 _backend.SetActionOverride(false, _plan.Request.Kind);
             _plan = null;
             _actionStarted = false;
@@ -381,14 +432,19 @@ namespace OpenFifa.Gameplay
             animator.SetFloat(LocoRateHash, rate);
         }
 
-        private ActionSide EstimateNextFootfall()
+        private ActionSide EstimateNextFootfall() => TryEstimateNextFootfall(out ActionSide next) ? next : ActionSide.Right;
+
+        /// <summary>The foot in the air now (lands next), read from the pose; false when the rig has no humanoid feet.</summary>
+        private bool TryEstimateNextFootfall(out ActionSide next)
         {
-            if (animator == null || !animator.isHuman) return ActionSide.Right;
+            next = ActionSide.Right;
+            if (animator == null || !animator.isHuman) return false;
             Transform lf = animator.GetBoneTransform(HumanBodyBones.LeftFoot);
             Transform rf = animator.GetBoneTransform(HumanBodyBones.RightFoot);
-            if (lf == null || rf == null) return ActionSide.Right;
+            if (lf == null || rf == null) return false;
             // The lower foot is in stance; the other one lands next.
-            return lf.position.y <= rf.position.y ? ActionSide.Right : ActionSide.Left;
+            next = lf.position.y <= rf.position.y ? ActionSide.Right : ActionSide.Left;
+            return true;
         }
 
         // ------------------------------------------------------------------ IK
@@ -421,13 +477,15 @@ namespace OpenFifa.Gameplay
             if (enableContactIk && _plan != null && _actionStarted)
             {
                 ContactIkTargets ik = _plan.Ik;
-                float ws = ik.StrikeWeightAt(_simTime);
+                bool layered = _plan.Profile.LayeredOnLocomotion;
+                // Dribble touch: short in/out envelope around the contact tick, capped so the run cycle still shows.
+                float ws = ik.StrikeWeightAt(_simTime) * (layered ? dribbleTouchIkWeight : 1f);
                 if (ws > 0f) ApplyEffector(ik.StrikeEffector, ik.StrikeTarget.ToUnity(), ws);
                 float wp = ik.PlantWeightAt(_simTime);
                 if (wp > 0f) ApplyEffector(ik.PlantEffector, ik.PlantTarget.ToUnity(), wp);
                 if (_plan.Request.Kind != AnimActionKind.Header && ws > 0f)
                 {
-                    animator.SetLookAtWeight(ws * lookAtWeight, 0.2f, 0.9f, 0f, 0.5f);
+                    animator.SetLookAtWeight(ws * lookAtWeight * (layered ? dribbleTouchLookAtScale : 1f), 0.2f, 0.9f, 0f, 0.5f);
                     animator.SetLookAtPosition(_plan.Request.BallAtContact.ToUnity());
                 }
             }

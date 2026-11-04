@@ -72,7 +72,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 var a = _session.Animation.Get(PlayerId);
                 if (a.IsNone) return PlayerAnimAction.None;
-                return new PlayerAnimAction(a.Id, a.Kind, a.Side, a.ContactTime, a.BallAtContact.ToUnity(),
+                // Dribble touches arrive as FirstTouch + IsDribbleTouch; the driver plays them as a running touch
+                // (foot IK layered on locomotion) instead of the full first-touch clip.
+                AnimActionKind kind = DribbleTouchSolver.PresentationKind(a.Kind, a.IsDribbleTouch);
+                return new PlayerAnimAction(a.Id, kind, a.Side, a.ContactTime, a.BallAtContact.ToUnity(),
                     a.Direction.ToUnity(), a.RootAtContact.ToUnity(), a.YawAtContact, a.HasRootAtContact);
             }
         }

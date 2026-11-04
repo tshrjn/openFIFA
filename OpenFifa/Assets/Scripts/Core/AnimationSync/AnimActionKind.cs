@@ -15,6 +15,11 @@ namespace OpenFifa.Core
         Fall = 9,
         Celebrate = 10,
         GoalkeeperThrow = 11,
+        /// <summary>
+        /// Running dribble touch: no clip and no wind-up stop. Played as strike-foot IK toward the ball at the contact
+        /// tick, layered on locomotion (the player keeps running). See <see cref="DribbleTouchSolver"/>.
+        /// </summary>
+        DribbleTouch = 12,
     }
 
     /// <summary>Which foot (or hand side, for dives) performs the action.</summary>
@@ -68,6 +73,7 @@ namespace OpenFifa.Core
                 case AnimActionKind.Fall: return Fall;
                 case AnimActionKind.Celebrate: return Celebrate;
                 case AnimActionKind.GoalkeeperThrow: return GoalkeeperThrow;
+                case AnimActionKind.DribbleTouch: return Locomotion; // layered on locomotion, no state of its own
                 default: return Locomotion;
             }
         }

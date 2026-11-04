@@ -83,6 +83,7 @@ namespace OpenFifa.Core
                 case AnimActionKind.Shot:
                 case AnimActionKind.Cross:
                 case AnimActionKind.FirstTouch:
+                case AnimActionKind.DribbleTouch:
                 case AnimActionKind.StandingTackle:
                 case AnimActionKind.SlideTackle:
                     return side == ActionSide.Right ? ContactEffector.RightFoot : ContactEffector.LeftFoot;
