@@ -1,0 +1,27 @@
+{
+    "name": "OpenFifa.Gameplay.MotionMatching",
+    "rootNamespace": "OpenFifa.Gameplay",
+    "references": [
+        "OpenFifa.Core",
+        "OpenFifa.Gameplay",
+        "JLPM.MotionMatching",
+        "Unity.Mathematics"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "OPENFIFA_MOTION_MATCHING"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.jlpm.motionmatching",
+            "expression": "0.3.0",
+            "define": "OPENFIFA_MOTION_MATCHING"
+        }
+    ],
+    "noEngineReferences": false
+}
