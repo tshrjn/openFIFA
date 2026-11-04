@@ -14,7 +14,7 @@ The gamepad layout follows the functional conventions of the common console foot
 | North | Y | Triangle | Through ball | — |
 | East | B | Circle | Shoot (hold to charge) | Tackle |
 | Right trigger | RT | R2 | Sprint | Sprint |
-| Left trigger | LT | L2 | Shield; with Shoot: knuckleball | Jockey |
+| Left trigger | LT | L2 | Shield; pressed during a Shoot charge: knuckleball | Jockey |
 | Left shoulder | LB | L1 | Modifier | Switch player (smart) |
 | Right shoulder | RB | R1 | Modifier | Hold: teammate press |
 | Right stick flick | RS | R | Skill move (8 directions) | Switch player in the flick direction |
@@ -29,13 +29,13 @@ The gamepad layout follows the functional conventions of the common console foot
 | LB + Shoot | LB + B | L1 + Circle | Chip shot |
 | RB + Shoot | RB + B | R1 + Circle | Finesse shot |
 | LB + RB + Shoot | LB + RB + B | L1 + R1 + Circle | Driven (power) shot |
-| LT + Shoot | LT + B | L2 + Circle | Knuckleball (almost no spin; wobbles and dips) |
+| Shoot, then LT | B, then LT | Circle, then L2 | Knuckleball (almost no spin; wobbles and dips) |
 | RB + Pass | RB + A | R1 + Cross | Driven pass |
 | LB + Through | LB + Y | L1 + Triangle | Lobbed through ball |
 | LB + RB + Through | LB + RB + Y | L1 + R1 + Triangle | Driven through ball |
 | LB + RB + Lob | LB + RB + X | L1 + R1 + Square | Driven lob / cross |
 
-A modifier counts if it is held at any point while the kick button is down. LT + Shoot takes priority over the shoulder modifiers (LT + LB + Shoot is still a knuckleball), and it only changes shots: LT with Pass, Lob or Through plays the normal kick. Because LT is also Shield, a shot struck while shielding is a knuckleball.
+A shoulder modifier (LB, RB) counts if it is held at any point while the kick button is down. LT is different, because LT is also Shield: it only makes a knuckleball when it is pressed *after* the Shoot press, while the shot is still charging. Holding LT to shield and then pressing Shoot gives a normal shot (LT and Shoot pressed on the same tick also give a normal shot); releasing LT and pressing it again during the charge gives a knuckleball. The knuckleball takes priority over the shoulder modifiers (Shoot + LB, then LT, is still a knuckleball), and LT only changes shots: Pass, Lob or Through with LT play the normal kick.
 
 ### Alternate preset
 
@@ -46,7 +46,7 @@ This preset puts Shoot on West (X / Square) and Lob/Cross on East (B / Circle). 
 | LB + Shoot | Finesse shot |
 | RB + Shoot | Driven shot |
 | LB + RB + Shoot | Chip shot |
-| LT + Shoot | Knuckleball (same as Classic) |
+| Shoot, then LT | Knuckleball (same as Classic: LT pressed during the charge) |
 
 Defence follows the roles in both presets: the Shoot button tackles and the Lob button slides.
 
