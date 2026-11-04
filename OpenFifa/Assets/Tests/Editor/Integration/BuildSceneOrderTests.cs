@@ -46,5 +46,15 @@ namespace OpenFifa.Tests.Editor.Integration
             foreach (var s in BuildSceneOrder.Leading)
                 Assert.IsTrue(System.IO.File.Exists(s), s + " is missing");
         }
-    }
+    
+        [Test]
+        public void LocalMultiplayerSceneName_IsTheLoadableNameOfTheSecondBuildScene()
+        {
+            Assert.AreEqual("LocalMultiplayerMatch", BuildSceneOrder.LocalMultiplayerSceneName);
+            Assert.AreEqual(BuildSceneOrder.LocalMultiplayerScene, BuildSceneOrder.Leading[1]);
+            Assert.AreEqual("Match", BuildSceneOrder.SceneName("Assets\\Scenes\\Match.unity"));
+            Assert.AreEqual("Plain", BuildSceneOrder.SceneName("Plain"));
+            Assert.AreEqual(string.Empty, BuildSceneOrder.SceneName(null));
+        }
+}
 }

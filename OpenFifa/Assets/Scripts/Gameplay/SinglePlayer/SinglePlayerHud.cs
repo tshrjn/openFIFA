@@ -15,6 +15,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
     public sealed class SinglePlayerHud : MonoBehaviour
     {
         private SinglePlayerMatchController _c;
+        private bool _showLocalMultiplayer;
         private GUIStyle _title, _big, _label, _small, _button;
         private Texture2D _white, _disc, _ring;
         private GUIStyle _buttonLabel, _buttonShadow;
@@ -36,6 +37,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _pick = _c.Level;
             // The in-match broadcast HUD lives on a uGUI canvas; add it for scenes made before it existed.
             if (GetComponent<SinglePlayerHudCanvas>() == null) gameObject.AddComponent<SinglePlayerHudCanvas>();
+            string lm = BuildSceneOrder.LocalMultiplayerSceneName;
+            _showLocalMultiplayer = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name != lm
+                                    && Application.CanStreamedLevelBeLoaded(lm);
         }
 
         private float Scale => Mathf.Max(0.6f, Screen.height / 720f);
@@ -139,6 +143,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
             GUI.Label(new Rect(0, y, w, 26), _statsText, _label);
             y += 44;
             if (GUI.Button(new Rect(w * 0.5f - 120, y, 240, 56), "Kick Off", _button)) _c.StartMatch(_pick);
+            // Local multiplayer (one seat per gamepad) lives in its own scene, second in the build order; it reuses
+            // this match and picker, so the entry is hidden there.
+            if (_showLocalMultiplayer
+                && GUI.Button(new Rect(w * 0.5f + 136, y + 6, 200, 44), "Local Multiplayer", _button))
+                UnityEngine.SceneManagement.SceneManager.LoadScene(BuildSceneOrder.LocalMultiplayerSceneName);
             GUI.Label(new Rect(20, h - 34, w - 40, 26),
                 SinglePlayerInput.GamepadConnected ? "Gamepad connected: FC Classic controls" : "No gamepad: touch controls (keyboard WASD / Space / F on desktop)", _small);
         }
