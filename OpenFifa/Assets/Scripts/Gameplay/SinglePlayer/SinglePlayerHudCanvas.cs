@@ -46,7 +46,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private readonly Image[] _crest = new Image[2];
         private readonly Text[] _crestText = new Text[2];
         private readonly Texture2D[] _crestTex = new Texture2D[2];
-        private readonly string[] _crestKey = new string[2];
+        // What each crest was last built from: rebuilt only when the club reference or the shirt colour changes (the
+        // old string key was concatenated every LateUpdate, garbage every frame).
+        private readonly object[] _crestClub = new object[2];
+        private readonly Color[] _crestPrimary = new Color[2];
+        private readonly bool[] _crestBuilt = new bool[2];
         public const int CrestPx = 64;
         public const float CrestSize = 26f;
         private int _scoreKey = int.MinValue, _clockKey = int.MinValue;
@@ -269,11 +273,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 var club = side == 0 ? _c.HomeClub : _c.AwayClub;
                 Color primary = Opaque(side == 0 ? _c.HomeColour : _c.AwayColour);
+                if (_crestBuilt[side] && ReferenceEquals(_crestClub[side], club) && _crestPrimary[side] == primary) continue;
+                _crestBuilt[side] = true;
+                _crestClub[side] = club;
+                _crestPrimary[side] = primary;
                 string name = club != null ? club.Name : (side == 0 ? "Home" : "Away");
                 string shortName = club != null ? club.ShortName : (side == 0 ? "HOM" : "AWY");
-                string key = name + "|" + shortName + "|" + ColorUtility.ToHtmlStringRGB(primary) + "|" + (club != null ? club.SecondaryColour : "");
-                if (key == _crestKey[side]) continue;
-                _crestKey[side] = key;
                 Color secondary = club != null && ColorUtility.TryParseHtmlString(club.SecondaryColour, out var sc) ? sc : Color.white;
                 // A secondary that is too close to the shirt colour would vanish: fall back to white or near-black.
                 if (Mathf.Abs(secondary.r - primary.r) + Mathf.Abs(secondary.g - primary.g) + Mathf.Abs(secondary.b - primary.b) < 0.35f)

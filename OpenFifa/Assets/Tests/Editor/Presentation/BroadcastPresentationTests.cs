@@ -111,7 +111,8 @@ namespace OpenFifa.Tests.Editor.Presentation
         {
             var problems = new List<string>();
             var leagues = RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems);
-            Assert.AreEqual(1, leagues.Count, string.Join("\n", problems));
+            Assert.AreEqual(0, problems.Count, string.Join("\n", problems));
+            Assert.GreaterOrEqual(leagues.Count, 1);
             var clubs = leagues[0].Clubs;
             RosterMatchBuilder.BuildSetup(clubs[0], clubs[1], 2, out var home, out var away, out var names, out _);
             var numbers = MatchSheetNumbers.Build(home, away);

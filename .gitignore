@@ -108,5 +108,6 @@ docs/references/*.webm
 OpenFifa/.build/
 !OpenFifa/Assets/Editor/Build/
 
-# Python tool caches
+# Python bytecode
 __pycache__/
+*.pyc

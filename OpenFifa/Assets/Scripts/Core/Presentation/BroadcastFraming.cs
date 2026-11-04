@@ -47,6 +47,50 @@ namespace OpenFifa.Core
             return framed;
         }
 
+        /// <summary>
+        /// Critically damped spring towards <paramref name="target"/> (the same integrator as Unity's Mathf.SmoothDamp,
+        /// without a speed limit), engine-free so the follow logic can be tested.
+        /// </summary>
+        public static float SmoothDamp(float current, float target, ref float velocity, float smoothTime, float dt)
+        {
+            if (dt <= 0f) return current;
+            smoothTime = Math.Max(1e-4f, smoothTime);
+            float omega = 2f / smoothTime;
+            float x = omega * dt;
+            float exp = 1f / (1f + x + 0.48f * x * x + 0.235f * x * x * x);
+            float change = current - target;
+            float temp = (velocity + omega * change) * dt;
+            velocity = (velocity - omega * temp) * exp;
+            float output = target + (change + temp) * exp;
+            if ((target - current > 0f) == (output > target))
+            {
+                // No overshoot past the target.
+                output = target;
+                velocity = 0f;
+            }
+            return output;
+        }
+
+        /// <summary>Largest framing speed (m/s) carried out of the dead-zone edge (a hard-hit ball, not a teleport).</summary>
+        public const float MaxFollowSpeed = 35f;
+
+        /// <summary>
+        /// One axis of the broadcast follow: smooth towards <paramref name="target"/>, then hold the hard dead-zone edge
+        /// (<see cref="ClampFollow"/>) around the ball. While the edge holds the framing, the framing moves with the ball,
+        /// so the spring's velocity becomes the ball's (<paramref name="ballVelocity"/> on this axis). When the edge
+        /// releases (the ball slows after a long ball) the spring carries on from that speed: zeroing it (the old code)
+        /// made the camera stop dead at the release and then crawl back up to speed.
+        /// </summary>
+        public static float FollowAxis(float framed, ref float velocity, float target, float ball, float ballVelocity,
+            float maxOffset, float smoothTime, float dt)
+        {
+            float next = SmoothDamp(framed, target, ref velocity, smoothTime, dt);
+            float held = ClampFollow(next, ball, maxOffset);
+            if (held != next)
+                velocity = ballVelocity > MaxFollowSpeed ? MaxFollowSpeed : (ballVelocity < -MaxFollowSpeed ? -MaxFollowSpeed : ballVelocity);
+            return held;
+        }
+
         /// <summary>On-screen size in pixels of an object <paramref name="sizeMetres"/> tall at a distance (perspective).</summary>
         public static float Pixels(float sizeMetres, float distance, float verticalFovDegrees, float screenHeight)
         {

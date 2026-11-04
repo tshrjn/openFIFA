@@ -25,8 +25,16 @@ namespace OpenFifa.Core
         /// <summary>Fastest sprint the sim allows (6.6 + 3.1 m/s) and the jog fraction, for the arrival speed cap.</summary>
         public const float MaxSprintSpeed = 9.7f;
         public const float MaxJogFraction = 0.62f;
-        /// <summary>A move target slower than this (m/s) is treated as a fixed spot.</summary>
+        /// <summary>A move target slower than this (m/s) is treated as a fixed spot by the pace-keeping logic.</summary>
         public const float MovingTargetSpeed = 0.5f;
+        /// <summary>
+        /// A target with any velocity above this (m/s) is a drifting shape spot (<see cref="TeamAIShapeMotion"/>): its
+        /// speed crosses zero on the ellipse's short axis (a back-line spot's depth drift peaks near 0.3 m/s), so it is
+        /// never "settled on". Only an exactly fixed spot gets the <see cref="ResumeRadius"/> dead zone.
+        /// </summary>
+        public const float DriftTargetSpeed = 0.02f;
+        /// <summary>Closing gain (1/s) when walking with a drifting spot inside the arrive radius.</summary>
+        public const float DriftClosingGain = 1f;
         /// <summary>
         /// Typical jog and sprint top speeds (m/s; sim: sprint 6.6-9.7, jog 62% of it) used to turn a target's speed
         /// into a throttle. Only used to keep pace with a moving target; the live closing speed corrects any error.
@@ -173,9 +181,14 @@ namespace OpenFifa.Core
         public static float TempoThrottle(in AIPlayerCommand cmd)
         {
             if (cmd.SpeedLimit <= 0f) return 1f;
-            float jogTop = (cmd.SprintSpeed > 0.5f ? cmd.SprintSpeed : AssumedSprintSpeed) * MaxJogFraction;
-            return SimMath.Clamp01(cmd.SpeedLimit / jogTop);
+            return SimMath.Clamp01(cmd.SpeedLimit / JogTop(cmd));
         }
+
+        /// <summary>The player's jog top speed (m/s) as the sim computes it: <see cref="MaxJogFraction"/> of his stamina-scaled sprint.</summary>
+        public static float JogTop(in AIPlayerCommand cmd) => SprintTop(cmd) * MaxJogFraction;
+
+        /// <summary>The player's (stamina-scaled) sprint top speed from the command, or the typical value when unknown.</summary>
+        public static float SprintTop(in AIPlayerCommand cmd) => cmd.SprintSpeed > 0.5f ? cmd.SprintSpeed : AssumedSprintSpeed;
 
         /// <summary>Off-ball positioning intents that may shuffle facing the ball (never the carrier or a ball chaser).</summary>
         public static bool IsOffBallShapeIntent(TeamAIIntent intent)
@@ -212,6 +225,45 @@ namespace OpenFifa.Core
                 case TeamAIAction.Shield: return IntentAction.Shield;
                 default: return IntentAction.None;
             }
+        }
+
+        /// <summary>A defender this far (m) upfield of the ball, out of possession, is caught upfield.</summary>
+        public const float CaughtUpfieldMargin = 3f;
+        /// <summary>... and sprints back when his spot is more than this (m) behind him.</summary>
+        public const float RecoveryRunDistance = 8f;
+
+        /// <summary>
+        /// Recovery run: a back-line or holding player (CB, FB, DM) caught upfield of the ball while the other side has
+        /// it (or touched it last) sprints back to his spot, whatever the team phase. The team AI only sends players back
+        /// at full pace in its short Recovery phase; after it, a shape command (hold, keep line, mark) carries the
+        /// off-ball tempo limit, so a centre-back left 30 m upfield by a long ball jogged home at 3-4 m/s. This lifts the
+        /// limit and sets the sprint on such commands. Applied by the match session to the director's command before
+        /// <see cref="ToIntent"/>; true when the command was changed.
+        /// </summary>
+        public bool ApplyRecoveryRun(ref AIPlayerCommand cmd, int id) => ApplyRecoveryRun(ref cmd, World, id);
+
+        public static bool ApplyRecoveryRun(ref AIPlayerCommand cmd, TeamAIWorld world, int id)
+        {
+            if (world == null || id < 0 || id >= world.PlayerCount) return false;
+            if (world.MatchPhase != TeamAIMatchPhase.InPlay) return false;
+            ref readonly var p = ref world.Players[id];
+            if (!p.Active || p.HumanControlled) return false;
+            if (p.Role != TeamAIRole.CB && p.Role != TeamAIRole.FB && p.Role != TeamAIRole.DM) return false;
+            if (cmd.Action != TeamAIAction.None || cmd.Sprint || !IsOffBallShapeIntent(cmd.Intent)) return false;
+            int team = p.Team;
+            int owner = world.Ball.OwnerId;
+            bool theirBall = owner >= 0 && owner < world.PlayerCount
+                ? world.Players[owner].Team != team
+                : world.Ball.LastTouchTeam >= 0 && world.Ball.LastTouchTeam != team;
+            if (!theirBall) return false;
+            int sign = world.AttackSign(team);
+            float upfield = (p.Position.Z - world.Ball.Position.Z) * sign;
+            float spotBehind = (p.Position.Z - cmd.MoveTarget.Z) * sign;
+            if (upfield < CaughtUpfieldMargin || spotBehind < RecoveryRunDistance) return false;
+            cmd.Sprint = true;
+            cmd.SpeedLimit = 0f;
+            cmd.Intent = TeamAIIntent.Recover;
+            return true;
         }
 
         /// <summary>
@@ -264,7 +316,11 @@ namespace OpenFifa.Core
             // stepping back and forth (and his body flipping) every 0.1 s.
             // Only for plain movement: an action's own small step (shielding 1 m away from the presser) still runs.
             bool plainMove = cmd.Action == TeamAIAction.None;
-            float radius = plainMove && !moving && speed < SettledSpeed ? ResumeRadius : ArriveRadius;
+            // A drifting shape spot (any velocity) has no settle hysteresis: its speed passes through zero twice a lap,
+            // and parking the player until it is 1.2 m away (about the drift's whole amplitude) made the back line
+            // stop and go. Inside the arrive radius he walks with the drift instead (below).
+            bool drifting = plainMove && !moving && tvSpeed > DriftTargetSpeed && IsOffBallShapeIntent(cmd.Intent);
+            float radius = plainMove && !moving && !drifting && speed < SettledSpeed ? ResumeRadius : ArriveRadius;
             if (dist > radius)
             {
                 SimVec3 dir = to / dist;
@@ -274,9 +330,12 @@ namespace OpenFifa.Core
                 if (moving)
                 {
                     // Keep pace with a target running away along the approach, then close on top of that.
+                    // Against this player's own jog top (stamina-scaled) when it is under the typical one: a slow or
+                    // tired player whose jog cannot keep pace switches to the sprint gait instead of falling behind.
+                    float jogTop = Math.Min(AssumedJogSpeed, JogTop(cmd));
                     recede = SimMath.Max(0f, SimVec3.Dot(tv, dir));
-                    if (recede > AssumedJogSpeed * 0.9f) { sprint = true; throttle = 1f; }
-                    else if (!sprint) throttle = SimMath.Max(throttle, SimMath.Min(1f, recede / AssumedJogSpeed + 0.25f));
+                    if (recede > jogTop * 0.9f) { sprint = true; throttle = 1f; }
+                    else if (!sprint) throttle = SimMath.Max(throttle, SimMath.Min(1f, recede / jogTop + 0.25f));
                 }
                 // Arrive: cap the speed so the closing speed never exceeds what a sure deceleration can shed before the
                 // spot. The cap is continuous in the distance (no brake/release toggling between ticks) and assumes the
@@ -288,11 +347,21 @@ namespace OpenFifa.Core
                 intent.Move = dir * throttle;
                 intent.Sprint = sprint;
             }
+            else if (drifting)
+            {
+                // Walk with the drifting spot, closing the remaining gap gently: continuous motion, no park-and-restart.
+                SimVec3 want = tv + to * DriftClosingGain;
+                float th = SimMath.Clamp01(want.Magnitude / JogTop(cmd));
+                th = SimMath.Min(th, TempoThrottle(cmd));
+                float wm = want.Magnitude;
+                intent.Move = wm > 1e-4f ? want / wm * th : SimVec3.Zero;
+            }
             else if (moving)
             {
                 // On a moving target: run with it.
-                bool sprint = tvSpeed > AssumedJogSpeed * 0.9f;
-                float th = SimMath.Clamp01(tvSpeed / (sprint ? AssumedSprintSpeed : AssumedJogSpeed));
+                float jogTop = Math.Min(AssumedJogSpeed, JogTop(cmd));
+                bool sprint = tvSpeed > jogTop * 0.9f;
+                float th = SimMath.Clamp01(tvSpeed / (sprint ? Math.Min(AssumedSprintSpeed, SprintTop(cmd)) : jogTop));
                 if (!sprint) th = SimMath.Min(th, TempoThrottle(cmd));
                 intent.Move = tv / tvSpeed * th;
                 intent.Sprint = sprint;

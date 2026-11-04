@@ -68,7 +68,30 @@ namespace OpenFifa.Core
             return new RosterClub(c.GetString("id"), c.GetString("name"), c.GetString("shortName"),
                 colours.GetString("primary"), colours.GetString("secondary"), colours.GetString("away"),
                 stadium.GetString("name"), stadium.GetInt("capacity", 0), c.GetString("formation"),
-                c.GetInt("reputation", 3), players);
+                c.GetInt("reputation", 3), players, BuildKits(c.Get("kits")));
+        }
+
+        private static RosterKit[] BuildKits(JsonNode kits)
+        {
+            if (kits == null || !kits.IsObject) return null;
+            var list = new List<RosterKit>();
+            foreach (var m in kits.Members)
+            {
+                var k = m.Value;
+                if (!k.IsObject) continue;
+                list.Add(new RosterKit(m.Key, k.GetString("primary"), k.GetString("secondary"), k.GetString("tertiary"),
+                    k.GetString("pattern", "solid"), k.GetString("shortsColor"), k.GetString("socksColor"),
+                    k.GetString("numberColor"), k.GetString("numberOutline")));
+            }
+            return list.ToArray();
+        }
+
+        private static RosterAppearance BuildAppearance(JsonNode a, int playerHeightCm)
+        {
+            if (a == null || !a.IsObject) return null;
+            return new RosterAppearance((float)a.GetNumber("skinTone", 0.5), a.GetString("hairStyle"),
+                a.GetString("hairColor"), a.GetString("facialHair"), a.GetInt("heightCm", playerHeightCm),
+                a.GetString("build"), a.GetString("bootColor"));
         }
 
         private static RosterPlayer BuildPlayer(JsonNode p)
@@ -80,9 +103,13 @@ namespace OpenFifa.Core
             var attrs = new int[RosterSchema.AttributeCount];
             for (int i = 0; i < attrs.Length; i++) attrs[i] = attrsNode.GetInt(RosterSchema.AttributeKeys[i], RosterSchema.AttributeMin);
             RosterSchema.TryParseFoot(p.GetString("preferredFoot"), out var foot);
+            // "squadNumber" (appearance contract) and "shirtNumber" (schema v1) are the same number; either may be given.
+            int number = p.Has("shirtNumber") ? p.GetInt("shirtNumber", 0) : p.GetInt("squadNumber", 0);
+            int height = p.GetInt("heightCm", 0);
             return new RosterPlayer(p.GetString("id"), p.GetString("firstName"), p.GetString("lastName"),
-                p.GetString("knownAs"), p.GetInt("shirtNumber", 0), p.GetString("nationality"), p.GetInt("age", 0),
-                p.GetInt("heightCm", 0), foot, p.GetInt("weakFoot", 3), p.GetInt("skillMoves", 2), positions, attrs);
+                p.GetString("knownAs"), number, p.GetString("nationality"), p.GetInt("age", 0),
+                height, foot, p.GetInt("weakFoot", 3), p.GetInt("skillMoves", 2), positions, attrs,
+                p.GetString("shirtName"), BuildAppearance(p.Get("appearance"), height));
         }
     }
 }
