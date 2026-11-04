@@ -163,11 +163,11 @@ namespace OpenFifa.Core
         /// </summary>
         public int HammingDistance(long hashA, long hashB)
         {
-            long xor = hashA ^ hashB;
+            ulong xor = (ulong)(hashA ^ hashB);
             int distance = 0;
             while (xor != 0)
             {
-                distance += (int)(xor & 1);
+                distance += (int)(xor & 1UL);
                 xor >>= 1;
             }
             return distance;
