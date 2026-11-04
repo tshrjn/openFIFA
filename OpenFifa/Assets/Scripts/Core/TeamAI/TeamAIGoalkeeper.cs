@@ -27,7 +27,14 @@ namespace OpenFifa.Core
         /// Positional target on the angle bisector. Comes off the line as the ball approaches, narrows the angle
         /// in 1v1 range and becomes a sweeper when the ball is in the opponent's half.
         /// </summary>
-        public static SimVec3 PositionTarget(SimVec3 ball, int attackSign, PitchSpec pitch, float backLineDepth)
+        public static SimVec3 PositionTarget(SimVec3 ball, int attackSign, PitchSpec pitch, float backLineDepth) =>
+            PositionTarget(ball, attackSign, pitch, backLineDepth, 1f);
+
+        /// <summary>
+        /// As above; <paramref name="lineScale"/> under 1 keeps the keeper nearer his line when the ball is in our half
+        /// (a deep, box-defending side: the keeper covers the cut-back and the near post instead of narrowing the angle).
+        /// </summary>
+        public static SimVec3 PositionTarget(SimVec3 ball, int attackSign, PitchSpec pitch, float backLineDepth, float lineScale)
         {
             var flatBall = TeamAIMath.Flat(ball);
             var p = BisectorOnGoalLine(flatBall, attackSign, pitch);
@@ -51,6 +58,7 @@ namespace OpenFifa.Core
             {
                 d = TeamAIMath.Clamp(1.2f + 0.1f * ballDist, 1.2f, 4.5f);
                 if (ballDist < 12f) d = Math.Min(d, ballDist * 0.35f);
+                d *= lineScale;
             }
             return p + u * d;
         }
@@ -71,7 +79,12 @@ namespace OpenFifa.Core
         /// prediction (null falls back to <see cref="TeamAIMath.PredictBall"/>).
         /// </summary>
         public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
-            TeamAIBallTrajectory trajectory, ref AIPlayerCommand cmd)
+            TeamAIBallTrajectory trajectory, ref AIPlayerCommand cmd) =>
+            Decide(world, gkIndex, backLineDepth, teamHasPossession, trajectory, 1f, ref cmd);
+
+        /// <summary>As above, with the <see cref="PositionTarget(SimVec3,int,PitchSpec,float,float)"/> line scale.</summary>
+        public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
+            TeamAIBallTrajectory trajectory, float lineScale, ref AIPlayerCommand cmd)
         {
             var gk = world.Players[gkIndex];
             int sign = world.AttackSign(gk.Team);
@@ -179,7 +192,7 @@ namespace OpenFifa.Core
             }
 
             // 4) Position on the angle bisector.
-            var pos = PositionTarget(flatBall, sign, pitch, backLineDepth);
+            var pos = PositionTarget(flatBall, sign, pitch, backLineDepth, lineScale);
             SetMove(ref cmd, gk, pos, TeamAIMath.FlatDistance(gk.Position, pos) > 6f, TeamAIIntent.GKPosition);
         }
 
