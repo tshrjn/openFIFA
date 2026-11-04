@@ -26,10 +26,11 @@ Every slider runs from 0 to 1, and 0.5 is neutral. A default `new TeamAITactics(
 | Field | What it changes |
 |-------|-----------------|
 | `Width` | How wide the block spans. |
-| `Depth` | Back-line height (±0.1 of the pitch). |
+| `Depth` | Back-line height (±0.07 of the pitch, unchanged from before). |
 | `PressingIntensity` | When the team enters the high press, how long it counter-presses, and how many pressers go. |
 | `Directness` | On-ball pass scoring. Forward progress is weighted ×0.75 to ×1.25 and interception risk ×1.2 to ×0.8, and lofted balls forward become more attractive. Below 0.4, the lone holding midfielder drops between split centre-backs in build-up, provided the side plays a back two. |
 | `ForwardRuns` | Players allowed to run in behind at once (1, 2 or 3). At 0.7 and above, central midfielders make late runs into the final third. Full-backs only overlap at 0.25 and above, and from deeper at 0.75 and above. It also sets how far the wide forwards track back. |
+| *(rest defence)* | A late midfield run, or an early overlap at ForwardRuns 0.75 and above, only goes when at least three team-mates stay behind the ball (`TeamAIBrain.RestDefenders`). |
 | `CounterAttack` | Above 0.5, the team breaks for up to `TeamAIBrain.CounterWindow` (6 s) after winning the ball in open play. During the break, forwards start runs from up to 12% of the pitch behind the offside line, and the on-ball directness rises by up to 0.4. |
 
 `TeamAITactics.FromStyle(TeamAIStyle, formation)` gives the named presets: Balanced, Possession, HighPress (gegenpress), CounterAttack, LongBall, WingPlay and ParkTheBus. `TryParseStyle` accepts names such as "park the bus", "high-press" and "gegenpress".
@@ -45,10 +46,18 @@ Every slider runs from 0 to 1, and 0.5 is neutral. A default `new TeamAITactics(
 - **Leading by two or more:** Defensive after 75%.
 - **Numbers:** a man down is one step more defensive, and a man up while not winning is one step more attacking.
 
-A change goes in at the next stoppage, or after it has been wanted for `ChangeDelay` (20 s) of open play. `SinglePlayerMatchSession` turns the manager on for the AI side only, so the human's AI team-mates keep the user's tactics.
+A change goes in at the next stoppage, or after it has been wanted for `ChangeDelay` (20 s) of open play.
+
+`SinglePlayerMatchSession` turns the manager on for the AI side only, through `TeamAIManager.ForDifficulty(theta)`. You can switch it off with `SinglePlayerMatchOptions.AIManager = false`, and the human's AI team-mates always keep the user's tactics. `ForDifficulty` scales the manager to the level:
+
+- **Chasing a game:** one step (Attacking) below Legendary, and up to AllOutAttack at Legendary and Ultimate.
+- **Protecting a lead:** one step (Defensive) below World Class, and none from World Class up, so a top side keeps attacking.
+- **Style execution:** each style slider is pulled toward 0.5, by 0.25 at theta 0 up to 1 at theta 1. A pressing club on Beginner presses like a Beginner side, so style never overrides difficulty.
+
+Difficulty-ladder balances below come from 5 seeds with 4-minute halves, the same measure as `SinglePlayerSessionTests`. The figures are listed in the PR.
 
 `TeamAIWorld.Score` and `TeamAIWorld.MatchProgress` (0 at kick-off, 0.5 at half-time, 1 at full time) are filled by `SimTeamAIAdapter.Fill`.
 
 ## Rosters
 
-A club can name a style in the roster JSON with an optional `"style"` key, for example `"style": "counter"`. The validator rejects names it does not know. Without a style, `RosterMatchBuilder.TacticsFor` keeps the reputation-based sliders.
+A club can name a style in the roster JSON with an optional `"style"` key, for example `"style": "counter"`. The validator rejects names it does not know. With a style, `RosterMatchBuilder.TacticsFor` shifts the preset by reputation: pressing changes by 0.05 and line height by 0.03 for each star above or below three, so two clubs with the same style still differ. Without a style, or with `balanced`, it keeps the reputation-based sliders. The Premier League styles live in `tools/rosters/premier_league/build_premier_league.py` (`STYLES`).

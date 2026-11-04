@@ -43,6 +43,15 @@ namespace OpenFifa.Core
         public bool CounterActive { get; private set; }
         private float _regainTime = -100f;
         private bool _hadBall;
+        /// <summary>Ball depth below which a counter-attack can start, and up to which a running one carries on.</summary>
+        public const float CounterStartDepth = 0.78f;
+        public const float CounterEndDepth = 0.82f;
+        /// <summary>
+        /// Rest defence: outfielders who stay behind the ball. A late midfield run, or an early overlap by a
+        /// commit-everyone side, only goes if at least this many team-mates are still behind the ball.
+        /// </summary>
+        public const int RestDefenders = 3;
+        private int _restBehind;
         public TeamAIDifficulty Difficulty { get; private set; }
         public readonly TeamAIRandom Rng;
         public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
@@ -146,7 +155,7 @@ namespace OpenFifa.Core
 
             // ---- Layer 0: manager (mentality from score and clock) ----
             Manager.Update(world, Team);
-            TeamAIManager.Apply(Tactics, Manager.Current, Effective);
+            TeamAIManager.Apply(Tactics, Manager.Current, Manager.Enabled ? Manager.StyleExecution : 1f, Effective);
 
             // ---- Layer 1: team phase ----
             float nearest = NearestTeammateDistance(world, ball);
@@ -157,11 +166,14 @@ namespace OpenFifa.Core
             // ---- Transition: break at once after winning the ball in open play ----
             bool openPlay = world.MatchPhase == TeamAIMatchPhase.InPlay;
             if (hasPossession && !_hadBall && openPlay) _regainTime = world.Time;
-            if (!openPlay && !hasPossession) _regainTime = -100f;
+            // A restart ends any break (our own free kick is a set piece, not a counter).
+            if (!openPlay) _regainTime = -100f;
             _hadBall = hasPossession;
             float boost = Effective.CounterBoost;
+            // Hysteresis on the depth limit: a break that reached 0.78 runs on to 0.82 instead of flickering at the edge.
             CounterActive = hasPossession && openPlay && boost > 0f && world.Time - _regainTime < CounterWindow * boost &&
-                            ballDepth < 0.78f;
+                            ballDepth < (CounterActive ? CounterEndDepth : CounterStartDepth);
+            _restBehind = CountBehindBall(world, ballDepth, ownerIndex, sign);
             OnBall.Directness = TeamAIMath.Clamp01(Effective.Directness + (CounterActive ? 0.4f * boost : 0f));
             OnBall.CrossBias = 0.3f * TeamAIMath.Clamp01((Effective.Width - 0.6f) * 2.5f);
 
@@ -413,7 +425,9 @@ namespace OpenFifa.Core
 
             // Run in behind, timed against the offside line.
             // Late runs from midfield join in when the team commits players forward (high ForwardRuns) in the final third.
-            bool lateRunner = p.Role == TeamAIRole.CM && Effective.ForwardRuns >= 0.7f && phase == TeamAIPhase.FinalThird;
+            bool behindBall = myDepth < TeamAIMath.Depth(world.Ball.Position.Z, sign, pitch) - 0.02f;
+            bool lateRunner = p.Role == TeamAIRole.CM && Effective.ForwardRuns >= 0.7f && phase == TeamAIPhase.FinalThird &&
+                              (_running[i] || _restBehind - (behindBall ? 1 : 0) >= RestDefenders);
             if (ownerOurs && attacking && runners < Effective.MaxRunners &&
                 (p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM || lateRunner))
             {
@@ -433,6 +447,7 @@ namespace OpenFifa.Core
                 if (continuing || start)
                 {
                     if (start) { _running[i] = true; _runStart[i] = world.Time; }
+                    if (start && behindBall) _restBehind--;
                     runners++;
                     float targetDepth = Math.Min(OffsideDepth + 0.12f, 0.95f);
                     float x = TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
@@ -458,7 +473,8 @@ namespace OpenFifa.Core
             }
 
             // Overlap: ball-side full-back runs outside a wide carrier in the opponent half.
-            if (ownerOurs && p.Role == TeamAIRole.FB && overlappers == 0 && attacking && Effective.ForwardRuns >= 0.25f)
+            bool restOk = Effective.ForwardRuns < 0.75f || _restBehind - (behindBall ? 1 : 0) >= RestDefenders;
+            if (ownerOurs && p.Role == TeamAIRole.FB && overlappers == 0 && attacking && Effective.ForwardRuns >= 0.25f && restOk)
             {
                 var owner = world.Players[ownerIndex];
                 float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
@@ -467,6 +483,7 @@ namespace OpenFifa.Core
                 if (sameSide && carrierRole && ownerDepth > (Effective.ForwardRuns >= 0.75f ? 0.4f : 0.5f))
                 {
                     overlappers++;
+                    if (behindBall) _restBehind--;
                     float side = anchor.X > 0f ? 1f : -1f;
                     float depth = Math.Min(ownerDepth + 0.1f, onsideDepth);
                     var target = new SimVec3(side * (pitch.HalfWidth - 3f), 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
@@ -763,6 +780,19 @@ namespace OpenFifa.Core
         /// reads the touch and goes in (a missed tackle costs half a second, and the second presser covers).
         /// </summary>
         public static float TackleThreshold(float theta) => TeamAIMath.Lerp(0.5f, 0.36f, theta);
+
+        /// <summary>Our active outfielders (not the carrier) more than 0.02 of the pitch behind the ball.</summary>
+        private int CountBehindBall(TeamAIWorld world, float ballDepth, int ownerIndex, int sign)
+        {
+            int n = 0;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                ref readonly var o = ref world.Players[j];
+                if (j == ownerIndex || !o.Active || o.Team != Team || o.Role == TeamAIRole.GK) continue;
+                if (TeamAIMath.Depth(o.Position.Z, sign, world.Pitch) < ballDepth - 0.02f) n++;
+            }
+            return n;
+        }
 
         private int FindMarkTarget(TeamAIWorld world, SimVec3 anchor, int sign, float radius, float maxDepth)
         {

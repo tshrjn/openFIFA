@@ -430,7 +430,7 @@ STYLES = {
     "chelsea": "possession",
     "coventry": "counter",
     "crystal-palace": "counter",
-    "everton": "park-the-bus",
+    "everton": "counter",
     "fulham": "balanced",
     "hull": "counter",
     "ipswich": "counter",
@@ -440,7 +440,7 @@ STYLES = {
     "man-united": "wing-play",
     "newcastle": "high-press",
     "nottingham-forest": "counter",
-    "sunderland": "park-the-bus",
+    "sunderland": "long-ball",
     "tottenham": "high-press",
 }
 

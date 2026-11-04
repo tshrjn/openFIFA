@@ -52,13 +52,20 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Team instructions for a club: its roster style when it names one, otherwise sliders from reputation (bigger
-        /// clubs press harder and hold a higher line) with the balanced style.
+        /// Team instructions for a club: its roster style when it names one, shifted by reputation (a 5-star side presses
+        /// 0.1 harder and holds its line 0.06 higher than a 3-star side with the same style, a 1-star side as much lower),
+        /// so two clubs with one style still differ. Without a style (or "balanced"): sliders from reputation alone.
         /// </summary>
         public static TeamAITactics TacticsFor(RosterClub club, TeamAIFormation formation)
         {
             if (TeamAITactics.TryParseStyle(club.Style, out var style) && style != TeamAIStyle.Balanced)
-                return TeamAITactics.FromStyle(style, formation);
+            {
+                var t = TeamAITactics.FromStyle(style, formation);
+                int rep = club.Reputation - 3;
+                t.PressingIntensity = TeamAIMath.Clamp01(t.PressingIntensity + 0.05f * rep);
+                t.Depth = TeamAIMath.Clamp01(t.Depth + 0.03f * rep);
+                return t;
+            }
             float press = 0.35f + 0.1f * club.Reputation;
             return new TeamAITactics(formation, 0.5f, 0.4f + 0.04f * club.Reputation, press);
         }
