@@ -422,5 +422,49 @@ namespace OpenFifa.Tests.Editor.TeamAI
             neutral.DecideNow(w, 0.1f);
             Assert.AreEqual(0f, neutral.Brains[0].PressSqueeze, "neutral pressing intensity: unchanged behaviour");
         }
+
+        // ------------------------------------------------------------------ style strength follows intent
+
+        private static int AIGoalsFor(TeamAIStyle style, TeamAIDifficultyLevel level, int seeds)
+        {
+            int goals = 0;
+            for (int seed = 1; seed <= seeds; seed++)
+            {
+                var setup = MatchSetup.CreateDefault((ulong)seed);
+                var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+                {
+                    Level = level, Seed = (ulong)seed, Config = new MatchSimConfig { HalfDurationSeconds = 360f },
+                    AwayTactics = TeamAITactics.FromStyle(style, SimFormationMapper.BestFit(setup.AwayFormation))
+                });
+                var bot = new ScriptedGamepadBot();
+                while (!s.IsFinished) s.StepOnce(bot);
+                goals += s.Result.AIGoals;
+            }
+            return goals;
+        }
+
+        /// <summary>
+        /// A defensive style must not be the strongest attack. At Ultimate against the scripted user (16 seeds of
+        /// 6-minute halves): park the bus scores least, high press most and clearly more than balanced. Measured over
+        /// 48 seeds: ParkTheBus 145, Possession 196, Balanced 203, HighPress 274 (before the calibration ParkTheBus
+        /// scored 178 to Balanced's 105 over 24 seeds, the most of any style).
+        /// </summary>
+        [Test]
+        [Category("Slow")]
+        [Timeout(3600000)]
+        public void StyleGoalsFor_FollowIntent_ParkTheBusLeast_HighPressMost()
+        {
+            const int seeds = 16;
+            var level = TeamAIDifficultyLevel.Ultimate;
+            int bus = AIGoalsFor(TeamAIStyle.ParkTheBus, level, seeds);
+            int bal = AIGoalsFor(TeamAIStyle.Balanced, level, seeds);
+            int poss = AIGoalsFor(TeamAIStyle.Possession, level, seeds);
+            int press = AIGoalsFor(TeamAIStyle.HighPress, level, seeds);
+            System.Console.WriteLine($"AI goals at Ultimate over {seeds}: ParkTheBus {bus}, Balanced {bal}, Possession {poss}, HighPress {press}");
+            Assert.Less(bus, bal, "park the bus should score less than a balanced side");
+            Assert.Less(bus, poss, "park the bus should score less than a possession side");
+            Assert.Greater(press, bal, "a high press should score more than a balanced side");
+            Assert.Greater(press, bus * 1.4f, "a high press should score far more than park the bus");
+        }
     }
 }
