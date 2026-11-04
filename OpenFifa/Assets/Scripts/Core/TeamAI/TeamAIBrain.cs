@@ -29,7 +29,11 @@ namespace OpenFifa.Core
         /// <summary>Corner, penalty and near-box free-kick routines (planned while a restart is pending).</summary>
         public readonly TeamAISetPieces SetPieces = new TeamAISetPieces();
         /// <summary>This tick's sim-matched free-ball prediction (built when the ball is loose).</summary>
-        public readonly TeamAIBallTrajectory Trajectory = new TeamAIBallTrajectory();
+        /// <summary>
+        /// This decision tick's free-ball trajectory. <see cref="TeamAIDirector"/> gives both brains the same instance,
+        /// so it is integrated once per tick instead of once per team (Build is cached per time, ball state and model).
+        /// </summary>
+        public TeamAIBallTrajectory Trajectory { get; set; } = new TeamAIBallTrajectory();
         /// <summary>A set-piece routine is running this tick.</summary>
         public bool SetPieceRoutineActive { get; private set; }
 

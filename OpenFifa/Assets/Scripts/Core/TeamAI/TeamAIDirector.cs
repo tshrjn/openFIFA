@@ -32,6 +32,9 @@ namespace OpenFifa.Core
             PitchControl = new TeamAIPitchControl(pitch);
             Brains[0] = new TeamAIBrain(0, home, homeDifficulty, seed * 2UL + 1UL);
             Brains[1] = new TeamAIBrain(1, away, awayDifficulty, seed * 2UL + 2UL);
+            var trajectory = new TeamAIBallTrajectory();
+            Brains[0].Trajectory = trajectory;
+            Brains[1].Trajectory = trajectory;
         }
 
         /// <summary>
