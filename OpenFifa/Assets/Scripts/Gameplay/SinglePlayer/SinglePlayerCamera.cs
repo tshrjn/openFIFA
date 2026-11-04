@@ -24,16 +24,25 @@ namespace OpenFifa.Gameplay.SinglePlayer
         [Tooltip("Controlled player, blended in a little.")] public Transform Player;
         public float HalfWidth = 34f;
         public float HalfLength = 52.5f;
-        public float Height = 24f;
-        public float Distance = 40f;
-        public float FieldOfView = 34f;
-        public float Damping = 0.35f;
+        // Broadcast ("tele") framing, closer to FC's default camera than the old 24 m high / 34 deg view, where players
+        // were ~25 px tall at 720p. New field names so values serialised by older scenes are not picked up.
+        [Tooltip("Broadcast camera height (m).")] public float BroadcastHeight = 19f;
+        [Tooltip("Broadcast camera distance back from the near touchline (m).")] public float BroadcastSetback = 28f;
+        [Tooltip("Broadcast vertical field of view (deg).")] public float BroadcastFov = 27f;
+        [Tooltip("Seconds of ball travel (along the pitch) the framing leads by.")] public float LeadSeconds = 0.6f;
+        [Tooltip("Largest lead (m).")] public float MaxLead = 7f;
+        public float Damping = 0.45f;
+        /// <summary>How far the camera moves in towards the near touchline per metre the play is on the near side.</summary>
+        public const float DollyIn = 0.15f;
+        [Tooltip("Largest broadcast yaw towards a goal (deg).")] public float MaxYawDegrees = 25f;
         /// <summary>Which goal the GoalArea mode looks at (+1 = +Z).</summary>
         public int GoalSide = 1;
 
         private Vector3 _focus;
         private Vector3 _vel;
         private bool _snapped;
+        private Vector3 _lastBall;
+        private float _ballVz, _lead, _leadVel;
 
         /// <summary>Camera yaw in radians, same convention as the sim (0 = +Z, +pi/2 = +X).</summary>
         public float YawRadians => Mathf.Atan2(transform.forward.x, transform.forward.z);
@@ -47,9 +56,23 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var cam = GetComponent<Camera>();
             Vector3 ball = Ball != null ? Ball.position : Vector3.zero;
             Vector3 player = Player != null ? Player.position : ball;
+            // Lead in the direction of play: smoothed ball speed along the pitch, damped so it does not jitter on touches.
+            if (snap || !_snapped || dt <= 0f)
+            {
+                _lastBall = ball;
+                if (!_snapped) { _ballVz = 0f; _lead = 0f; _leadVel = 0f; }
+            }
+            else
+            {
+                float vz = (ball.z - _lastBall.z) / dt;
+                _lastBall = ball;
+                _ballVz = Mathf.Lerp(_ballVz, Mathf.Clamp(vz, -30f, 30f), 1f - Mathf.Exp(-dt * 3f));
+                _lead = Mathf.SmoothDamp(_lead, Mathf.Clamp(_ballVz * LeadSeconds, -MaxLead, MaxLead), ref _leadVel, 0.8f, Mathf.Infinity, dt);
+            }
             Vector3 target = Vector3.Lerp(ball, player, 0.2f);
             target.y = 0f;
-            target.z = Mathf.Clamp(target.z, -HalfLength + 12f, HalfLength - 12f);
+            target.z = Mathf.Clamp(target.z + _lead, -HalfLength + 8f, HalfLength - 8f);
+            target.x = Mathf.Clamp(target.x, -HalfWidth, HalfWidth);
             if (snap || !_snapped || dt <= 0f) { _focus = target; _snapped = true; }
             else _focus = Vector3.SmoothDamp(_focus, target, ref _vel, Damping, Mathf.Infinity, dt);
 
@@ -69,7 +92,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     break;
                 case Mode.GoalArea:
                     cam.fieldOfView = 55f;
-                    pos = new Vector3(0f, 7f, GoalSide * (HalfLength + 14f));
+                    // Just behind the net, in front of the stadium's LED ring and stand (14 m back put it inside the stand).
+                    pos = new Vector3(0f, 6f, GoalSide * (HalfLength + 4f));
                     look = new Vector3(0f, 0.5f, GoalSide * (HalfLength - 14f));
                     break;
                 case Mode.TopDown:
@@ -79,9 +103,17 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     transform.SetPositionAndRotation(pos, Quaternion.Euler(90f, -90f, 0f));
                     return;
                 default:
-                    cam.fieldOfView = FieldOfView;
-                    pos = new Vector3(_focus.x * 0.3f + HalfWidth + Distance * 0.55f, Height, _focus.z);
-                    look = new Vector3(_focus.x * 0.6f, 0f, _focus.z);
+                    // Fixed gantry line behind the near touchline that slides along the pitch; it dollies in a little
+                    // when play is near the camera. The look point follows the ball across, biased to the centre so
+                    // the far touchline stays in shot, and the near touchline comes in when play is near it.
+                    cam.fieldOfView = BroadcastFov;
+                    // The gantry stops short of the ends, so near a goal the camera turns a little towards it (yaw is
+                    // clamped to MaxYawDegrees) instead of sliding out over the stand.
+                    pos = new Vector3(HalfWidth + BroadcastSetback - Mathf.Max(0f, _focus.x) * DollyIn, BroadcastHeight,
+                        Mathf.Clamp(_focus.z, -(HalfLength - 14f), HalfLength - 14f));
+                    look = new Vector3(_focus.x * 0.75f, 0f, _focus.z);
+                    float maxDz = Mathf.Tan(MaxYawDegrees * Mathf.Deg2Rad) * Mathf.Max(1f, pos.x - look.x);
+                    look.z = pos.z + Mathf.Clamp(look.z - pos.z, -maxDz, maxDz);
                     break;
             }
             transform.position = pos;

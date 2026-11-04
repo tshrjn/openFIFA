@@ -13,6 +13,16 @@ namespace OpenFifa.Gameplay
         [SerializeField] private PitchConfig _pitchConfigAsset;
 
         private PitchConfigData _config;
+        private Material _lineMaterial;
+
+        /// <summary>Grass beyond the touch and goal lines (m). 0 keeps the surface exactly the size of the pitch.</summary>
+        public float RunOffMetres { get; set; }
+
+        /// <summary>Painted line width (m). Markings are flat strips lying on the grass (normal up), not camera-facing ribbons.</summary>
+        public float LineWidth { get; set; } = 0.12f;
+
+        /// <summary>Height of the line strips above the pitch origin; the surface cube's top is at 0.05.</summary>
+        private const float LineY = 0.065f;
 
         private void Awake()
         {
@@ -47,7 +57,8 @@ namespace OpenFifa.Gameplay
             pitch.transform.localPosition = Vector3.zero;
             // Cube is 1x1x1 by default; scale to pitch dimensions
             // Y is thin (0.1), X is length, Z is width
-            pitch.transform.localScale = new Vector3(_config.PitchLength, 0.1f, _config.PitchWidth);
+            float runOff = Mathf.Max(0f, RunOffMetres);
+            pitch.transform.localScale = new Vector3(_config.PitchLength + 2f * runOff, 0.1f, _config.PitchWidth + 2f * runOff);
 
             // Assign grass band material (lit, responds to stadium lighting)
             var renderer = pitch.GetComponent<MeshRenderer>();
@@ -198,37 +209,25 @@ namespace OpenFifa.Gameplay
         {
             var centerCircle = new GameObject("CenterCircle");
             centerCircle.transform.SetParent(transform);
-            centerCircle.transform.localPosition = new Vector3(0f, 0.06f, 0f);
+            centerCircle.transform.localPosition = new Vector3(0f, LineY, 0f);
 
-            // Use LineRenderer for the circle marking
-            var lineRenderer = centerCircle.AddComponent<LineRenderer>();
-            lineRenderer.useWorldSpace = false;
-            lineRenderer.loop = true;
-            lineRenderer.startWidth = 0.1f;
-            lineRenderer.endWidth = 0.1f;
-
-            // Create circle points
-            int segments = 64;
-            lineRenderer.positionCount = segments;
+            int segments = 96;
             float radius = _config.CenterCircleRadius;
-
+            var pts = new Vector3[segments];
             for (int i = 0; i < segments; i++)
             {
                 float angle = (float)i / segments * 2f * Mathf.PI;
-                float x = Mathf.Cos(angle) * radius;
-                float z = Mathf.Sin(angle) * radius;
-                lineRenderer.SetPosition(i, new Vector3(x, 0f, z));
+                pts[i] = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
             }
-
-            // White line material
-            var mat = CreateColorMaterial(Color.white);
-            lineRenderer.material = mat;
+            AddFlatLine(centerCircle, pts, true);
+            var mat = LineMaterial;
 
             // Center spot
             var centerSpot = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             centerSpot.name = "CenterSpot";
             centerSpot.transform.SetParent(centerCircle.transform);
             centerSpot.transform.localPosition = Vector3.zero;
+            centerSpot.transform.localPosition = new Vector3(0f, -0.005f, 0f);
             centerSpot.transform.localScale = new Vector3(0.3f, 0.01f, 0.3f);
             var spotRenderer = centerSpot.GetComponent<MeshRenderer>();
             spotRenderer.sharedMaterial = mat;
@@ -246,20 +245,20 @@ namespace OpenFifa.Gameplay
 
             // GoalAreaA at positive X (east)
             CreateGoalAreaMarking("GoalAreaA",
-                new Vector3(halfLength - goalAreaDepth / 2f, 0.06f, 0f),
+                new Vector3(halfLength - goalAreaDepth / 2f, LineY, 0f),
                 goalAreaDepth,
                 _config.GoalWidth + 4f); // Slightly wider than goal for area marking
 
             // GoalAreaB at negative X (west)
             CreateGoalAreaMarking("GoalAreaB",
-                new Vector3(-(halfLength - goalAreaDepth / 2f), 0.06f, 0f),
+                new Vector3(-(halfLength - goalAreaDepth / 2f), LineY, 0f),
                 goalAreaDepth,
                 _config.GoalWidth + 4f);
 
             // Halfway line
             CreateLineMarking("HalfwayLine",
-                new Vector3(0f, 0.06f, 0f),
-                new Vector3(0.1f, 0.01f, _config.PitchWidth));
+                new Vector3(0f, LineY, 0f),
+                new Vector3(LineWidth, 0.01f, _config.PitchWidth));
         }
 
         private void CreateGoalAreaMarking(string name, Vector3 position, float depth, float width)
@@ -268,22 +267,19 @@ namespace OpenFifa.Gameplay
             goalArea.transform.SetParent(transform);
             goalArea.transform.localPosition = position;
 
-            var lineRenderer = goalArea.AddComponent<LineRenderer>();
-            lineRenderer.useWorldSpace = false;
-            lineRenderer.loop = false;
-            lineRenderer.startWidth = 0.1f;
-            lineRenderer.endWidth = 0.1f;
-            lineRenderer.positionCount = 4;
-
             float halfDepth = depth / 2f;
             float halfWidth = width / 2f;
 
-            lineRenderer.SetPosition(0, new Vector3(-halfDepth, 0, halfWidth));
-            lineRenderer.SetPosition(1, new Vector3(halfDepth, 0, halfWidth));
-            lineRenderer.SetPosition(2, new Vector3(halfDepth, 0, -halfWidth));
-            lineRenderer.SetPosition(3, new Vector3(-halfDepth, 0, -halfWidth));
-
-            lineRenderer.material = CreateColorMaterial(Color.white);
+            // Closed rectangle. This used to be an open 4-point polyline (loop = false), which never drew the
+            // (-halfDepth) side: for the +X box that is the front edge facing the centre spot, so one end of the pitch
+            // had a box with no front line (the other end lost its goal-line side, hidden under the goal line).
+            AddFlatLine(goalArea, new[]
+            {
+                new Vector3(-halfDepth, 0, halfWidth),
+                new Vector3(halfDepth, 0, halfWidth),
+                new Vector3(halfDepth, 0, -halfWidth),
+                new Vector3(-halfDepth, 0, -halfWidth),
+            }, true);
         }
 
         /// <summary>
@@ -293,8 +289,8 @@ namespace OpenFifa.Gameplay
         {
             float hl = _config.HalfLength;
             float hw = _config.HalfWidth;
-            float y = 0.06f;
-            float w = 0.12f; // line width
+            float y = LineY;
+            float w = LineWidth;
 
             // Touchline North (positive Z)
             CreateLineMarking("TouchlineNorth",
@@ -320,11 +316,11 @@ namespace OpenFifa.Gameplay
             float penaltyWidth = _config.GoalWidth + 10f; // 15m wide
 
             CreateGoalAreaMarking("PenaltyAreaEast",
-                new Vector3(hl - penaltyDepth / 2f, 0.06f, 0f),
+                new Vector3(hl - penaltyDepth / 2f, LineY, 0f),
                 penaltyDepth, penaltyWidth);
 
             CreateGoalAreaMarking("PenaltyAreaWest",
-                new Vector3(-(hl - penaltyDepth / 2f), 0.06f, 0f),
+                new Vector3(-(hl - penaltyDepth / 2f), LineY, 0f),
                 penaltyDepth, penaltyWidth);
         }
 
@@ -337,10 +333,10 @@ namespace OpenFifa.Gameplay
             float hw = _config.HalfWidth;
             float radius = 1f; // Standard corner arc radius
 
-            CreateCornerArc("CornerArcNE", new Vector3(hl, 0.06f, hw), 180f, 270f, radius);
-            CreateCornerArc("CornerArcNW", new Vector3(-hl, 0.06f, hw), 270f, 360f, radius);
-            CreateCornerArc("CornerArcSE", new Vector3(hl, 0.06f, -hw), 90f, 180f, radius);
-            CreateCornerArc("CornerArcSW", new Vector3(-hl, 0.06f, -hw), 0f, 90f, radius);
+            CreateCornerArc("CornerArcNE", new Vector3(hl, LineY, hw), 180f, 270f, radius);
+            CreateCornerArc("CornerArcNW", new Vector3(-hl, LineY, hw), 270f, 360f, radius);
+            CreateCornerArc("CornerArcSE", new Vector3(hl, LineY, -hw), 90f, 180f, radius);
+            CreateCornerArc("CornerArcSW", new Vector3(-hl, LineY, -hw), 0f, 90f, radius);
         }
 
         private void CreateCornerArc(string name, Vector3 position,
@@ -350,25 +346,15 @@ namespace OpenFifa.Gameplay
             arc.transform.SetParent(transform);
             arc.transform.localPosition = position;
 
-            var lr = arc.AddComponent<LineRenderer>();
-            lr.useWorldSpace = false;
-            lr.loop = false;
-            lr.startWidth = 0.1f;
-            lr.endWidth = 0.1f;
-
             int segments = 16;
-            lr.positionCount = segments + 1;
-
+            var pts = new Vector3[segments + 1];
             for (int i = 0; i <= segments; i++)
             {
                 float t = (float)i / segments;
                 float angle = Mathf.Lerp(startAngleDeg, endAngleDeg, t) * Mathf.Deg2Rad;
-                float x = Mathf.Cos(angle) * radius;
-                float z = Mathf.Sin(angle) * radius;
-                lr.SetPosition(i, new Vector3(x, 0f, z));
+                pts[i] = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
             }
-
-            lr.material = CreateColorMaterial(Color.white);
+            AddFlatLine(arc, pts, false);
         }
 
         /// <summary>
@@ -379,8 +365,8 @@ namespace OpenFifa.Gameplay
             float hl = _config.HalfLength;
             float penaltyDist = _config.GoalAreaDepth * 2f; // 8m from goal line
 
-            CreateSpot("PenaltySpotEast", new Vector3(hl - penaltyDist, 0.06f, 0f));
-            CreateSpot("PenaltySpotWest", new Vector3(-(hl - penaltyDist), 0.06f, 0f));
+            CreateSpot("PenaltySpotEast", new Vector3(hl - penaltyDist, LineY - 0.005f, 0f));
+            CreateSpot("PenaltySpotWest", new Vector3(-(hl - penaltyDist), LineY - 0.005f, 0f));
         }
 
         private void CreateSpot(string name, Vector3 position)
@@ -390,7 +376,7 @@ namespace OpenFifa.Gameplay
             spot.transform.SetParent(transform);
             spot.transform.localPosition = position;
             spot.transform.localScale = new Vector3(0.25f, 0.01f, 0.25f);
-            spot.GetComponent<MeshRenderer>().sharedMaterial = CreateColorMaterial(Color.white);
+            spot.GetComponent<MeshRenderer>().sharedMaterial = LineMaterial;
 
             var col = spot.GetComponent<Collider>();
             if (col != null) Object.Destroy(col);
@@ -412,20 +398,98 @@ namespace OpenFifa.Gameplay
             return mat;
         }
 
+        /// <summary>Straight marking centred on <paramref name="position"/>; <paramref name="scale"/> x/z give its length and width.</summary>
         private void CreateLineMarking(string name, Vector3 position, Vector3 scale)
         {
-            var line = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            line.name = name;
+            var line = new GameObject(name);
             line.transform.SetParent(transform);
             line.transform.localPosition = position;
-            line.transform.localScale = scale;
+            bool alongX = scale.x >= scale.z;
+            float half = (alongX ? scale.x : scale.z) * 0.5f;
+            float width = alongX ? scale.z : scale.x;
+            var a = alongX ? new Vector3(-half, 0f, 0f) : new Vector3(0f, 0f, -half);
+            AddFlatLine(line, new[] { a, -a }, false, width);
+        }
 
-            var renderer = line.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = CreateColorMaterial(Color.white);
+        /// <summary>Shared lit white material: the strips face up, so they take the same light (and shadows) as the grass.</summary>
+        private Material LineMaterial
+        {
+            get
+            {
+                if (_lineMaterial == null)
+                {
+                    _lineMaterial = CreateColorMaterial(new Color(0.96f, 0.96f, 0.94f));
+                    if (_lineMaterial.HasProperty("_Smoothness")) _lineMaterial.SetFloat("_Smoothness", 0.1f);
+                    _lineMaterial.name = "PitchLines";
+                }
+                return _lineMaterial;
+            }
+        }
 
-            // Remove collider - this is just a visual marking
-            var collider = line.GetComponent<Collider>();
-            if (collider != null) Object.Destroy(collider);
+        /// <summary>
+        /// Adds a flat (y = 0, normal up) mitred strip along <paramref name="points"/> to <paramref name="go"/>.
+        /// Replaces the LineRenderers, whose camera-facing ribbons went grey (normals towards the camera, not the sun)
+        /// and collapsed to slivers at the broadcast camera's grazing angle.
+        /// </summary>
+        internal void AddFlatLine(GameObject go, Vector3[] points, bool loop, float width = -1f)
+        {
+            var mesh = BuildFlatLineMesh(points, loop, width > 0f ? width : LineWidth);
+            mesh.name = go.name + "_Line";
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            mr.sharedMaterial = LineMaterial;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = true;
+        }
+
+        /// <summary>Flat strip mesh of the given width along a polyline (mitred joins, closed when <paramref name="loop"/>).</summary>
+        public static Mesh BuildFlatLineMesh(Vector3[] points, bool loop, float width)
+        {
+            int n = points.Length;
+            int count = loop ? n + 1 : n;
+            var verts = new Vector3[count * 2];
+            var normals = new Vector3[count * 2];
+            var uvs = new Vector2[count * 2];
+            float hw = width * 0.5f;
+            for (int k = 0; k < count; k++)
+            {
+                int i = k % n;
+                Vector3 p = points[i];
+                bool hasPrev = loop || i > 0;
+                bool hasNext = loop || i < n - 1;
+                Vector3 prev = points[(i - 1 + n) % n], next = points[(i + 1) % n];
+                Vector3 dIn = hasPrev ? (p - prev) : (next - p);
+                Vector3 dOut = hasNext ? (next - p) : (p - prev);
+                dIn.y = 0f; dOut.y = 0f;
+                dIn.Normalize(); dOut.Normalize();
+                Vector3 nIn = new Vector3(-dIn.z, 0f, dIn.x), nOut = new Vector3(-dOut.z, 0f, dOut.x);
+                Vector3 m = (nIn + nOut);
+                if (m.sqrMagnitude < 1e-6f) m = nOut;
+                m.Normalize();
+                float len = hw / Mathf.Max(0.25f, Vector3.Dot(m, nOut));
+                verts[k * 2] = p + m * len;
+                verts[k * 2 + 1] = p - m * len;
+                normals[k * 2] = normals[k * 2 + 1] = Vector3.up;
+                uvs[k * 2] = new Vector2(k, 0f);
+                uvs[k * 2 + 1] = new Vector2(k, 1f);
+            }
+            var tris = new int[(count - 1) * 6];
+            for (int k = 0; k < count - 1; k++)
+            {
+                int a = k * 2, b = k * 2 + 1, c = k * 2 + 2, d = k * 2 + 3;
+                AddUpTri(verts, tris, k * 6, a, c, b);
+                AddUpTri(verts, tris, k * 6 + 3, b, c, d);
+            }
+            var mesh = new Mesh { vertices = verts, normals = normals, uv = uvs, triangles = tris };
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        /// <summary>Writes a triangle wound so its front face points up (+Y) in Unity's clockwise convention.</summary>
+        private static void AddUpTri(Vector3[] v, int[] tris, int at, int i0, int i1, int i2)
+        {
+            if (Vector3.Cross(v[i1] - v[i0], v[i2] - v[i0]).y < 0f) { int t = i1; i1 = i2; i2 = t; }
+            tris[at] = i0; tris[at + 1] = i1; tris[at + 2] = i2;
         }
     }
 }

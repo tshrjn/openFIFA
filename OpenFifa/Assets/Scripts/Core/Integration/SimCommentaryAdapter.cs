@@ -33,6 +33,8 @@ namespace OpenFifa.Core
         private bool _wonBallInOwnHalf;
         private SimTeam _wonBallTeam = SimTeam.None;
         private RestartType _lastRestartTaken;
+        /// <summary>The restart the pending shot was struck from (None in open play), read when the Shot event fires.</summary>
+        private RestartType _shotRestart;
 
         /// <param name="playerNames">Spoken names (roster KnownAs) per sim id; null entries are allowed.</param>
         /// <param name="playerIds">Roster ids per sim id; may be null.</param>
@@ -96,6 +98,8 @@ namespace OpenFifa.Core
                         _shotTeam = e.Team;
                         _shotXg = e.Value;
                         _shotHeight = e.Position.Y;
+                        // The sim sets LastKickRestart in the same kick that emits Shot, so this is the shot's own restart.
+                        _shotRestart = s.LastKickRestart;
                         var goal = new SimVec3(0f, 0f, _sim.AttackSign(e.Team) * _sim.Config.Pitch.HalfLength);
                         _shotDistance = SimMath.FlatDistance(e.Position, goal);
                         break;
@@ -191,16 +195,20 @@ namespace OpenFifa.Core
                 c.DistanceMetres = _shotDistance;
             }
             float t = (float)(_sim.State.Tick * _sim.Dt);
+            bool fromShot = _shotPending && _shotTeam == e.Team && e.PlayerId == _shooter;
             GoalSituation sit = GoalSituation.OpenPlay;
             if (ownGoal) sit = GoalSituation.OwnGoal;
-            else if (_sim.State.LastKickRestart == RestartType.Penalty) sit = GoalSituation.Penalty;
-            else if (_sim.State.LastKickRestart == RestartType.DirectFreeKick) sit = GoalSituation.FreeKick;
+            // Penalty / free kick only when the goal is that restart's own shot. LastKickRestart alone is sticky: only kicks
+            // reset it, so a goal dribbled or deflected in after a saved penalty or a short free kick would keep it.
+            else if (fromShot && _shotRestart == RestartType.Penalty) sit = GoalSituation.Penalty;
+            else if (fromShot && _shotRestart == RestartType.DirectFreeKick) sit = GoalSituation.FreeKick;
             else if (_shotPending && _shotHeight > SimAnimActionTracker.HeaderHeight) sit = GoalSituation.Header;
             else if (_shotPending && _shotDistance >= LongRangeMetres) sit = GoalSituation.LongRange;
             else if (_wonBallTeam == e.Team && _wonBallInOwnHalf && t - _wonBallTime <= CounterSeconds) sit = GoalSituation.Counter;
             else if (_shotPending && _shotDistance <= TapInMetres) sit = GoalSituation.TapIn;
             c.Situation = sit;
             _shotPending = false;
+            _shotRestart = RestartType.None;
             _passCount = 0;
         }
     }

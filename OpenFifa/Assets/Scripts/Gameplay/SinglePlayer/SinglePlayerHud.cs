@@ -15,17 +15,17 @@ namespace OpenFifa.Gameplay.SinglePlayer
     public sealed class SinglePlayerHud : MonoBehaviour
     {
         private SinglePlayerMatchController _c;
-        private GUIStyle _title, _big, _label, _small, _button, _sub;
-        private Texture2D _white;
+        private GUIStyle _title, _big, _label, _small, _button;
+        private Texture2D _white, _disc, _ring;
+        private GUIStyle _buttonLabel, _buttonShadow;
         private TeamAIDifficultyLevel _pick = TeamAIDifficultyLevel.Professional;
         private readonly MenuRect[] _levelRects = new MenuRect[TeamAIDifficultyLadder.LevelCount];
 
         // Cached HUD strings and the keys they were built from.
-        private string _scoreText = string.Empty, _clockText = string.Empty, _statusText = string.Empty, _statsText = string.Empty;
+        private string _statsText = string.Empty;
         private string _ftScore = string.Empty, _ftVerdict = string.Empty, _ftStats = string.Empty;
-        private long _scoreKey = long.MinValue, _statusKey = long.MinValue;
-        private int _clockKey = int.MinValue, _statsKey = int.MinValue;
-        private SinglePlayerMatchSession _ftSession, _statusSession;
+        private int _statsKey = int.MinValue;
+        private SinglePlayerMatchSession _ftSession;
 
         /// <summary>Force the touch overlay on (screenshots, desktop testing).</summary>
         public bool ForceTouchOverlay;
@@ -34,6 +34,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             _c = GetComponent<SinglePlayerMatchController>();
             _pick = _c.Level;
+            // The in-match broadcast HUD lives on a uGUI canvas; add it for scenes made before it existed.
+            if (GetComponent<SinglePlayerHudCanvas>() == null) gameObject.AddComponent<SinglePlayerHudCanvas>();
         }
 
         private float Scale => Mathf.Max(0.6f, Screen.height / 720f);
@@ -51,8 +53,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _small = new GUIStyle(GUI.skin.label) { fontSize = 14, alignment = TextAnchor.MiddleLeft };
             _small.normal.textColor = new Color(0.85f, 0.88f, 0.95f);
             _button = new GUIStyle(GUI.skin.button) { fontSize = 18 };
-            _sub = new GUIStyle(GUI.skin.label) { fontSize = 20, alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            _sub.normal.textColor = Color.white;
+            _buttonLabel = new GUIStyle(GUI.skin.label) { fontSize = 19, fontStyle = FontStyle.Bold, alignment = TextAnchor.MiddleCenter };
+            _buttonLabel.normal.textColor = Color.white;
+            _buttonShadow = new GUIStyle(_buttonLabel);
+            _buttonShadow.normal.textColor = new Color(0f, 0f, 0f, 0.85f);
+            _disc = CircleTexture(128, 0f);
+            _ring = CircleTexture(128, 0.82f);
         }
 
         private void OnGUI()
@@ -68,13 +74,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 DrawPicker(w, h);
                 return;
             }
-            DrawScoreBug();
-            DrawSubtitle(w, h);
+            // Scorebug, name panels, radar and subtitles are on the uGUI canvas (SinglePlayerHudCanvas).
             DrawPowerBar(w, h);
             if (ShowTouchOverlay) DrawTouchOverlay(w, h);
             if (_c.Session.Paused) DrawPause(w, h);
             if (_c.Session.IsFinished) DrawFullTime(w, h);
         }
+
+        /// <summary>True while the touch overlay is drawn (the HUD canvas lifts the name panels above it).</summary>
+        public bool TouchOverlayVisible => _c != null && _c.Started && ShowTouchOverlay;
 
         private bool ShowTouchOverlay =>
             ForceTouchOverlay || (!SinglePlayerInput.GamepadConnected && UnityEngine.InputSystem.Touchscreen.current != null && !_c.AiVsAi);
@@ -147,49 +155,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (home) _c.HomeClubIndex = idx; else _c.AwayClubIndex = idx;
         }
 
-        private void DrawScoreBug()
-        {
-            var st = _c.Session.Sim.State;
-            var r = new Rect(16, 14, 360, 40);
-            Panel(r, new Color(0.04f, 0.06f, 0.1f, 0.85f));
-            Panel(new Rect(r.x, r.y, 6, r.height), new Color(1f, 0.8f, 0.1f));
-            GUI.Label(new Rect(r.x + 10, r.y, 70, r.height), _c.HomeShort, _label);
-            long scoreKey = ((long)st.HomeScore << 32) | (uint)st.AwayScore;
-            if (scoreKey != _scoreKey)
-            {
-                _scoreKey = scoreKey;
-                _scoreText = $"{st.HomeScore} - {st.AwayScore}";
-            }
-            int clock = _c.ClockSeconds();
-            if (clock != _clockKey)
-            {
-                _clockKey = clock;
-                _clockText = $"{clock / 60:00}:{clock % 60:00}";
-            }
-            GUI.Label(new Rect(r.x + 80, r.y, 90, r.height), _scoreText, _big);
-            GUI.Label(new Rect(r.x + 170, r.y, 70, r.height), _c.AwayShort, _label);
-            GUI.Label(new Rect(r.x + 250, r.y, 100, r.height), _clockText, _label);
-
-            int id = _c.AiVsAi ? -1 : _c.Session.ControlledId;
-            long statusKey = ((long)(id + 1) << 16) | ((long)_c.Level << 8) | ((long)_c.HumanTeam << 1) | (_c.AiVsAi ? 1L : 0L);
-            if (statusKey != _statusKey || !ReferenceEquals(_statusSession, _c.Session))
-            {
-                _statusKey = statusKey;
-                _statusSession = _c.Session;
-                string who = _c.AiVsAi ? "AI vs AI" : "You: " + (_c.HumanTeam == SimTeam.Home ? _c.HomeShort : _c.AwayShort);
-                string name = id >= 0 && _c.Names != null ? "  |  " + _c.Names[id] : string.Empty;
-                _statusText = $"{SinglePlayerMatchController.ProductName}  {TeamAIDifficultyLadder.DisplayName(_c.Level)}  |  {who}{name}";
-            }
-            GUI.Label(new Rect(r.x, r.yMax + 2, 520, 22), _statusText, _small);
-        }
-
-        private void DrawSubtitle(float w, float h)
-        {
-            if (string.IsNullOrEmpty(_c.Subtitle) || Time.unscaledTime > _c.SubtitleUntil) return;
-            var r = new Rect(w * 0.2f, h - 92, w * 0.6f, 40);
-            Panel(r, new Color(0f, 0f, 0f, 0.55f));
-            GUI.Label(r, _c.Subtitle, _sub);
-        }
+        /// <summary>Bottom inset kept clear for the iPad home indicator (HUD units).</summary>
+        public const float BottomSafeInset = 20f;
 
         private void DrawPowerBar(float w, float h)
         {
@@ -206,23 +173,90 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             var input = _c.Input;
             var layout = input != null ? input.Touch.Layout : TouchLayout.ForAspect(w / h);
-            bool attack = input != null && input.LastContext.InPossession;
-            // Stick zone and stick.
+            // Possession from the session, not the device reader: SinglePlayerInput.LastContext only updates when it is
+            // the active input source (not for the scripted bot or before the first touch), which left the labels on
+            // the defending set (Switch/Tackle/Press) while attacking.
+            bool attack = _c.Session != null ? _c.Session.CurrentContext().InPossession : input != null && input.LastContext.InPossession;
+            // Floating stick: no zone tint (it drew a visible seam across the pitch at the zone's right edge). Base
+            // ring + knob while a finger is down; otherwise a faint resting stick where the thumb usually lands.
             var zone = layout.StickZone;
-            Panel(new Rect(zone.XMin * w, (1f - zone.YMax) * h, (zone.XMax - zone.XMin) * w, (zone.YMax - zone.YMin) * h), new Color(1f, 1f, 1f, 0.04f));
-            if (input != null && input.Touch.StickActive)
+            float srad = layout.StickRadius * h;
+            bool touching = input != null && input.Touch.StickActive;
+            // Forced overlay (captures, desktop review): show the stick as if held, driven by the seat's actual intent.
+            bool active = touching || ForceTouchOverlay;
+            Vector2 baseC = touching
+                ? new Vector2(input.Touch.StickOrigin.X * w, (1f - input.Touch.StickOrigin.Y) * h)
+                : new Vector2(Mathf.Lerp(zone.XMin, zone.XMax, 0.35f) * w, h - BottomSafeInset - srad * 1.6f);
+            Circle(_disc, baseC, srad, new Color(0.02f, 0.04f, 0.08f, active ? 0.45f : 0.3f));
+            Circle(_ring, baseC, srad, new Color(1f, 1f, 1f, active ? 0.85f : 0.45f));
+            Vector2 knob = baseC;
+            if (active)
             {
-                var o = input.Touch.StickOrigin;
-                float rad = layout.StickRadius * h;
-                Panel(new Rect(o.X * w - rad, (1f - o.Y) * h - rad, rad * 2, rad * 2), new Color(1f, 1f, 1f, 0.15f));
+                var mv = _c.Session != null ? _c.Session.LastControlIntent.Move : input.Last.Move;
+                float mag = Mathf.Sqrt(mv.X * mv.X + mv.Y * mv.Y);
+                if (mag > 1f) mv = new ControlVec2(mv.X / mag, mv.Y / mag);
+                knob += new Vector2(mv.X, -mv.Y) * srad;
             }
+            Circle(_disc, knob, srad * 0.45f, new Color(1f, 1f, 1f, active ? 0.9f : 0.5f));
+            if (!active) Shadowed(new Rect(baseC.x - srad, baseC.y + srad + 2f, srad * 2f, 24f), "Move", _small.fontSize);
+
             foreach (var b in layout.Buttons)
             {
                 float rad = b.Radius * h;
-                var r = new Rect(b.Center.X * w - rad, (1f - b.Center.Y) * h - rad, rad * 2, rad * 2);
-                Panel(r, new Color(0.05f, 0.08f, 0.15f, 0.55f));
-                GUI.Label(r, TouchControlScheme.LabelFor(b.Slot, attack), _label);
+                var c = new Vector2(b.Center.X * w, (1f - b.Center.Y) * h);
+                var r = new Rect(c.x - rad, c.y - rad, rad * 2, rad * 2);
+                // Opaque-enough fill in a per-button colour plus a white rim: readable over grass, stands or sky.
+                Circle(_disc, c, rad, ButtonColour(b.Slot, attack));
+                Circle(_ring, c, rad, new Color(1f, 1f, 1f, 0.9f));
+                Shadowed(r, TouchControlScheme.LabelFor(b.Slot, attack), _buttonLabel.fontSize);
             }
+        }
+
+        private static Color ButtonColour(TouchSlot slot, bool attack)
+        {
+            switch (slot)
+            {
+                case TouchSlot.Primary: return attack ? new Color(0.1f, 0.5f, 0.25f, 0.88f) : new Color(0.15f, 0.35f, 0.65f, 0.88f);
+                case TouchSlot.Strike: return new Color(0.7f, 0.15f, 0.15f, 0.88f);
+                case TouchSlot.Through: return attack ? new Color(0.45f, 0.2f, 0.65f, 0.88f) : new Color(0.75f, 0.42f, 0.05f, 0.88f);
+                default: return new Color(0.2f, 0.24f, 0.32f, 0.88f);
+            }
+        }
+
+        private static void Circle(Texture2D tex, Vector2 centre, float radius, Color c)
+        {
+            var old = GUI.color;
+            GUI.color = c;
+            GUI.DrawTexture(new Rect(centre.x - radius, centre.y - radius, radius * 2f, radius * 2f), tex);
+            GUI.color = old;
+        }
+
+        /// <summary>Bold white label with a 2 px dark drop shadow.</summary>
+        private void Shadowed(Rect r, string text, int size)
+        {
+            _buttonShadow.fontSize = size;
+            _buttonLabel.fontSize = size;
+            GUI.Label(new Rect(r.x + 2f, r.y + 2f, r.width, r.height), text, _buttonShadow);
+            GUI.Label(r, text, _buttonLabel);
+        }
+
+        /// <summary>White anti-aliased disc (inner = 0) or ring (inner = inner radius fraction), generated at runtime.</summary>
+        private static Texture2D CircleTexture(int size, float inner)
+        {
+            var px = new Color32[size * size];
+            float c = (size - 1) * 0.5f, ro = size * 0.5f - 1f, ri = ro * inner;
+            for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c));
+                    float a = Mathf.Clamp01(ro - d + 0.5f);
+                    if (inner > 0f) a *= Mathf.Clamp01(d - ri + 0.5f);
+                    px[y * size + x] = new Color32(255, 255, 255, (byte)(a * 255f));
+                }
+            var t = new Texture2D(size, size, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            t.SetPixels32(px);
+            t.Apply(false, true);
+            return t;
         }
 
         private void DrawPause(float w, float h)
