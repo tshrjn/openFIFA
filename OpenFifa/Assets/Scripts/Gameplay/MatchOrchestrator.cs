@@ -23,6 +23,10 @@ namespace OpenFifa.Gameplay
         [SerializeField] private float _halfDuration = 180f;
         [SerializeField] private bool _rushMode = true;
 
+        [Header("Offside (optional; runtime defaults when empty)")]
+        [SerializeField] private OffsideConfig _offsideConfig;
+        [SerializeField] private OffsidePresentationConfig _offsidePresentationConfig;
+
         [Header("Team Colors")]
         [SerializeField] private Color _homeColor = new Color(0.2f, 0.4f, 0.9f);
         [SerializeField] private Color _awayColor = new Color(0.9f, 0.2f, 0.2f);
@@ -107,6 +111,11 @@ namespace OpenFifa.Gameplay
 
             // Minimap radar (needs teams + ball ready)
             CreateMinimap();
+
+            // Offside (Law 11): self-contained, see OffsideController
+            OffsideController.Attach(gameObject, _offsideConfig, _offsidePresentationConfig,
+                _stateMachine, _ballController, _homePlayers, _awayPlayers, _pitchConfig,
+                _cameraController, _homeColor, _awayColor);
         }
 
         private void Update()
