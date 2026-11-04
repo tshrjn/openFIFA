@@ -124,6 +124,8 @@ namespace OpenFifa.Core
             World.Ball.Position = s.Ball.Position;
             World.Ball.Velocity = s.Ball.Velocity;
             World.Ball.Spin = s.Ball.Spin;
+            World.Ball.KnuckleSeed = s.Ball.KnuckleSeed;
+            World.Ball.KnuckleOrigin = s.Ball.KnuckleOrigin;
             World.Ball.OwnerId = s.Owner;
             World.Ball.LastTouchId = s.LastTouchPlayer;
             World.Ball.LastTouchTeam = TeamIndex(s.LastTouchTeam);

@@ -136,6 +136,23 @@ namespace OpenFifa.Tests.Editor.TeamAI
         }
 
         [Test]
+        public void Trajectory_KnuckleShot_IncludesTheWobble()
+        {
+            var cfg = new BallSimConfig();
+            var w = new TeamAIWorld(PitchSpec.Standard);
+            w.Ball.Position = new SimVec3(0f, cfg.Radius, -20f);
+            w.Ball.Velocity = new SimVec3(0f, 3.5f, 29f);
+            w.Ball.KnuckleSeed = 0.55f;
+            w.Ball.KnuckleOrigin = w.Ball.Position;
+            var traj = new TeamAIBallTrajectory();
+            traj.Build(w, TeamAIBallModel.Default);
+            var b = new SimBall { Position = w.Ball.Position, Velocity = w.Ball.Velocity, KnuckleSeed = 0.55f, KnuckleOrigin = w.Ball.Position };
+            var truth = BallIntegrator.PredictBall(b, cfg, w.Pitch, 0.8f);
+            Assert.AreEqual(truth.Position.X, traj.At(0.8f).X, 0.02f, "the AI sees the knuckle wobble");
+            Assert.Greater(System.Math.Abs(truth.Position.X), 0.05f, "and there is a wobble to see");
+        }
+
+        [Test]
         public void Trajectory_RollingBall_MatchesIntegrator()
         {
             var cfg = new BallSimConfig();
