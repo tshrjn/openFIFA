@@ -60,4 +60,4 @@ Command line: `-lmBots` drives both seats with `ScriptedGamepadBot` (for capture
 - `LocalGamepadInput` is one seat's `IHumanInputSource`: raw frame → `TeammateCallResolver` (writes `World.Directives`) → `GamepadControlResolver`.
 - With auto-switch on (every level today), a human almost always holds the team's ball carrier. So "call for the ball" mostly signals your co-op partner, which the HUD can show. The AI-carrier path is there for a future player-lock option.
 
-Tests: `Tests/Editor/LocalMultiplayer/` (category `LOCAL-2P`).
+Tests: `Tests/Editor/LocalMultiplayer/` (category `LOCAL_2P`).

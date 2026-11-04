@@ -182,11 +182,9 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
             var go = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
             go.name = "Seat marker";
             Destroy(go.GetComponent<Collider>());
-            go.transform.localScale = new Vector3(0.35f, 0.04f, 0.35f);
-            var r = go.GetComponent<Renderer>();
-            var shader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
-            if (shader != null) r.material = new Material(shader) { color = colour };
-            else r.material.color = colour;
+            go.transform.localScale = new Vector3(0.7f, 0.05f, 0.7f);
+            // Same shader path as the match's own primitives (URP Lit ships in the build; Unlit may be stripped).
+            SinglePlayerMatchController.Tint(go, colour);
             return go.transform;
         }
 
