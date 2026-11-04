@@ -68,7 +68,7 @@ namespace OpenFifa.Core
             return new RosterClub(c.GetString("id"), c.GetString("name"), c.GetString("shortName"),
                 colours.GetString("primary"), colours.GetString("secondary"), colours.GetString("away"),
                 stadium.GetString("name"), stadium.GetInt("capacity", 0), c.GetString("formation"),
-                c.GetInt("reputation", 3), players);
+                c.GetInt("reputation", 3), players, c.GetString("style"));
         }
 
         private static RosterPlayer BuildPlayer(JsonNode p)

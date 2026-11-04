@@ -15,7 +15,7 @@ namespace OpenFifa.Core
         private static readonly HashSet<string> RootKeys = Set("format", "schemaVersion", "league", "provenance", "clubs");
         private static readonly HashSet<string> LeagueKeys = Set("id", "name", "shortName", "country", "season");
         private static readonly HashSet<string> ProvenanceKeys = Set("source", "fictional", "generator", "seed", "notes", "license");
-        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players");
+        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players", "style");
         private static readonly HashSet<string> ColourKeys = Set("primary", "secondary", "away");
         private static readonly HashSet<string> StadiumKeys = Set("name", "capacity");
         private static readonly HashSet<string> PlayerKeys = Set("id", "firstName", "lastName", "knownAs", "shirtNumber",
@@ -223,6 +223,10 @@ namespace OpenFifa.Core
                 Error(Join(path, "formation"), "must be an outfield shape whose lines add up to 10, like \"4-3-3\" (got \"" + formation + "\")", club.Get("formation"));
 
             RequireInt(club, "reputation", path, RosterSchema.StarMin, RosterSchema.StarMax);
+
+            var style = club.Get("style");
+            if (style != null && (style.Kind != JsonNodeKind.String || !TeamAITactics.TryParseStyle(style.StringValue, out _)))
+                Error(Join(path, "style"), "must be one of \"balanced\", \"possession\", \"high-press\", \"counter\", \"long-ball\", \"wing-play\", \"park-the-bus\"", style);
 
             var players = club.Get("players");
             string pp = Join(path, "players");

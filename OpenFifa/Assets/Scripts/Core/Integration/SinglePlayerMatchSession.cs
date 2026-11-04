@@ -125,6 +125,9 @@ namespace OpenFifa.Core
             Director.Brains[0].BallModel = ballModel;
             Director.Brains[1].BallModel = ballModel;
             AddHumanSlot(Options.HumanTeam);
+            // The AI side has a manager on the touchline: it changes mentality with the score and the clock. The human's
+            // AI team-mates keep the user's tactics.
+            Director.Brains[SimTeamAIAdapter.TeamIndex(AITeam)].Manager.Enabled = true;
             Animation = new SimAnimActionTracker();
             Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds);
             CameraYaw = Options.CameraYaw;

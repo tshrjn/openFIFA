@@ -23,13 +23,19 @@ namespace OpenFifa.Core
         public string Formation { get; }
         /// <summary>1-5 club reputation, used by generators, AI difficulty and commentary tone.</summary>
         public int Reputation { get; }
+        /// <summary>
+        /// Optional playing style ("possession", "high-press", "counter", "long-ball", "wing-play", "park-the-bus",
+        /// "balanced"); null when the roster gives none (the match builder then derives one). See <see cref="TeamAIStyle"/>.
+        /// </summary>
+        public string Style { get; }
 
         public IReadOnlyList<RosterPlayer> Players => _players;
 
         public RosterClub(string id, string name, string shortName, string primaryColour, string secondaryColour,
             string awayColour, string stadiumName, int stadiumCapacity, string formation, int reputation,
-            RosterPlayer[] players)
+            RosterPlayer[] players, string style = null)
         {
+            Style = style;
             Id = id;
             Name = name;
             ShortName = shortName;

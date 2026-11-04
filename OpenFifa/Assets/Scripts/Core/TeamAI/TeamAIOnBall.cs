@@ -94,6 +94,20 @@ namespace OpenFifa.Core
 
         /// <summary>Ball timing model (sim-matched). Set by the brain; defaults to the default ball config.</summary>
         public TeamAIBallModel Model = TeamAIBallModel.Default;
+        /// <summary>
+        /// Team build-up directness this tick (0..1, see <see cref="TeamAITactics.Directness"/>); the brain sets it.
+        /// 0.5 is neutral. Higher values weigh a pass's forward progress more and its interception risk less, and make
+        /// lofted balls forward more attractive.
+        /// </summary>
+        public float Directness = 0.5f;
+
+        /// <summary>Extra score for a cross (0 = neutral); wing-play sides set it from their width.</summary>
+        public float CrossBias;
+
+        /// <summary>Multiplier on forward progress for a directness (1 at 0.5; 0.6 .. 1.4).</summary>
+        public static float DirectProgress(float directness) => 0.6f + 0.8f * TeamAIMath.Clamp01(directness);
+        /// <summary>Multiplier on interception risk for a directness (1 at 0.5; 1.35 .. 0.65).</summary>
+        public static float DirectRisk(float directness) => 1.35f - 0.7f * TeamAIMath.Clamp01(directness);
 
         private int _calledReceiver = -1;
         private bool _calledThrough;
@@ -501,14 +515,14 @@ namespace OpenFifa.Core
             float prog = progression > 0f ? ForwardProgressionWeight * progression : ProgressionWeight * progression;
             // Ambition scales with difficulty: a strong side looks for the forward ball and accepts some lane risk to
             // play it; a weak one recycles sideways.
-            float riskWeight = RiskWeight;
-            if (progression > 0f) prog *= Ambition(diff.Theta);
+            float riskWeight = RiskWeight * DirectRisk(Directness);
+            if (progression > 0f) prog *= Ambition(diff.Theta) * DirectProgress(Directness);
             float score = control * (0.35f + ThreatWeight * threat) + prog - riskWeight * risk - 0.6f * block - distPenalty;
-            if (lofted) score -= 0.06f;          // lofted balls are harder to control
+            if (lofted) score -= 0.06f + 0.1f * (0.5f - TeamAIMath.Clamp01(Directness)); // harder to control; direct sides accept it
             // A lofted ball backwards or square gives the ball away for nothing; going back to the keeper is a reset.
             if (lofted && progression < 0.05f && action != TeamAIAction.Cross) score -= 0.25f;
             if (world.Players[recIndex].Role == TeamAIRole.GK && ownerDepth > 0.2f) score -= 0.12f;
-            if (action == TeamAIAction.Cross) score += 0.05f;
+            if (action == TeamAIAction.Cross) score += 0.05f + CrossBias;
             score *= technique;
             score += rng.NextSigned() * diff.DecisionNoise;
             if (recIndex == _calledReceiver)
