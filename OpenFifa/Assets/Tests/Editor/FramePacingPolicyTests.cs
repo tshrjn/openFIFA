@@ -20,6 +20,9 @@ namespace OpenFifa.Tests.Editor
         [Test] public void DisplayCappedBelow60_UsesDisplayRate() => Assert.AreEqual(50, FramePacingPolicy.Choose(Ipad(50)));
         [Test] public void Override_IsHonoured() => Assert.AreEqual(30, FramePacingPolicy.Choose(Ipad(over: 30)));
         [Test] public void Override_Above60_CappedWhenHot() => Assert.AreEqual(60, FramePacingPolicy.Choose(Ipad(120, over: 120, thermal: DeviceThermalLevel.Serious)));
+        [Test] public void Override_StillFallsTo30WhenCritical() => Assert.AreEqual(30, FramePacingPolicy.Choose(Ipad(over: 60, thermal: DeviceThermalLevel.Critical)));
+        [Test] public void Desktop_Override_IsHonoured() => Assert.AreEqual(50, FramePacingPolicy.Choose(new FramePacingInputs { Mobile = false, Override = 50 }));
+        [Test] public void Desktop_OverrideCleared_ReturnsToVSync() => Assert.AreEqual(-1, FramePacingPolicy.Choose(new FramePacingInputs { Mobile = false, Override = -1 }));
         [Test] public void Desktop_LeavesPacingToVSync() => Assert.AreEqual(-1, FramePacingPolicy.Choose(new FramePacingInputs { Mobile = false, DisplayRefreshHz = 120 }));
     }
 }

@@ -70,7 +70,7 @@ namespace OpenFifa.Gameplay
             int target = FramePacingPolicy.Choose(inputs);
             if (target == _applied) return;
             _applied = target;
-            if (target > 0) Application.targetFrameRate = target;
+            Application.targetFrameRate = target; // -1 hands pacing back to vSync (desktop) once an override is cleared
         }
 
         private static class Native
