@@ -11,7 +11,9 @@
 // - Crest and sponsor decal slots, sweat/dirt wear driven by _Sweat/_Dirt.
 // - _MappingMode 0: object-space mapping for the capsule/proxy body (cylindrical around Y,
 //   shirt/shorts/socks/boots bands from _BodyLines). 1: mesh UVs for a skinned jersey mesh,
-//   with print panels given as UV rects.
+//   with print panels given as UV rects. 2: skinned body (e.g. the mannequin) using the body map
+//   baked at import into UV2 (armT, legT, armWeight, legWeight) and UV3 (rest-pose kit-space
+//   position, metres about the neck base): regions, patterns and prints follow the skin.
 //
 // Passes match URP Lit: ForwardLit, ShadowCaster, DepthOnly, DepthNormals, MotionVectors.
 // All scalar/vector properties live in the UnityPerMaterial CBUFFER (SRP Batcher compatible).
@@ -27,6 +29,14 @@ Shader "OpenFifa/Kit"
         _SocksColor("Socks", Color) = (0.12, 0.25, 0.75, 1)
         _SkinColor("Skin (proxy body)", Color) = (0.62, 0.45, 0.35, 1)
         _BootColor("Boots (proxy body)", Color) = (0.05, 0.05, 0.06, 1)
+        _GloveColor("Gloves (skinned body)", Color) = (0.95, 0.95, 0.95, 1)
+        _BootAccentColor("Boot stripe / sole (skinned body)", Color) = (0.95, 0.95, 0.95, 1)
+        _SkinWrap("Skin wrap lighting", Range(0, 1)) = 0.5
+
+        [Header(Head (skinned body))]
+        _HairColor("Hair", Color) = (0.1, 0.07, 0.05, 1)
+        _HeadStyle("Hair style (0 bald, 1 buzz, 2 short), facial hair (0-3), hairline offset (m), eye tone (0-1)", Vector) = (2, 0, 0, 0.2)
+        _HeadParams("Head centre Y, centre Z, half width, half depth (kit space)", Vector) = (0.201, -0.012, 0.087, 0.118)
 
         [Header(Pattern)]
         [Enum(Solid,0,Stripes,1,Hoops,2,Halves,3,Gradient,4,Pinstripes,5,Chevron,6,Sash,7)]
@@ -35,11 +45,14 @@ Shader "OpenFifa/Kit"
         [Enum(VNeck,0,Round,1,Polo,2)] _CollarStyle("Collar", Float) = 1
 
         [Header(Mapping)]
-        [Enum(ObjectSpace,0,MeshUV,1)] _MappingMode("Mapping", Float) = 0
+        [Enum(ObjectSpace,0,MeshUV,1,SkinnedBody,2)] _MappingMode("Mapping", Float) = 0
         _FacingAngle("Facing Angle (rad, object mode)", Float) = 0
         _BodyLines("Body Lines OS Y (neck, hem, shorts, boots)", Vector) = (0.62, -0.05, -0.52, -0.9)
         _BackPrintRect("Back Print Rect", Vector) = (0, 0.33, 0.46, 0.46)
         _FrontPrintRect("Front Print Rect", Vector) = (0, 0.33, 0.46, 0.46)
+        _BodyLimbLimits("Skinned: sleeve end armT, glove start armT, shorts hem legT, sock top legT", Vector) = (0.5, 9, 0.5, 1.12)
+        _BodyTorsoLines("Skinned: waist Y (m below neck), boot top legT, torso half width, half depth", Vector) = (-0.5, 1.93, 0.172, 0.13)
+        _BodyEdgeSoftness("Skinned: region edge softness", Range(0, 0.1)) = 0.012
 
         [Header(Name and Number)]
         [NoScaleOffset] _NameNumberTex("Name/Number Atlas (R fill, G outline, B height)", 2D) = "black" {}

@@ -17,6 +17,8 @@ struct KitAttributes
     float3 normalOS   : NORMAL;
     float4 tangentOS  : TANGENT;
     float2 texcoord   : TEXCOORD0;
+    float4 bodyMap0   : TEXCOORD2;   // skinned body map: armT, legT, armWeight, legWeight
+    float4 bodyMap1   : TEXCOORD3;   // skinned body map: rest-pose kit-space position, w = baked
     UNITY_VERTEX_INPUT_INSTANCE_ID
 };
 
@@ -40,6 +42,8 @@ struct KitVaryings
 #ifdef USE_APV_PROBE_OCCLUSION
     float4 probeOcclusion    : TEXCOORD9;
 #endif
+    float4 bodyMap0          : TEXCOORD10;
+    float4 bodyMap1          : TEXCOORD11;
     float4 positionCS        : SV_POSITION;
     UNITY_VERTEX_INPUT_INSTANCE_ID
     UNITY_VERTEX_OUTPUT_STEREO
@@ -67,6 +71,8 @@ KitVaryings KitForwardVertex(KitAttributes input)
     output.tangentWS = half4(normalInput.tangentWS.xyz, sign);
     output.positionOS = input.positionOS.xyz;
     output.normalOS = input.normalOS;
+    output.bodyMap0 = input.bodyMap0;
+    output.bodyMap1 = input.bodyMap1;
 
     OUTPUT_SH4(vertexInput.positionWS, output.normalWS.xyz, GetWorldSpaceNormalizeViewDir(vertexInput.positionWS), output.vertexSH, output.probeOcclusion);
 
@@ -115,7 +121,7 @@ void KitForwardFragment(
 #endif
 
     float3 normalOS = normalize(input.normalOS);
-    KitSpace kit = KitComputeSpace(input.positionOS, normalOS, input.uv);
+    KitSpace kit = KitComputeSpace(input.positionOS, normalOS, input.uv, input.bodyMap0, input.bodyMap1);
     KitSurface surf = KitBuildSurface(kit);
 
     // --- Normal: geometric -> knit / licensed detail -> heat-press bevel --------------------
@@ -126,6 +132,13 @@ void KitForwardFragment(
     {
         tangentWS = TransformObjectToWorldDir(kit.knitTangentOS);
         tangentWS = normalize(tangentWS - geomNormalWS * dot(geomNormalWS, tangentWS));
+        bitangentWS = cross(geomNormalWS, tangentWS);
+    }
+    else if (kit.isSkinned > 0.5)
+    {
+        // Knit runs around the body: horizontal tangent from the world normal (no reliance on mesh UVs).
+        float3 t = cross(float3(0.0, 1.0, 0.0), geomNormalWS);
+        tangentWS = dot(t, t) > 1e-6 ? normalize(t) : float3(1.0, 0.0, 0.0);
         bitangentWS = cross(geomNormalWS, tangentWS);
     }
     else
@@ -174,6 +187,17 @@ void KitForwardFragment(
     surfaceData.alpha = 1.0;
 
     half4 color = UniversalFragmentPBR(inputData, surfaceData);
+
+    // --- Skin: wrap diffuse (light bleeding past the terminator, warm tint), a cheap subsurface look ---
+    if (surf.skinMask > 0.001 && _SkinWrap > 0.001)
+    {
+        Light skinLight = GetMainLight(inputData.shadowCoord, inputData.positionWS, inputData.shadowMask);
+        half ndl = dot(inputData.normalWS, skinLight.direction);
+        half wrapD = saturate((ndl + _SkinWrap) / (1.0 + _SkinWrap));
+        half extra = max(wrapD - saturate(ndl), 0.0);
+        half3 lightCol = skinLight.color * skinLight.distanceAttenuation * lerp(0.6, 1.0, skinLight.shadowAttenuation);
+        color.rgb += surf.albedo * lightCol * extra * half3(1.0, 0.62, 0.5) * surf.skinMask;
+    }
 
     // --- Sheen: soft grazing highlight of polyester knit -----------------------------------
     half sheenAmount = _SheenStrength * surf.sheenMask;

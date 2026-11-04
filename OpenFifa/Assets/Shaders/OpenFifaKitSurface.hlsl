@@ -45,6 +45,16 @@ struct KitSpace
     float  frontMask;
     float2 licensedUV;   // uv used to sample licensed textures
     float  isObjectMode;
+    float  isSkinned;    // skinned body map (mode 2)
+    float  bodySpace;    // 1 when kitPos / uv describe a whole body (object or skinned mode)
+    float  neckY;        // body modes: kit-space Y of the neckline
+    float  hemY;         // body modes: kit-space Y of the shirt hem
+    half4  regionW;      // weights: shirt, shorts, socks, boots (skin = the rest minus gloves)
+    half   gloveW;       // goalkeeper gloves
+    half   armW;         // skinned: 1 on the arms (sleeve cuff)
+    float2 limb;         // skinned: (armT, legT) joint-chain parameters
+    float  height;       // skinned: metres above the soles
+    half   torsoW;       // skinned: 1 on the torso
 };
 
 float3 KitObjectScale()
@@ -96,15 +106,107 @@ float KitValueNoise(float3 p)
         f.z);
 }
 
+// Anti-aliased step at edge, widened by `soft` (parameter units).
+float KitSoftStep(float edge, float x, float soft)
+{
+    float w = max(fwidth(x) * 0.75, 1e-4) + soft;
+    return smoothstep(edge - w, edge + w, x);
+}
+
+half4 KitOneHotRegion(float region)
+{
+    return half4(region == KIT_REGION_SHIRT, region == KIT_REGION_SHORTS,
+                 region == KIT_REGION_SOCKS, region == KIT_REGION_BOOTS);
+}
+
 // ----------------------------------------------------------------------------------------
 // Mapping
 // ----------------------------------------------------------------------------------------
 
-KitSpace KitComputeSpace(float3 positionOS, float3 normalOS, float2 meshUV)
+// Skinned body map (mode 2). body0 = (armT, legT, armWeight, legWeight), body1 = rest-pose kit-space
+// position (metres; origin on the torso axis at the neck base, +X right, +Y up, +Z front), w = 1 when baked.
+void KitComputeSkinnedSpace(inout KitSpace k, float4 body0, float4 body1)
+{
+    k.isSkinned = 1.0;
+    k.bodySpace = 1.0;
+    float3 kp = body1.xyz;
+    k.kitPos = kp;
+    float2 rad = max(_BodyTorsoLines.zw, 0.02);
+    float hem = min(_BodyTorsoLines.x, -0.05);
+    k.neckY = 0.0;
+    k.hemY = hem;
+
+    // Around-the-body angle on the torso ellipse (0.5 = front centre), height 0 hem .. 1 neckline.
+    float theta = atan2(kp.x / rad.x, kp.z / rad.y);
+    k.uv = float2(theta * INV_TWO_PI + 0.5, (kp.y - hem) / -hem);
+    k.knitCoord = float2(theta * 0.5 * (rad.x + rad.y), kp.y);
+    k.knitTangentOS = 0;
+    k.knitBitangentOS = 0;
+
+    float soft = _BodyEdgeSoftness;
+    float armT = body0.x;
+    float legT = body0.y;
+    k.limb = float2(armT, legT);
+    k.height = body1.w - 1.0;
+    half arm = KitSoftStep(0.5, body0.z, 0.05);
+    half leg = KitSoftStep(0.5, body0.w, 0.05) * (1.0 - arm);
+    half torso = (1.0 - arm) * (1.0 - leg);
+    k.armW = arm;
+    k.torsoW = torso;
+
+    // Arms: sleeve to _BodyLimbLimits.x, bare forearm, gloves from _BodyLimbLimits.y.
+    half sleeve = 1.0 - KitSoftStep(_BodyLimbLimits.x, armT, soft);
+    half glove = KitSoftStep(_BodyLimbLimits.y, armT, soft) * (1.0 - sleeve);
+
+    // Legs: shorts to mid thigh, bare knee, socks from just below the knee, boots from the ankle.
+    half legShorts = 1.0 - KitSoftStep(_BodyLimbLimits.z, legT, soft);
+    half boots = KitSoftStep(_BodyTorsoLines.y, legT, soft);
+    half socks = KitSoftStep(_BodyLimbLimits.w, legT, soft) * (1.0 - boots);
+
+    // Torso: neckline (dipping slightly at the front, rising over the trapezius), shirt, shorts below the waist.
+    float collarY = -0.012 - 0.03 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.055, 0.0);
+    half neckSkin = KitSoftStep(collarY, kp.y, soft * 0.5);
+    half torsoShorts = (1.0 - KitSoftStep(hem, kp.y, soft)) * (1.0 - neckSkin);
+    half torsoShirt = (1.0 - neckSkin) * (1.0 - torsoShorts);
+    k.neckY = collarY;
+
+    k.regionW = half4(torso * torsoShirt + arm * sleeve,
+                      torso * torsoShorts + leg * legShorts,
+                      leg * socks,
+                      leg * boots);
+    k.gloveW = arm * glove;
+
+    half4 w = k.regionW;
+    half skinW = saturate(1.0 - dot(w, 1.0) - k.gloveW);
+    k.region = KIT_REGION_SKIN;
+    half best = skinW;
+    if (w.x > best) { best = w.x; k.region = KIT_REGION_SHIRT; }
+    if (w.y > best) { best = w.y; k.region = KIT_REGION_SHORTS; }
+    if (w.z > best) { best = w.z; k.region = KIT_REGION_SOCKS; }
+    if (w.w > best) { best = w.w; k.region = KIT_REGION_BOOTS; }
+
+    // Planar prints on the torso only (not the sleeves). Back panel seen from behind: viewer's right = +X.
+    half printable = torso * torsoShirt;
+    k.backUV = float2((kp.x - _BackPrintRect.x) / _BackPrintRect.z + 0.5,
+                      (kp.y - _BackPrintRect.y) / _BackPrintRect.w + 0.5);
+    k.frontUV = float2((-kp.x - _FrontPrintRect.x) / _FrontPrintRect.z + 0.5,
+                       (kp.y - _FrontPrintRect.y) / _FrontPrintRect.w + 0.5);
+    float depth = kp.z / rad.y;
+    k.backMask = KitInside01(k.backUV) * saturate((-depth - 0.1) * 5.0) * printable;
+    k.frontMask = KitInside01(k.frontUV) * saturate((depth - 0.1) * 5.0) * printable;
+
+    k.licensedUV = k.uv;
+}
+
+KitSpace KitComputeSpace(float3 positionOS, float3 normalOS, float2 meshUV, float4 body0, float4 body1)
 {
     KitSpace k = (KitSpace)0;
 
-    if (_MappingMode < 0.5)
+    if (_MappingMode > 1.5)
+    {
+        KitComputeSkinnedSpace(k, body0, body1);
+    }
+    else if (_MappingMode < 0.5)
     {
         // Object-space mapping for the capsule proxy (and any upright body proxy):
         // cylindrical around object Y, front = +Z rotated by _FacingAngle.
@@ -150,6 +252,10 @@ KitSpace KitComputeSpace(float3 positionOS, float3 normalOS, float2 meshUV)
         k.frontMask = KitInside01(k.frontUV) * saturate((kn.z - 0.1) * 4.0) * shirt;
 
         k.licensedUV = k.uv;
+        k.bodySpace = 1.0;
+        k.neckY = neck;
+        k.hemY = hem;
+        k.regionW = KitOneHotRegion(k.region);
     }
     else
     {
@@ -169,6 +275,7 @@ KitSpace KitComputeSpace(float3 positionOS, float3 normalOS, float2 meshUV)
         k.frontMask = KitInside01(k.frontUV);
 
         k.licensedUV = meshUV;
+        k.regionW = KitOneHotRegion(k.region);
     }
 
     return k;
@@ -227,12 +334,10 @@ half KitPatternMask(KitSpace k)
     if (type == KIT_PATTERN_SASH)
     {
         float d;
-        if (k.isObjectMode > 0.5)
+        if (k.bodySpace > 0.5)
         {
             // A tilted plane through the torso: wraps round the body like a real sash.
-            float neck = _BodyLines.x * KitObjectScale().y;
-            float hem = _BodyLines.y * KitObjectScale().y;
-            float mid = lerp(hem, neck, 0.55);
+            float mid = lerp(k.hemY, k.neckY, 0.55);
             d = dot(float2(k.kitPos.x, k.kitPos.y - mid), normalize(float2(1.0, 1.15)));
             return KitBand(d, 0.055 * scale);
         }
@@ -245,10 +350,9 @@ half KitPatternMask(KitSpace k)
 // Collar trim and neck opening for the object mapping. Returns x: trim weight, y: skin (neck opening) weight.
 half2 KitCollar(KitSpace k)
 {
-    if (k.isObjectMode < 0.5) return half2(0, 0);
+    if (k.bodySpace < 0.5) return half2(0, 0);
 
-    float neck = _BodyLines.x * KitObjectScale().y;
-    float below = neck - k.kitPos.y;                 // metres below the neckline
+    float below = k.neckY - k.kitPos.y;                 // metres below the neckline
     float frontFacing = step(0.0, k.kitPos.z);
     float across = abs(k.kitPos.x);
     int style = (int)round(_CollarStyle);
@@ -318,6 +422,91 @@ float3 KitPerturbNormalByHeight(float3 normalWS, float3 positionWS, float height
 }
 
 // ----------------------------------------------------------------------------------------
+// Head: painted face, hair and facial hair for the skinned body (kit space, metres)
+// ----------------------------------------------------------------------------------------
+
+// Soft ellipse: 1 inside, anti-aliased edge.
+float KitEllipse(float2 p, float2 c, float2 r)
+{
+    float d = length((p - c) / r) - 1.0;
+    float aa = max(fwidth(d), 1e-4);
+    return 1.0 - smoothstep(-aa, aa, d);
+}
+
+// Paints the head onto `albedo` (only where `skin` > 0). Returns the hair coverage (for smoothness / sheen).
+half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
+{
+    float3 kp = k.kitPos;
+    float2 p = kp.xy;
+    float nz = (kp.z - _HeadParams.y) / max(_HeadParams.w, 0.01);
+    half onHead = k.torsoW * KitSoftStep(0.085, kp.y, 0.004) * skin;
+    half front = smoothstep(0.35, 0.65, nz);
+    float ax = abs(kp.x);
+    half3 skinCol = _SkinColor.rgb;
+    half3 hairCol = _HairColor.rgb;
+    int hairStyle = (int)round(_HeadStyle.x);
+    int facial = (int)round(_HeadStyle.y);
+
+    float grain = KitValueNoise(kp * float3(900.0, 900.0, 900.0));
+    float strands = KitValueNoise(kp * float3(700.0, 90.0, 700.0));
+
+    // Hair: hairline high at the forehead, above the ears at the sides, low at the nape; sideburns.
+    float hairline = lerp(0.150, 0.288, smoothstep(-0.55, 0.75, nz)) + _HeadStyle.z;
+    hairline = min(hairline, lerp(0.288, 0.252, smoothstep(0.055, 0.08, ax) * smoothstep(0.8, 0.2, nz)));
+    half hair = KitSoftStep(hairline, kp.y, 0.003);
+    half sideburn = smoothstep(0.066, 0.078, ax) * step(0.205, kp.y) * smoothstep(-0.1, 0.05, nz) * smoothstep(0.6, 0.4, nz);
+    hair = saturate(hair + sideburn) * onHead;
+    half hairAmount = hairStyle >= 2 ? 1.0 : (hairStyle == 1 ? 0.6 : 0.0);
+    half3 hairShade = hairCol * lerp(0.75, 1.2, strands);
+    half3 buzz = lerp(skinCol, hairCol, 0.55 + 0.35 * grain);
+    half3 hairPaint = hairStyle >= 2 ? hairShade : buzz;
+    albedo = lerp(albedo, hairPaint, hair * hairAmount);
+
+    // Facial hair.
+    half jaw = onHead * smoothstep(-0.25, 0.1, nz) * step(kp.y, 0.176 + 0.35 * ax) * step(0.112, kp.y);
+    half lips = KitEllipse(p, float2(0.0, 0.161), float2(0.022, 0.0065));
+    half beardZone = jaw * (1.0 - lips);
+    half moustache = onHead * front * step(abs(kp.x), 0.03) * step(0.167, kp.y) * step(kp.y, 0.178);
+    half goatee = onHead * front * KitEllipse(p, float2(0.0, 0.135), float2(0.022, 0.028)) * (1.0 - lips);
+    half facialMask = 0.0;
+    half facialAmount = 1.0;
+    if (facial == 1) { facialMask = beardZone; facialAmount = 0.3 + 0.25 * grain; }
+    else if (facial == 2) { facialMask = saturate(beardZone + moustache); facialAmount = 0.85; }
+    else if (facial == 3) { facialMask = saturate(goatee + moustache); facialAmount = 0.85; }
+    albedo = lerp(albedo, hairShade, facialMask * facialAmount * (1.0 - hair));
+
+    // Face features (front only).
+    half f = onHead * front * (1.0 - hair);
+    float eyeY = 0.226;
+    half eyes = 0.0, iris = 0.0;
+    [unroll] for (int side = -1; side <= 1; side += 2)
+    {
+        float2 c = float2(side * 0.031, eyeY);
+        eyes = max(eyes, KitEllipse(p, c, float2(0.0125, 0.0062)));
+        iris = max(iris, KitEllipse(p, c + float2(0.0, -0.0004), float2(0.0055, 0.0055)));
+    }
+    half3 irisCol = lerp(half3(0.16, 0.1, 0.06), half3(0.25, 0.35, 0.42), _HeadStyle.w);
+    albedo = lerp(albedo, skinCol * 0.6, f * KitEllipse(p, float2(0.031 * sign(kp.x), eyeY + 0.001), float2(0.016, 0.009)) * 0.35); // socket shade
+    albedo = lerp(albedo, half3(0.86, 0.84, 0.8), f * eyes);
+    albedo = lerp(albedo, irisCol, f * eyes * iris);
+    float browY = 0.244 + 0.004 * saturate((ax - 0.02) / 0.03);
+    half brows = f * step(0.012, ax) * step(ax, 0.05) * (1.0 - smoothstep(0.0026, 0.0042, abs(kp.y - browY)));
+    albedo = lerp(albedo, hairCol * 0.9, brows);
+    half nostrils = f * max(KitEllipse(p, float2(0.009, 0.189), float2(0.0045, 0.0028)), KitEllipse(p, float2(-0.009, 0.189), float2(0.0045, 0.0028)));
+    albedo = lerp(albedo, skinCol * 0.55, nostrils * 0.7);
+    half noseShade = f * step(ax, 0.012) * step(0.19, kp.y) * step(kp.y, 0.225) * 0.12;
+    albedo *= 1.0 - noseShade;
+    half3 lipCol = skinCol * half3(0.82, 0.6, 0.58);
+    albedo = lerp(albedo, lipCol, f * lips * (1.0 - facialMask * 0.6));
+    albedo = lerp(albedo, skinCol * 0.35, f * step(abs(kp.x), 0.021) * (1.0 - smoothstep(0.0008, 0.0016, abs(kp.y - 0.1615))));
+    // Ears: a darker rim on the head sides.
+    half ears = onHead * smoothstep(0.075, 0.085, ax) * step(0.19, kp.y) * step(kp.y, 0.245) * smoothstep(0.35, 0.0, abs(nz - 0.0)) * (1.0 - hair);
+    albedo = lerp(albedo, skinCol * 0.82, ears * 0.6);
+
+    return saturate(hair * hairAmount * step(1.5, hairStyle) + facialMask * step(1.5, facial));
+}
+
+// ----------------------------------------------------------------------------------------
 // Surface assembly
 // ----------------------------------------------------------------------------------------
 
@@ -329,6 +518,7 @@ struct KitSurface
     half  sheenMask;       // 1 = knit fabric, 0 = prints / skin / boots
     half3 normalTS;        // micro detail in the knit tangent frame
     half  printHeight;     // metres, applied with KitPerturbNormalByHeight
+    half  skinMask;        // 1 on bare skin (wrap lighting)
 };
 
 KitSurface KitBuildSurface(KitSpace k)
@@ -369,35 +559,55 @@ KitSurface KitBuildSurface(KitSpace k)
         shirt = lerp(shirt, _SkinColor.rgb, collar.y);
     }
 
-    // Derivative-based terms are evaluated before the per-pixel region branch.
+    // Derivative-based terms are evaluated before any per-pixel branching.
     half shortsStripe = KitBand(abs(abs(atan2(k.kitPos.x, k.kitPos.z)) - HALF_PI), 0.07);
     half socksBand = KitBand(k.kitPos.y - (_BodyLines.z * KitObjectScale().y - 0.05), 0.018);
+    half sleeveCuff = 0.0;
+    if (k.isSkinned > 0.5)
+    {
+        // Skinned body: trim on the shorts hem, a band near the sock top and a cuff on the sleeve.
+        shortsStripe = KitBand(k.limb.y - (_BodyLimbLimits.z - 0.035), 0.016);
+        socksBand = KitBand(k.limb.y - (_BodyLimbLimits.w + 0.065), 0.022);
+        sleeveCuff = KitBand(k.limb.x - (_BodyLimbLimits.x - 0.04), 0.024) * k.armW;
+    }
+    shirt = lerp(shirt, _TertiaryColor.rgb, sleeveCuff);
 
-    half3 albedo = shirt;
+    half3 socksBase = _SocksColor.rgb;
+    half3 bootCol = _BootColor.rgb;
+    if (k.isSkinned > 0.5)
+    {
+        // Side panels down the flanks of the shirt (from the armpit to the hem).
+        float2 rad = max(_BodyTorsoLines.zw, 0.02);
+        float side = abs(abs(atan2(k.kitPos.x / rad.x, k.kitPos.z / rad.y)) - HALF_PI);
+        half panel = KitBand(side, 0.16) * k.torsoW * step(k.kitPos.y, -0.12);
+        shirt = lerp(shirt, lerp(shirt, _TertiaryColor.rgb, 0.85), panel);
+
+        // Socks: turned-down cuff at the top (slightly darker knit) with the trim band, shin pad below.
+        float cuffT = k.limb.y - _BodyLimbLimits.w;
+        half cuff = 1.0 - KitSoftStep(0.13, cuffT, 0.0);
+        socksBase *= lerp(1.0, 0.82, cuff);
+
+        // Boots: contrasting sole and a swept side stripe in the accent colour.
+        half sole = 1.0 - KitSoftStep(0.022, k.height, 0.002);
+        float d = (k.limb.y - 2.45) + (k.height - 0.045) * 6.0;
+        half stripe = KitBand(d, 0.07) * step(0.03, k.height) * step(2.15, k.limb.y);
+        bootCol = lerp(bootCol, _BootAccentColor.rgb, saturate(sole + stripe));
+    }
+
+    // Region blend (weights are one-hot in object/UV modes, soft-edged in skinned mode).
+    half4 w = k.regionW;
+    half glove = k.gloveW;
+    half skin = saturate(1.0 - dot(w, 1.0) - glove);
+    half fabric = w.x + w.y + w.z;
+    half3 shortsCol = lerp(_ShortsColor.rgb, _TertiaryColor.rgb, shortsStripe);
+    half3 socksCol = lerp(socksBase, _TertiaryColor.rgb, socksBand);
+    half3 albedo = shirt * w.x + shortsCol * w.y + socksCol * w.z + bootCol * w.w
+                 + _GloveColor.rgb * glove + _SkinColor.rgb * skin;
     int region = (int)k.region;
-    if (region == KIT_REGION_SHORTS)
-    {
-        // Shorts with a contrasting side stripe.
-        albedo = lerp(_ShortsColor.rgb, _TertiaryColor.rgb, shortsStripe);
-    }
-    else if (region == KIT_REGION_SOCKS)
-    {
-        albedo = lerp(_SocksColor.rgb, _TertiaryColor.rgb, socksBand);
-    }
-    else if (region == KIT_REGION_BOOTS)
-    {
-        albedo = _BootColor.rgb;
-        fabricSmoothness = 0.62;
-        o.sheenMask = 0.0;
-        knitStrength = 0.0;
-    }
-    else if (region == KIT_REGION_SKIN)
-    {
-        albedo = _SkinColor.rgb;
-        fabricSmoothness = 0.38;
-        o.sheenMask = 0.0;
-        knitStrength = 0.0;
-    }
+
+    fabricSmoothness = fabricSmoothness * fabric + 0.62 * w.w + 0.35 * glove + 0.38 * skin;
+    o.sheenMask *= fabric;
+    knitStrength *= fabric;
 
     o.smoothness = fabricSmoothness;
 
@@ -440,13 +650,13 @@ KitSurface KitBuildSurface(KitSpace k)
     o.sheenMask *= 1.0 - sponsorA;
 
     // --- Match wear: sweat and dirt ----------------------------------------------------------
-    half garment = (region == KIT_REGION_SHIRT || region == KIT_REGION_SHORTS || region == KIT_REGION_SOCKS) ? 1.0 : 0.0;
-    float3 noiseP = k.isObjectMode > 0.5 ? k.kitPos * 9.0 : float3(k.uv * 14.0, 0.0);
+    half garment = fabric;
+    float3 noiseP = k.bodySpace > 0.5 ? k.kitPos * 9.0 : float3(k.uv * 14.0, 0.0);
     half n1 = KitValueNoise(noiseP);
     half n2 = KitValueNoise(noiseP * 2.7 + 11.0);
 
     half sweatZone;
-    if (k.isObjectMode > 0.5)
+    if (k.bodySpace > 0.5)
     {
         float radius = max(length(k.kitPos.xz), 1e-3);
         half sides = saturate(1.0 - abs(k.kitPos.z) / radius * 1.6);       // under the arms
@@ -467,7 +677,7 @@ KitSurface KitBuildSurface(KitSpace k)
     o.smoothness = lerp(o.smoothness, 0.55, sweat * 0.6);
     o.sheenMask *= 1.0 - 0.6 * sweat;
 
-    half dirtZone = k.isObjectMode > 0.5
+    half dirtZone = k.bodySpace > 0.5
         ? saturate(1.0 - k.uv.y) * 0.7 + (region == KIT_REGION_SHORTS ? 0.6 : 0.0) + (region == KIT_REGION_SOCKS ? 0.9 : 0.0)
         : saturate(1.0 - k.uv.y);
     half dirt = saturate((n2 * 0.6 + n1 * 0.4 - (1.0 - _Dirt * dirtZone)) * 3.0) * garment;
@@ -475,7 +685,14 @@ KitSurface KitBuildSurface(KitSpace k)
     o.smoothness = lerp(o.smoothness, 0.12, dirt);
     o.sheenMask *= 1.0 - dirt;
 
+    half hairCover = 0.0;
+    if (k.isSkinned > 0.5)
+    {
+        hairCover = KitPaintHead(k, skin, albedo);
+        o.smoothness = lerp(o.smoothness, 0.45, hairCover);
+    }
     o.albedo = albedo;
+    o.skinMask = skin * (1.0 - hairCover);
 
     // --- Micro normal ------------------------------------------------------------------------
     half3 knit = KitKnitNormalTS(k.knitCoord, knitStrength);

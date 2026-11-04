@@ -15,6 +15,10 @@ namespace OpenFifa.Gameplay
     /// - Applies licensed textures from a <see cref="KitDefinition"/> when present.
     /// - On capsule/proxy bodies (object-space mapping) it turns the kit to face the movement
     ///   direction, so back numbers read correctly even though the capsule never rotates.
+    /// - On skinned humanoids whose mesh carries the import-time kit body map (UV3, see
+    ///   KitBodyMapPostprocessor) it switches to <see cref="KitMappingMode.SkinnedBody"/> automatically and
+    ///   puts the kit material on every skinned renderer and sub-mesh (body and joints), with a per-player
+    ///   skin tone (<see cref="SetSkinTone"/>), short or long sleeves and goalkeeper gloves from the kit.
     ///
     /// Works with the legacy <see cref="FullJerseyConfig"/> API used by JerseyCustomizationUI.
     /// </summary>
@@ -32,6 +36,18 @@ namespace OpenFifa.Gameplay
         [SerializeField] private Vector4 meshBackPrintRect = new Vector4(0.55f, 0.35f, 0.4f, 0.4f);
         [Tooltip("MeshUV mode only: front print panel as UV rect (min x, min y, width, height).")]
         [SerializeField] private Vector4 meshFrontPrintRect = new Vector4(0.05f, 0.35f, 0.4f, 0.4f);
+
+        [Header("Skinned Body (mapping mode SkinnedBody)")]
+        [Tooltip("Back print panel in body kit space: centre x, centre y (metres below the neck base are negative), width, height.")]
+        [SerializeField] private Vector4 bodyBackPrintRect = new Vector4(0f, -0.25f, 0.34f, 0.34f);
+        [Tooltip("Front print panel in body kit space (same convention).")]
+        [SerializeField] private Vector4 bodyFrontPrintRect = new Vector4(0f, -0.25f, 0.34f, 0.34f);
+        [Tooltip("x sleeve end (short sleeves, arm chain: 0 shoulder, 1 elbow, 2 wrist), z shorts hem and w sock top (leg chain: 0 hip, 1 knee, 2 ankle).")]
+        [SerializeField] private Vector4 bodyLimbLimits = new Vector4(0.55f, 9f, 0.55f, 1.12f);
+        [Tooltip("Arm chain parameter where long (goalkeeper) sleeves end and gloves start.")]
+        [SerializeField] private float longSleeveEnd = 1.97f;
+        [Tooltip("x waist line (metres relative to the neck base), y boot top (leg chain), z/w torso half width/depth (metres).")]
+        [SerializeField] private Vector4 bodyTorsoLines = new Vector4(-0.5f, 1.93f, 0.172f, 0.13f);
 
         [Header("Texture Settings")]
         [SerializeField] private int nameNumberTextureWidth = 1024;
@@ -60,6 +76,15 @@ namespace OpenFifa.Gameplay
         private Rigidbody _rigidbody;
         private float _facingDegrees;
         private bool _isApplied;
+        private Renderer[] _bodyRenderers;
+        private Color? _skinTone;
+        private Color? _bootBase;
+        private Color? _bootAccent;
+        private Color? _hairColour;
+        private Vector4? _headStyle;
+
+        /// <summary>Mesh UV channel holding the baked body-space position (w = 1 when baked).</summary>
+        public const int BodyMapChannel = 3;
 
         /// <summary>Whether a jersey has been applied.</summary>
         public bool IsApplied => _isApplied;
@@ -75,6 +100,60 @@ namespace OpenFifa.Gameplay
 
         /// <summary>Per-player kit material instance (null until a jersey is applied).</summary>
         public Material KitMaterial => _material;
+
+        /// <summary>Mapping mode in use (resolved on the first apply when auto-detected).</summary>
+        public KitMappingMode MappingMode => mappingMode;
+
+        /// <summary>
+        /// Sets the mapping before the first apply (afterwards it only updates the material's mode).
+        /// </summary>
+        public void SetMappingMode(KitMappingMode mode)
+        {
+            mappingMode = mode;
+            if (_material != null) _material.SetFloat(KitShaderIds.MappingMode, (float)mode);
+        }
+
+        /// <summary>Skin tone of the body (skinned mapping; also the neck opening on proxy bodies).</summary>
+        public void SetSkinTone(Color tone)
+        {
+            _skinTone = tone;
+            if (_material != null) _material.SetColor(KitShaderIds.SkinColor, tone);
+        }
+
+        /// <summary>Boot base and accent (stripe + sole) colours (skinned mapping).</summary>
+        public void SetBootColours(Color baseColour, Color accent)
+        {
+            _bootBase = baseColour;
+            _bootAccent = accent;
+            if (_material == null) return;
+            _material.SetColor(KitShaderIds.BootColor, baseColour);
+            _material.SetColor(KitShaderIds.BootAccentColor, accent);
+        }
+
+        /// <summary>
+        /// Head look for the skinned mapping: painted hair (buzz/short; longer styles also get a hair cap mesh from
+        /// <see cref="HairCapBuilder"/>), facial hair and eye tone.
+        /// </summary>
+        public void SetHead(HairStyle hair, FacialHair facial, Color hairColour, float eyeTone)
+        {
+            // Volume styles paint a short base under their cap.
+            float painted = hair == HairStyle.Curly || hair == HairStyle.Tied ? (float)HairStyle.Short : (float)hair;
+            _headStyle = new Vector4(painted, (float)facial, 0f, Mathf.Clamp01(eyeTone));
+            _hairColour = hairColour;
+            if (_material == null) return;
+            _material.SetVector(KitShaderIds.HeadStyle, _headStyle.Value);
+            _material.SetColor(KitShaderIds.HairColor, hairColour);
+        }
+
+        /// <summary>
+        /// True when the renderer is a skinned mesh carrying the import-time kit body map.
+        /// </summary>
+        public static bool HasBodyMap(Renderer renderer)
+        {
+            var smr = renderer as SkinnedMeshRenderer;
+            var mesh = smr != null ? smr.sharedMesh : null;
+            return mesh != null && mesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.TexCoord3);
+        }
 
         /// <summary>Fired when jersey rendering completes.</summary>
         public event Action<JerseyRenderer> OnJerseyApplied;
@@ -135,6 +214,7 @@ namespace OpenFifa.Gameplay
 
             var numberColor = KitColorUtility.ParseOrDefault(data.NumberColor, JerseyComparer.SuggestTextColor(design.PrimaryColor));
             var outlineColor = KitColorUtility.ParseOrDefault(data.NumberOutlineColor, SimpleColor.Black);
+            ApplyLimbs(data);
             ApplyPrint(playerName, number, KitDefinitionConverter.GetNameLayout(data),
                 KitDefinitionConverter.GetFontStyle(data), data.NumberOutlineWidth, data.ShowFrontNumber,
                 numberColor, outlineColor);
@@ -232,7 +312,8 @@ namespace OpenFifa.Gameplay
         {
             if (jerseyBackRenderer != null && jerseyFrontRenderer != null) return;
 
-            var renderers = GetComponentsInChildren<Renderer>();
+            Renderer[] renderers = GetComponentsInChildren<SkinnedMeshRenderer>();
+            if (renderers.Length == 0) renderers = GetComponentsInChildren<Renderer>();
             if (renderers.Length == 0) return;
             if (jerseyBackRenderer == null) jerseyBackRenderer = renderers[0];
             if (jerseyFrontRenderer == null) jerseyFrontRenderer = renderers[0];
@@ -244,6 +325,9 @@ namespace OpenFifa.Gameplay
 
             AutoDiscoverRenderers();
             if (jerseyBackRenderer == null && jerseyFrontRenderer == null) return false;
+
+            if (mappingMode == KitMappingMode.ObjectSpace && HasBodyMap(jerseyBackRenderer))
+                mappingMode = KitMappingMode.SkinnedBody;
 
             // Resources/Kits/OpenFifaKit.mat references the shader so it is included in player builds.
             var template = kitMaterialTemplate != null ? kitMaterialTemplate : Resources.Load<Material>(KitShaderIds.MaterialResourcePath);
@@ -275,11 +359,51 @@ namespace OpenFifa.Gameplay
                 _material.SetVector(KitShaderIds.BackPrintRect, meshBackPrintRect);
                 _material.SetVector(KitShaderIds.FrontPrintRect, meshFrontPrintRect);
             }
+            else if (mappingMode == KitMappingMode.SkinnedBody)
+            {
+                _material.SetVector(KitShaderIds.BackPrintRect, bodyBackPrintRect);
+                _material.SetVector(KitShaderIds.FrontPrintRect, bodyFrontPrintRect);
+                _material.SetVector(KitShaderIds.BodyLimbLimits, bodyLimbLimits);
+                _material.SetVector(KitShaderIds.BodyTorsoLines, bodyTorsoLines);
+            }
+            if (_skinTone.HasValue) _material.SetColor(KitShaderIds.SkinColor, _skinTone.Value);
+            if (_bootBase.HasValue) _material.SetColor(KitShaderIds.BootColor, _bootBase.Value);
+            if (_headStyle.HasValue) _material.SetVector(KitShaderIds.HeadStyle, _headStyle.Value);
+            if (_hairColour.HasValue) _material.SetColor(KitShaderIds.HairColor, _hairColour.Value);
+            if (_bootAccent.HasValue) _material.SetColor(KitShaderIds.BootAccentColor, _bootAccent.Value);
+
+            if (mappingMode == KitMappingMode.SkinnedBody)
+            {
+                // Every skinned part and sub-mesh (body + joints) shares this player's one kit material.
+                _bodyRenderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                foreach (var r in _bodyRenderers) AssignToAllSlots(r);
+                return true;
+            }
 
             if (jerseyBackRenderer != null) jerseyBackRenderer.sharedMaterial = _material;
             if (jerseyFrontRenderer != null && jerseyFrontRenderer != jerseyBackRenderer)
                 jerseyFrontRenderer.sharedMaterial = _material;
             return true;
+        }
+
+        private void ApplyLimbs(KitDefinitionData data)
+        {
+            var limits = bodyLimbLimits;
+            bool longSleeves = string.Equals(data.Sleeves, "Long", StringComparison.OrdinalIgnoreCase);
+            if (longSleeves) limits.x = longSleeveEnd;
+            bool gloves = KitColorUtility.TryParseHex(data.GloveColor, out var glove);
+            limits.y = gloves ? longSleeveEnd + 0.03f : 9f;
+            _material.SetVector(KitShaderIds.BodyLimbLimits, limits);
+            if (gloves) _material.SetColor(KitShaderIds.GloveColor, ToColor(glove));
+        }
+
+        private void AssignToAllSlots(Renderer r)
+        {
+            if (r == null) return;
+            int slots = Mathf.Max(1, r.sharedMaterials.Length);
+            var mats = new Material[slots];
+            for (int i = 0; i < slots; i++) mats[i] = _material;
+            r.sharedMaterials = mats;
         }
 
         private void ApplyDesignProperties(JerseyDesign design)
