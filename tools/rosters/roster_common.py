@@ -5,7 +5,7 @@ Mirrors OpenFifa/Assets/Scripts/Core/Rosters/RosterSchema.cs. docs/ROSTER_FORMAT
 
 import json
 
-FORMAT_TAG = "openfifa-roster"
+FORMAT_TAG = "openfootball-roster"
 SCHEMA_VERSION = 1
 
 ATTRIBUTE_KEYS = [

@@ -1,5 +1,5 @@
 {
-  "format": "openfifa-roster",
+  "format": "openfootball-roster",
   "schemaVersion": 1,
   "league": {"id": "example", "name": "Example Import", "shortName": "EXAMPLE", "country": "", "season": ""},
   "provenance": {"source": "user-import", "fictional": false, "generator": "tools/rosters/import_template/import_csv.py", "notes": "Converted from a user-supplied CSV. Not distributed with OpenFifa."},

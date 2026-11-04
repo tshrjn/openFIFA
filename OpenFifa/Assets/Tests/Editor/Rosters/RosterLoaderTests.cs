@@ -105,7 +105,7 @@ namespace OpenFifa.Tests.Editor
         [Test]
         public void LocalFileSource_Discover_ListsOnlyRosterFilesSorted()
         {
-            string dir = Path.Combine(Path.GetTempPath(), "openfifa-roster-test-" + System.Guid.NewGuid().ToString("N"));
+            string dir = Path.Combine(Path.GetTempPath(), "openfootball-roster-test-" + System.Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(dir);
             try
             {

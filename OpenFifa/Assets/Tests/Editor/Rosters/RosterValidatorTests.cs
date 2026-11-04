@@ -143,13 +143,13 @@ namespace OpenFifa.Tests.Editor
         {
             var root = RosterTestData.SmallLeague();
             root.Set("format", JsonNode.FromString("something-else"));
-            Assert.IsTrue(RosterTestData.HasError(RosterTestData.Load(root), "format", "openfifa-roster"));
+            Assert.IsTrue(RosterTestData.HasError(RosterTestData.Load(root), "format", "openfootball-roster"));
         }
 
         [Test]
         public void Load_SyntaxError_ReportsLine()
         {
-            var r = RosterLoader.Load("{\n  \"format\": \"openfifa-roster\",\n  \"schemaVersion\": 1,,\n}", "broken");
+            var r = RosterLoader.Load("{\n  \"format\": \"openfootball-roster\",\n  \"schemaVersion\": 1,,\n}", "broken");
             Assert.IsFalse(r.Success);
             Assert.AreEqual(3, r.Issues[0].Line);
             StringAssert.Contains("line 3", r.Describe());

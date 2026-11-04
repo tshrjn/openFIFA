@@ -20,6 +20,7 @@ namespace OpenFifa.Gameplay
         public readonly Vector3 Direction;
         /// <summary>Sim root position at contact, if the sim knows it; otherwise the driver extrapolates from velocity.</summary>
         public readonly Vector3 RootAtContact;
+        /// <summary>Sim facing at contact, in RADIANS like the sim (0 = +Z, positive toward +X). The driver converts.</summary>
         public readonly float YawAtContact;
         public readonly bool HasRootAtContact;
 
@@ -44,6 +45,13 @@ namespace OpenFifa.Gameplay
     /// <summary>
     /// Read-only view of one player's sim state for the presentation layer. Implement this on the sim bridge
     /// (or an adapter); the animation code never references Sim types and never writes back.
+    ///
+    /// Units: angles are in RADIANS, the sim's unit (<c>SimPlayer.Facing</c>, <c>SimMath.Yaw</c>). The driver converts
+    /// them to degrees exactly once, in <see cref="PlayerAnimationDriver"/>, because Unity and AnimMath use degrees.
+    ///
+    /// Smoothing: a source may also implement <see cref="IPlayerAnimInterpolation"/>. Then it should return the raw
+    /// latest fixed-step snapshot here (no extrapolation) and the driver interpolates between the previous and the
+    /// current snapshot. A source without it is shown as-is (the source does its own smoothing, if any).
     /// </summary>
     public interface IPlayerAnimSource
     {
@@ -55,10 +63,23 @@ namespace OpenFifa.Gameplay
         Vector3 Velocity { get; }
         /// <summary>Velocity the player is steering toward (intent). Return Velocity if unknown.</summary>
         Vector3 DesiredVelocity { get; }
-        /// <summary>Facing yaw (deg, 0 = +Z, positive toward +X).</summary>
+        /// <summary>Facing yaw in RADIANS, as the sim stores it (0 = +Z, positive toward +X).</summary>
         float FacingYaw { get; }
         bool IsSprinting { get; }
         /// <summary>The current or upcoming committed action.</summary>
         PlayerAnimAction CurrentAction { get; }
+    }
+
+    /// <summary>
+    /// Optional companion to <see cref="IPlayerAnimSource"/> for fixed-step sims rendered at a different rate.
+    /// With it, <see cref="IPlayerAnimSource.SimTime"/>, Position and FacingYaw should be the latest snapshot
+    /// (tick * dt, unextrapolated); the driver keeps the previous snapshot and renders between the two.
+    /// </summary>
+    public interface IPlayerAnimInterpolation
+    {
+        /// <summary>Fixed-step accumulator remainder / fixed dt, in [0, 1], for the frame being rendered.</summary>
+        float InterpolationAlpha { get; }
+        /// <summary>The sim's fixed step (s), e.g. 1/60.</summary>
+        float FixedDeltaTime { get; }
     }
 }

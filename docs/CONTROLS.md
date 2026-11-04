@@ -80,10 +80,17 @@ The left side has a **floating stick**: it appears where the thumb lands in the 
 
 | Button | Attack | Defence |
 |---|---|---|
-| Primary | **Pass**: tap = pass, hold = more power, swipe up = lob (cross in a crossing zone), with Sprint held = driven pass | **Switch**: tap = smart switch, swipe = switch in that direction |
-| Strike | **Shoot**: hold to charge, swipe up = chip, swipe left/right = finesse, swipe down = low shot, with Sprint held = driven shot | **Tackle**: tap = tackle, swipe = slide tackle in that direction |
-| Through | **Through**: tap = through ball, swipe up = lobbed through, with Sprint held = driven through | **Press**: hold = contain, swipe up and hold = teammate press, swipe down and hold = jockey |
-| Sprint | Sprint (and the driven modifier) | Sprint |
+| Primary | **Pass**: tap = pass, hold = more power, swipe up = lob (cross in a crossing zone) | **Switch**: tap = smart switch, swipe = switch in that direction |
+| Strike | **Shoot**: hold to charge, swipe up = chip, swipe left/right = finesse, swipe down = low shot | **Tackle**: tap = tackle, swipe = slide tackle in that direction |
+| Through | **Through**: tap = through ball, swipe up = lobbed through | **Press**: hold = contain, swipe up and hold = teammate press, swipe down and hold = jockey |
+| Sprint | Sprint; tap during a kick's charge = driven (see below) | Sprint |
+
+**Driven kicks.** Press a kick button first, then press Sprint while it is still down; release the kick button as usual. Pass becomes a driven pass, Shoot a driven shot and Through a driven through ball (tap kicks only; swipes keep their own meaning). Sprint has to go down at least 0.05 s after the kick button (`TouchControlScheme.DrivenSprintMinDelaySeconds`), so these do not count:
+
+- holding Sprint while running and then pressing a kick button: normal kick;
+- pressing Sprint and the kick button together (within 0.05 s): normal kick.
+
+Lifting Sprint again before releasing the kick keeps it driven, so a quick tap on Sprint during the charge is enough.
 
 Kicks charge while the finger is down and fire on release. They go through the same contact-frame buffer as the gamepad. An optional setting turns on auto-sprint when the stick is pushed to the rim. The left-handed setting mirrors the layout.
 

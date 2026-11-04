@@ -11,6 +11,15 @@ namespace OpenFifa.Gameplay
     /// foot/ball IK to the visual model. Root motion is always off: the sim owns the position.
     ///
     /// Hierarchy: PlayerRoot (this, follows the sim) / VisualRoot (warp offsets) / Model (Animator + PlayerAnimatorHooks).
+    ///
+    /// Units: the source reports yaw in radians (sim units); this class converts once, on read, with
+    /// <see cref="SimYawToDegrees"/>, and works in degrees everywhere else (Unity, AnimMath, the sync planner).
+    ///
+    /// Smoothing: when an interpolation alpha is available (the source implements <see cref="IPlayerAnimInterpolation"/>,
+    /// or code calls <see cref="SetInterpolation"/>), the root is rendered between the previous and the current sim
+    /// snapshot with <see cref="AnimSnapshotInterpolator"/>, and the presentation clock used for action timing is the
+    /// same interpolated time, so contact frames stay in step with an interpolated ball. Without an alpha the latest
+    /// snapshot is shown as-is.
     /// </summary>
     [DefaultExecutionOrder(100)]
     [DisallowMultipleComponent]
@@ -51,6 +60,10 @@ namespace OpenFifa.Gameplay
         private static readonly int MirrorHash = Animator.StringToHash(AnimStateNames.ParamMirror);
 
         private IPlayerAnimSource _source;
+        private readonly AnimSnapshotInterpolator _interpolator = new AnimSnapshotInterpolator();
+        private bool _hasAlphaOverride;
+        private float _alphaOverride;
+        private float _fixedDtOverride;
         private ILocomotionBackend _backend;
         private AnimationSyncPlanner _planner;
         private LocomotionRateSolver _rateSolver;
@@ -80,7 +93,46 @@ namespace OpenFifa.Gameplay
         public IPlayerAnimSource Source
         {
             get => _source;
-            set => _source = value;
+            set
+            {
+                if (!ReferenceEquals(_source, value)) _interpolator.Reset();
+                _source = value;
+            }
+        }
+
+        /// <summary>Converts a sim yaw (radians, 0 = +Z, positive toward +X) to the degrees Unity and AnimMath use.</summary>
+        public static float SimYawToDegrees(float yawRad) => yawRad * AnimMath.Rad2Deg;
+
+        /// <summary>
+        /// Supplies the interpolation alpha (fixed-step accumulator remainder / fixedDt) for this frame, for sources
+        /// that do not implement <see cref="IPlayerAnimInterpolation"/>. Overrides the source's value until cleared.
+        /// </summary>
+        public void SetInterpolation(float alpha, float fixedDt)
+        {
+            _hasAlphaOverride = true;
+            _alphaOverride = alpha;
+            _fixedDtOverride = fixedDt;
+        }
+
+        public void ClearInterpolation() => _hasAlphaOverride = false;
+
+        private bool TryGetInterpolation(out float alpha, out float fixedDt)
+        {
+            if (_hasAlphaOverride)
+            {
+                alpha = _alphaOverride;
+                fixedDt = _fixedDtOverride;
+                return fixedDt > 0f;
+            }
+            if (_source is IPlayerAnimInterpolation interp)
+            {
+                alpha = interp.InterpolationAlpha;
+                fixedDt = interp.FixedDeltaTime;
+                return fixedDt > 0f;
+            }
+            alpha = 1f;
+            fixedDt = 0f;
+            return false;
         }
 
         public Animator Animator => animator;
@@ -127,11 +179,28 @@ namespace OpenFifa.Gameplay
             float dt = Time.deltaTime;
             if (dt <= 0f) return;
 
-            _simTime = _source.SimTime;
-            Vector3 pos = _source.Position;
+            float rawTime = _source.SimTime;
+            Vector3 rawPos = _source.Position;
+            float rawYawRad = _source.FacingYaw;
+            Vector3 pos;
+            float yaw; // degrees from here on
+            if (TryGetInterpolation(out float alpha, out float fixedDt))
+            {
+                _interpolator.Push(rawTime, rawPos.ToSim(), rawYawRad);
+                AnimSnapshot snap = _interpolator.Sample(alpha, fixedDt);
+                _simTime = snap.Time;
+                pos = snap.Position.ToUnity();
+                yaw = SimYawToDegrees(snap.YawRad);
+            }
+            else
+            {
+                _interpolator.Reset();
+                _simTime = rawTime;
+                pos = rawPos;
+                yaw = SimYawToDegrees(rawYawRad);
+            }
             Vector3 vel = _source.Velocity;
             vel.y = 0f;
-            float yaw = _source.FacingYaw;
 
             if (followSimTransform)
                 transform.SetPositionAndRotation(pos, Quaternion.Euler(0f, yaw, 0f));
@@ -163,7 +232,7 @@ namespace OpenFifa.Gameplay
             Vector3 rootAtContact = a.HasRootAtContact
                 ? a.RootAtContact
                 : pos + vel * Mathf.Max(0f, a.ContactTime - _simTime);
-            float yawAtContact = a.HasRootAtContact ? a.YawAtContact : yaw;
+            float yawAtContact = a.HasRootAtContact ? SimYawToDegrees(a.YawAtContact) : yaw;
 
             var request = new ActionSyncRequest(a.Kind, a.Side, _simTime, a.ContactTime, pos.ToSim(),
                 rootAtContact.ToSim(), yawAtContact, a.BallAtContact.ToSim(), a.Direction.ToSim(), vel.magnitude,

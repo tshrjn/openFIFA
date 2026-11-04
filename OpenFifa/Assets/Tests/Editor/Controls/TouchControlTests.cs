@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 using OpenFifa.Core;
 
@@ -81,18 +82,105 @@ namespace OpenFifa.Tests.Editor
                 ControlContext.Attack(1f, true, true), ControlContext.Attack(1.1f, true, true), new ControlVec2(0f, 0.1f)).Action);
         }
 
+        private static ControlIntent ShootWithSprint(TouchControlScheme s, float sprintDown, float shootDown, float release,
+            bool releaseSprintFirst = false)
+        {
+            ControlVec2 sprint = s.Layout.GetButton(TouchSlot.Sprint).Center;
+            ControlVec2 shoot = s.Layout.GetButton(TouchSlot.Strike).Center;
+            // Feed the two presses in time order; equal times go in the same tick.
+            if (sprintDown == shootDown)
+            {
+                s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Began), new TouchPoint(2, shoot, ControlTouchPhase.Began) },
+                    ControlContext.Attack(sprintDown));
+            }
+            else if (sprintDown < shootDown)
+            {
+                s.Tick(One(1, sprint, ControlTouchPhase.Began), ControlContext.Attack(sprintDown));
+                s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Stationary), new TouchPoint(2, shoot, ControlTouchPhase.Began) },
+                    ControlContext.Attack(shootDown));
+            }
+            else
+            {
+                s.Tick(One(2, shoot, ControlTouchPhase.Began), ControlContext.Attack(shootDown));
+                s.Tick(new[] { new TouchPoint(2, shoot, ControlTouchPhase.Stationary), new TouchPoint(1, sprint, ControlTouchPhase.Began) },
+                    ControlContext.Attack(sprintDown));
+            }
+            if (releaseSprintFirst)
+                s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Ended), new TouchPoint(2, shoot, ControlTouchPhase.Stationary) },
+                    ControlContext.Attack((Math.Max(sprintDown, shootDown) + release) * 0.5f));
+            if (releaseSprintFirst) return s.Tick(One(2, shoot, ControlTouchPhase.Ended), ControlContext.Attack(release));
+            return s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Stationary),
+                    new TouchPoint(2, shoot, ControlTouchPhase.Ended) }, ControlContext.Attack(release));
+        }
+
         [Test]
-        public void SprintHeld_MakesShotDriven()
+        public void SprintHeldBeforeShot_GivesNormalShot()
+        {
+            var s = new TouchControlScheme();
+            var i = ShootWithSprint(s, sprintDown: 0f, shootDown: 0.5f, release: 0.7f);
+            Assert.AreEqual(ControlAction.Shoot, i.Action);
+            Assert.IsTrue(i.Sprint);
+        }
+
+        [Test]
+        public void SprintPressedTogetherWithShot_GivesNormalShot()
+        {
+            var s = new TouchControlScheme();
+            Assert.AreEqual(ControlAction.Shoot, ShootWithSprint(s, 0f, 0f, 0.3f).Action);
+            // Inside the simultaneity threshold, sprint slightly after the shot still counts as together.
+            var s2 = new TouchControlScheme();
+            Assert.AreEqual(ControlAction.Shoot, ShootWithSprint(s2, 0.03f, 0f, 0.3f).Action);
+        }
+
+        [Test]
+        public void SprintPressedDuringCharge_MakesShotDriven()
+        {
+            var s = new TouchControlScheme();
+            var i = ShootWithSprint(s, sprintDown: 0.15f, shootDown: 0f, release: 0.4f);
+            Assert.AreEqual(ControlAction.DrivenShot, i.Action);
+        }
+
+        [Test]
+        public void SprintTappedDuringCharge_StaysDrivenAfterSprintLifts()
+        {
+            var s = new TouchControlScheme();
+            var i = ShootWithSprint(s, sprintDown: 0.15f, shootDown: 0f, release: 0.4f, releaseSprintFirst: true);
+            Assert.AreEqual(ControlAction.DrivenShot, i.Action);
+        }
+
+        [Test]
+        public void DrivenThreshold_IsInclusiveAndConfigurable()
+        {
+            float d = TouchControlScheme.DefaultDrivenSprintMinDelaySeconds;
+            Assert.AreEqual(ControlAction.DrivenShot, ShootWithSprint(new TouchControlScheme(), d, 0f, 0.4f).Action);
+            Assert.AreEqual(ControlAction.Shoot, ShootWithSprint(new TouchControlScheme(), d * 0.5f, 0f, 0.4f).Action);
+            var strict = new TouchControlScheme { DrivenSprintMinDelaySeconds = 0.2f };
+            Assert.AreEqual(ControlAction.Shoot, ShootWithSprint(strict, 0.15f, 0f, 0.4f).Action);
+        }
+
+        [Test]
+        public void SprintDuringCharge_DrivesPassAndThrough()
         {
             var s = new TouchControlScheme();
             ControlVec2 sprint = s.Layout.GetButton(TouchSlot.Sprint).Center;
-            ControlVec2 shoot = s.Layout.GetButton(TouchSlot.Strike).Center;
-            s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Began), new TouchPoint(2, shoot, ControlTouchPhase.Began) },
-                ControlContext.Attack(0f));
-            var i = s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Stationary), new TouchPoint(2, shoot, ControlTouchPhase.Ended) },
-                ControlContext.Attack(0.1f));
-            Assert.AreEqual(ControlAction.DrivenShot, i.Action);
-            Assert.IsTrue(i.Sprint);
+            foreach (var pair in new[] { (TouchSlot.Primary, ControlAction.DrivenPass), (TouchSlot.Through, ControlAction.DrivenThrough) })
+            {
+                ControlVec2 kick = s.Layout.GetButton(pair.Item1).Center;
+                s.Tick(One(2, kick, ControlTouchPhase.Began), ControlContext.Attack(10f));
+                s.Tick(new[] { new TouchPoint(2, kick, ControlTouchPhase.Stationary), new TouchPoint(1, sprint, ControlTouchPhase.Began) },
+                    ControlContext.Attack(10.2f));
+                var i = s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Ended), new TouchPoint(2, kick, ControlTouchPhase.Ended) },
+                    ControlContext.Attack(10.4f));
+                Assert.AreEqual(pair.Item2, i.Action);
+            }
+        }
+
+        [Test]
+        public void ResolveAttack_DrivenFlag_OnlyChangesTapKicks()
+        {
+            Assert.AreEqual(ControlAction.DrivenShot, TouchControlScheme.ResolveAttack(TouchSlot.Strike, TouchGesture.Tap, true, false));
+            Assert.AreEqual(ControlAction.Shoot, TouchControlScheme.ResolveAttack(TouchSlot.Strike, TouchGesture.Tap, false, false));
+            Assert.AreEqual(ControlAction.ChipShot, TouchControlScheme.ResolveAttack(TouchSlot.Strike, TouchGesture.SwipeUp, true, false));
         }
 
         [Test]

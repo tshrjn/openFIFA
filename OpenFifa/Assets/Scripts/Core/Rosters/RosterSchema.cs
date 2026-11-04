@@ -13,7 +13,7 @@ namespace OpenFifa.Core
         public const int CurrentVersion = 1;
 
         /// <summary>Format tag every roster file must carry in its "format" member.</summary>
-        public const string FormatTag = "openfifa-roster";
+        public const string FormatTag = "openfootball-roster";
 
         public const int AttributeMin = 1;
         public const int AttributeMax = 20;

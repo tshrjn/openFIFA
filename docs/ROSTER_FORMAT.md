@@ -37,9 +37,9 @@ warning: clubs[0].players[2].attributes.sprintSpeed: unknown attribute (ignored)
 
 ```json
 {
-  "format": "openfifa-roster",
+  "format": "openfootball-roster",
   "schemaVersion": 1,
-  "league": {"id": "opd", "name": "OpenFifa Premier Division", "shortName": "OPD", "country": "Albion (fictional)", "season": "2026/27"},
+  "league": {"id": "opd", "name": "OpenFootball Premier Division", "shortName": "OPD", "country": "Albion (fictional)", "season": "2026/27"},
   "provenance": {"source": "fictional-generated", "fictional": true, "generator": "...", "seed": 20261104, "notes": "..."},
   "clubs": [
     {
@@ -64,7 +64,7 @@ warning, so newer files still load in older builds.
 
 | Field | Type | Rule |
 | --- | --- | --- |
-| `format` | string | must be `"openfifa-roster"` |
+| `format` | string | must be `"openfootball-roster"` |
 | `schemaVersion` | int | `1`. Older versions are migrated. Newer versions are rejected with an "update OpenFifa" message. |
 | `league.id` | id | lower-case letters, digits, `-`, `_`, `.`; up to 48 characters |
 | `league.name` / `shortName` | string | up to 60 / 8 characters |

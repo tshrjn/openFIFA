@@ -23,8 +23,11 @@ namespace OpenFifa.Core
     /// before release, the press is dropped.
     ///
     /// Attack: Pass (tap pass, swipe up lob / cross), Shoot (tap shot, swipe up chip, swipe left/right finesse,
-    /// swipe down low shot), Through (tap through ball, swipe up lobbed through), Sprint. Holding Sprint while
-    /// releasing a kick makes it driven. Pass, Shoot and Through charge power while held.
+    /// swipe down low shot), Through (tap through ball, swipe up lobbed through), Sprint. Pass, Shoot and Through
+    /// charge power while held. A kick is driven only when Sprint is pressed (a new touch) while that kick button
+    /// is already down and has been for at least <see cref="DrivenSprintMinDelaySeconds"/>. Running with Sprint
+    /// held and then pressing a kick button gives a normal kick, and pressing Sprint and the kick button together
+    /// does too, so sprinting never turns kicks driven by accident.
     /// Defence: Switch (tap smart switch, swipe directional switch), Tackle (tap tackle, swipe slide),
     /// Press (hold contain, hold after swipe up teammate press, hold after swipe down jockey), Sprint.
     /// </summary>
@@ -37,7 +40,17 @@ namespace OpenFifa.Core
             public ControlVec2 Start;
             public ControlVec2 Current;
             public bool Attack;
+            /// <summary>Sim time the finger went down.</summary>
+            public float BeganAt;
+            /// <summary>Kick fingers only: Sprint was pressed during this kick's charge window.</summary>
+            public bool Driven;
         }
+
+        /// <summary>
+        /// Default for <see cref="DrivenSprintMinDelaySeconds"/>: 0.05 s is three 60 Hz frames, longer than the skew
+        /// between two fingers landing "together" but well under a deliberate press-then-tap (about 0.15 s or more).
+        /// </summary>
+        public const float DefaultDrivenSprintMinDelaySeconds = 0.05f;
 
         private readonly List<Finger> _fingers = new List<Finger>();
         private readonly ChargeMeter _meter = new ChargeMeter();
@@ -49,6 +62,12 @@ namespace OpenFifa.Core
 
         public TouchLayout Layout { get; set; }
         public ControlSettings Settings { get; }
+
+        /// <summary>
+        /// How long a kick button must already be down before a new Sprint press makes the kick driven.
+        /// Presses closer together than this count as simultaneous and give a normal kick.
+        /// </summary>
+        public float DrivenSprintMinDelaySeconds { get; set; } = DefaultDrivenSprintMinDelaySeconds;
 
         public TouchControlScheme(TouchLayout layout = null, ControlSettings settings = null)
         {
@@ -73,14 +92,17 @@ namespace OpenFifa.Core
             }
         }
 
-        /// <summary>Resolves an attacking button release into an action.</summary>
-        public static ControlAction ResolveAttack(TouchSlot slot, TouchGesture g, bool sprintHeld, bool inCrossingZone)
+        /// <summary>
+        /// Resolves an attacking button release into an action. <paramref name="driven"/> is true only when the
+        /// deliberate driven gesture was made (Sprint pressed during the charge), not whenever Sprint is held.
+        /// </summary>
+        public static ControlAction ResolveAttack(TouchSlot slot, TouchGesture g, bool driven, bool inCrossingZone)
         {
             switch (slot)
             {
                 case TouchSlot.Primary:
                     if (g == TouchGesture.SwipeUp) return inCrossingZone ? ControlAction.Cross : ControlAction.Lob;
-                    return sprintHeld ? ControlAction.DrivenPass : ControlAction.Pass;
+                    return driven ? ControlAction.DrivenPass : ControlAction.Pass;
                 case TouchSlot.Strike:
                     switch (g)
                     {
@@ -88,11 +110,11 @@ namespace OpenFifa.Core
                         case TouchGesture.SwipeLeft:
                         case TouchGesture.SwipeRight: return ControlAction.FinesseShot;
                         case TouchGesture.SwipeDown: return ControlAction.LowShot;
-                        default: return sprintHeld ? ControlAction.DrivenShot : ControlAction.Shoot;
+                        default: return driven ? ControlAction.DrivenShot : ControlAction.Shoot;
                     }
                 case TouchSlot.Through:
                     if (g == TouchGesture.SwipeUp) return ControlAction.LobbedThrough;
-                    return sprintHeld ? ControlAction.DrivenThrough : ControlAction.ThroughBall;
+                    return driven ? ControlAction.DrivenThrough : ControlAction.ThroughBall;
                 default:
                     return ControlAction.None;
             }
@@ -200,8 +222,13 @@ namespace OpenFifa.Core
             TouchSlot slot = Layout.HitTest(t.Position);
             if (slot != TouchSlot.None)
             {
-                _fingers.Add(new Finger { Id = t.FingerId, Slot = slot, Start = t.Position, Current = t.Position, Attack = ctx.InPossession });
-                bool kickSlot = slot == TouchSlot.Primary || slot == TouchSlot.Strike || slot == TouchSlot.Through;
+                if (slot == TouchSlot.Sprint && ctx.InPossession) MarkDriven(ctx.Time);
+                _fingers.Add(new Finger
+                {
+                    Id = t.FingerId, Slot = slot, Start = t.Position, Current = t.Position,
+                    Attack = ctx.InPossession, BeganAt = ctx.Time,
+                });
+                bool kickSlot = IsKickSlot(slot);
                 if (ctx.InPossession && kickSlot && !_meter.IsCharging)
                 {
                     float full = slot == TouchSlot.Strike ? Settings.ShotFullChargeSeconds : Settings.PassFullChargeSeconds;
@@ -261,7 +288,7 @@ namespace OpenFifa.Core
 
             if (f.Attack)
             {
-                ControlAction a = ResolveAttack(f.Slot, g, HasFinger(TouchSlot.Sprint, t.FingerId), ctx.InCrossingZone);
+                ControlAction a = ResolveAttack(f.Slot, g, f.Driven, ctx.InCrossingZone);
                 if (a == ControlAction.None) return ControlAction.None;
                 ControlVec2 aim = _stickFinger >= 0 ? Layout.ToHeightUnits(_stickCurrent - _stickOrigin).Normalized : ControlVec2.Zero;
                 _buffer.Push(a, power, aim, ctx.Time);
@@ -279,6 +306,22 @@ namespace OpenFifa.Core
                 intent.Aim = Layout.ToHeightUnits(travel).Normalized;
             }
             return d;
+        }
+
+        private static bool IsKickSlot(TouchSlot slot)
+            => slot == TouchSlot.Primary || slot == TouchSlot.Strike || slot == TouchSlot.Through;
+
+        /// <summary>A new Sprint press marks every attacking kick finger that has been down long enough.</summary>
+        private void MarkDriven(float now)
+        {
+            for (int i = 0; i < _fingers.Count; i++)
+            {
+                var f = _fingers[i];
+                if (!f.Attack || !IsKickSlot(f.Slot)) continue;
+                if (now - f.BeganAt + 1e-5f < DrivenSprintMinDelaySeconds) continue;
+                f.Driven = true;
+                _fingers[i] = f;
+            }
         }
 
         private bool HasFinger(TouchSlot slot, int excludeId)

@@ -23,9 +23,12 @@ namespace OpenFifa.Editor
     ///   -ipadExports device,simulator [IPAD_EXPORTS]
     ///   -ipadBuildNumber 176...       [IPAD_BUILD_NUMBER]  CFBundleVersion; default: 10-second ticks since epoch
     ///   -ipadMarketingVersion 0.1.0   [IPAD_MARKETING_VERSION] CFBundleShortVersionString; default: PlayerSettings
-    ///   -ipadBundleId com.x.y         [IPAD_BUNDLE_ID]     default com.tshrjn.openfifa (ios-factory convention)
+    ///   -ipadBundleId com.x.y         [IPAD_BUNDLE_ID]     default com.tshrjn.openfootball (ios-factory convention)
     ///   -appleTeamId ABCDE12345       [APPLE_TEAM_ID]      written as DEVELOPMENT_TEAM; may also be passed to xcodebuild
+    /// An option given with an empty value (e.g. an unquoted empty CI variable) falls back to its env var / default
+    /// and never consumes the option after it.
     /// Device exports go to &lt;outDir&gt;/device, simulator exports to &lt;outDir&gt;/simulator.
+    /// Any failure restores the captured player settings before the editor exits.
     /// </summary>
     public static class IosBuild
     {
@@ -36,6 +39,9 @@ namespace OpenFifa.Editor
 
         /// <summary>Set while one of our exports runs, read by <see cref="IosBuildPostprocess"/>.</summary>
         internal static IosExportContext Current { get; private set; }
+
+        /// <summary>Settings captured by <see cref="Run"/>; restored exactly once, by the finally or by <see cref="Fail"/>.</summary>
+        private static IosSettingsSnapshot s_pendingRestore;
 
         [MenuItem("OpenFootball/Build/iPad (Device Xcode project)")]
         public static void ExportDevice() => Run(new[] { IosExportKind.Device });
@@ -92,7 +98,7 @@ namespace OpenFifa.Editor
                 Fail("could not switch the active build target to iOS (is the iOS module installed?)");
             }
 
-            var snapshot = IosSettingsSnapshot.Capture();
+            s_pendingRestore = IosSettingsSnapshot.Capture();
             var failed = false;
             try
             {
@@ -110,8 +116,7 @@ namespace OpenFifa.Editor
             }
             finally
             {
-                Current = null;
-                snapshot.Restore();
+                RestoreSettings();
             }
             if (failed)
             {
@@ -202,16 +207,7 @@ namespace OpenFifa.Editor
 
         private static string Option(string arg, string env, string fallback)
         {
-            var args = Environment.GetCommandLineArgs();
-            for (var i = 0; i < args.Length - 1; i++)
-            {
-                if (args[i] == "-" + arg)
-                {
-                    return args[i + 1].Trim();
-                }
-            }
-            var value = Environment.GetEnvironmentVariable(env);
-            return string.IsNullOrEmpty(value) ? fallback : value.Trim();
+            return IosBuildArgs.Resolve(Environment.GetCommandLineArgs(), arg, Environment.GetEnvironmentVariable(env), fallback);
         }
 
         /// <summary>Repository root: the parent of the Unity project folder (OpenFifa/).</summary>
@@ -224,9 +220,28 @@ namespace OpenFifa.Editor
         private static string ResolveOutDir(string dir) =>
             Path.GetFullPath(Path.IsPathRooted(dir) ? dir : Path.Combine(RepoRoot(), dir));
 
+        /// <summary>Puts back the settings captured by <see cref="Run"/>, if any are still pending. Safe to call twice.</summary>
+        private static void RestoreSettings()
+        {
+            Current = null;
+            var snapshot = s_pendingRestore;
+            s_pendingRestore = null;
+            snapshot?.Restore();
+        }
+
         private static void Fail(string message)
         {
             Debug.LogError("[IosBuild] " + message);
+            // EditorApplication.Exit does not unwind to Run's finally, so restore here first; otherwise the
+            // overridden iOS settings would be saved into ProjectSettings/ when the editor quits.
+            try
+            {
+                RestoreSettings();
+            }
+            catch (Exception e)
+            {
+                Debug.LogError("[IosBuild] could not restore player settings: " + e);
+            }
             if (Application.isBatchMode)
             {
                 EditorApplication.Exit(1);

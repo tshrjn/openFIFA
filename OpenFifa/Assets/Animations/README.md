@@ -78,7 +78,7 @@ Player (sim root)       PlayerAnimationDriver  + your IPlayerAnimSource implemen
                         avatar from the same FBX, Apply Root Motion OFF) + PlayerAnimatorHooks
 ```
 
-- `IPlayerAnimSource` is the only coupling to the sim. Implement it on the sim bridge. It provides sim time, position, velocity, intent velocity, facing yaw, sprint flag and the current committed action. `PlayerAnimAction` carries a fresh `Id` per action, plus the kind, side, contact time, ball position at contact and outgoing direction.
+- `IPlayerAnimSource` is the only coupling to the sim. Implement it on the sim bridge. It provides sim time, position, velocity, intent velocity, facing yaw (radians, the sim's unit; the driver converts to degrees once), sprint flag and the current committed action. A fixed-step source can also implement `IPlayerAnimInterpolation` (alpha = accumulator remainder / dt, plus dt) and return the raw latest snapshot; the driver then renders between the previous and current snapshots, so a 60 Hz sim stays smooth at 120 Hz. `PlayerAnimAction` carries a fresh `Id` per action, plus the kind, side, contact time, ball position at contact and outgoing direction.
 - When a new action appears, the driver calls `AnimationSyncPlanner`. The planner returns:
   - the clip start time and playback rate (wind-up timing);
   - the visual translation and yaw warp, applied to `Visual` and blended in before contact then released after;

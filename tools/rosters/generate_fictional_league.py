@@ -240,15 +240,15 @@ def generate(seed):
     return {
         "format": FORMAT_TAG,
         "schemaVersion": SCHEMA_VERSION,
-        "league": {"id": "opd", "name": "OpenFifa Premier Division", "shortName": "OPD",
+        "league": {"id": "opd", "name": "OpenFootball Premier Division", "shortName": "OPD",
                    "country": "Albion (fictional)", "season": "2026/27"},
         "provenance": {
             "source": "fictional-generated",
             "fictional": True,
             "generator": "tools/rosters/generate_fictional_league.py",
             "seed": seed,
-            "license": "Same license as OpenFifa",
-            "notes": "All clubs, grounds and players are invented. Attributes are OpenFifa's own 1-20 scale, "
+            "license": "Same license as OpenFootball",
+            "notes": "All clubs, grounds and players are invented. Attributes are OpenFootball's own 1-20 scale, "
                      "generated from position profiles and club reputation; no third-party ratings were used.",
         },
         "clubs": clubs,
