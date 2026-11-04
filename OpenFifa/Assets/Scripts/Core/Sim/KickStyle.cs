@@ -9,6 +9,8 @@ namespace OpenFifa.Core
     /// <item><see cref="Driven"/> (Pass, ThroughPass): a firmer ground pass that arrives faster.
     /// (Lob): a flatter, quicker lofted ball.</item>
     /// <item><see cref="LobbedThrough"/> (Lob): lofted into the receiver's run, led like a through ball.</item>
+    /// <item><see cref="Knuckle"/> (Shoot): struck through the valve with almost no spin, so it wobbles and dips in
+    /// flight (see <see cref="BallSimConfig.KnuckleForceCoefficient"/>).</item>
     /// </list>
     /// A style that does not apply to the action is ignored (the plain action is played).
     /// </summary>
@@ -19,5 +21,6 @@ namespace OpenFifa.Core
         Low = 2,
         Driven = 3,
         LobbedThrough = 4,
+        Knuckle = 5,
     }
 }
