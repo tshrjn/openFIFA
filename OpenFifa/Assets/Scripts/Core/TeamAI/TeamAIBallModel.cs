@@ -328,14 +328,18 @@ namespace OpenFifa.Core
         /// <summary>Height of the ball at each sample.</summary>
         private readonly float[] _height = new float[Samples];
         private float _builtTime = float.NaN;
-        private SimVec3 _builtPos, _builtVel;
+        private SimVec3 _builtPos, _builtVel, _builtSpin;
+        private TeamAIBallModel _builtModel;
 
         /// <summary>Integrate the world ball forward (no players). Cached per (time, ball state).</summary>
         public void Build(TeamAIWorld world, TeamAIBallModel model)
         {
             var ball = world.Ball;
-            if (world.Time == _builtTime && ball.Position.Equals(_builtPos) && ball.Velocity.Equals(_builtVel)) return;
+            if (world.Time == _builtTime && ball.Position.Equals(_builtPos) && ball.Velocity.Equals(_builtVel) &&
+                ReferenceEquals(model, _builtModel) && ball.Spin.Equals(_builtSpin)) return;
             _builtTime = world.Time;
+            _builtModel = model;
+            _builtSpin = ball.Spin;
             _builtPos = ball.Position;
             _builtVel = ball.Velocity;
 
