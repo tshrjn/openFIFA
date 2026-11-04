@@ -56,6 +56,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public int LeagueIndex { get; set; }
         /// <summary>Club ids asked for on the command line (null = default), resolved after the rosters load.</summary>
         public string ArgLeague, ArgHome, ArgAway;
+        /// <summary>-spHomeStyle / -spAwayStyle: force a team style (e.g. park-the-bus, high-press) over the club's own.</summary>
+        public string ArgHomeStyle, ArgAwayStyle;
         private int _defaultLeague, _defaultHome, _defaultAway = 1;
         public RosterClub HomeClub { get; private set; }
         public RosterClub AwayClub { get; private set; }
@@ -151,6 +153,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spHome" && next != null) ArgHome = next;
                 else if (a == "-spAway" && next != null) ArgAway = next;
                 else if (a == "-spLeague" && next != null) ArgLeague = next;
+                else if (a == "-spHomeStyle" && next != null) ArgHomeStyle = next;
+                else if (a == "-spAwayStyle" && next != null) ArgAwayStyle = next;
                 else if (a == "-spNoCommentary") _muteCommentary = true;
                 else if (a == "-spCapture") _captureRun = true;
             }
@@ -574,9 +578,30 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 for (int i = 0; i < Names.Length; i++) Names[i] = (i < 11 ? "H" : "A") + (i % 11 + 1);
                 ShirtNumbers = MatchSheetNumbers.Default();
             }
+            options.HomeTactics = StyleOverride(ArgHomeStyle, options.HomeTactics, options.Setup, true);
+            options.AwayTactics = StyleOverride(ArgAwayStyle, options.AwayTactics, options.Setup, false);
             HomeColour = homeColor;
             AwayColour = awayColor;
             return options;
+        }
+
+        /// <summary>
+        /// Tactics for a forced style (-spHomeStyle / -spAwayStyle), keeping the side's formation (the club's, or the
+        /// default setup's best fit); the given tactics when no style was asked for or the name is unknown.
+        /// </summary>
+        private TeamAITactics StyleOverride(string styleName, TeamAITactics current, MatchSetup setup, bool home)
+        {
+            if (string.IsNullOrEmpty(styleName)) return current;
+            if (!TeamAITactics.TryParseStyle(styleName, out var style))
+            {
+                Debug.LogWarning("[" + ProductName + "] unknown team style '" + styleName + "'");
+                return current;
+            }
+            var spots = setup != null ? (home ? setup.HomeFormation : setup.AwayFormation)
+                : (home ? MatchSetup.CreateDefault(Seed).HomeFormation : MatchSetup.CreateDefault(Seed).AwayFormation);
+            var formation = current != null ? current.Formation : SimFormationMapper.BestFit(spots);
+            Debug.Log("[" + ProductName + "] " + (home ? "home" : "away") + " style forced to " + style);
+            return TeamAITactics.FromStyle(style, formation);
         }
 
         /// <summary>Input for the user's seat: null in AI vs AI, the scripted bot, or the device reader.</summary>
