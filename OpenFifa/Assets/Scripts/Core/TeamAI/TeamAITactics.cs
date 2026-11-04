@@ -262,7 +262,7 @@ namespace OpenFifa.Core
             switch (style)
             {
                 case TeamAIStyle.Possession:
-                    t.Set(width: 0.65f, depth: 0.65f, press: 0.6f, direct: 0.15f, runs: 0.45f, counter: 0.3f);
+                    t.Set(width: 0.65f, depth: 0.65f, press: 0.6f, direct: 0.25f, runs: 0.55f, counter: 0.3f);
                     break;
                 case TeamAIStyle.HighPress:
                     t.Set(width: 0.55f, depth: 0.85f, press: 0.95f, direct: 0.55f, runs: 0.6f, counter: 0.75f);
