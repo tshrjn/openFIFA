@@ -17,8 +17,8 @@ namespace OpenFifa.Tests.Editor
         public void JerseyPattern_HasExpectedValues()
         {
             var values = Enum.GetValues(typeof(JerseyPattern));
-            Assert.AreEqual(7, values.Length,
-                "JerseyPattern should have 7 values: Solid, Stripes, Hoops, HalfAndHalf, Gradient, Pinstripes, Chevron.");
+            Assert.AreEqual(8, values.Length,
+                "JerseyPattern should have 8 values: Solid, Stripes, Hoops, HalfAndHalf, Gradient, Pinstripes, Chevron, Sash.");
         }
 
         [Test]

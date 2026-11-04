@@ -42,6 +42,25 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-04 Session — Broadcast kit rendering (OpenFifa/Kit shader)
+
+**Status**: Completed (not yet verified inside the Unity Editor; see Known Issues)
+**Changes**:
+- `Assets/Shaders/OpenFifaKit.shader` + `OpenFifaKit*.hlsl`: hand-written URP 17 shader with ForwardLit, ShadowCaster, DepthOnly, DepthNormals and MotionVectors passes; SRP Batcher-compatible `UnityPerMaterial` CBUFFER. Procedural patterns (solid, stripes, hoops, halves, halftone gradient, pinstripes, chevron, sash) from 3 colours, polyester knit micro-normal, Charlie sheen lobe, heat-pressed name/number layer with gloss and edge bevel, crest/sponsor decal slots, `_Sweat`/`_Dirt` match wear, and licensed override textures (`_KitAlbedo`/`_KitNormal`/`_KitMask`, `_UseLicensedTextures`).
+- Two mappings: `_MappingMode 0` object space for the capsule players (shirt/shorts/socks/boots bands, planar back/front prints, kit turns to face the run direction via `_FacingAngle`), `_MappingMode 1` mesh UVs for a future skinned jersey (print panels are UV rects on `JerseyRenderer`).
+- Core (pure C#): `KitDefinitionData`/`KitLibraryData` JSON schema, `KitDefinitionValidator`, `KitLibraryLogic` (merge packs, match kit selection reusing `KitVariantManager` clash rules), `KitGlyphFont` (original stroke font, no font assets), `KitPrintLayoutLogic` (straight/arched name, back number, small front number), `KitPrintRasterizer`, `KitCrestRasterizer` (placeholder shield crest). `JerseyPattern.Sash = 7` added.
+- Gameplay: `KitDefinition` and `KitLibrary` ScriptableObjects, `KitPrintTextureBuilder`, rewritten `JerseyRenderer` (per-player material instance, cached print texture), `MatchKitBinder`, 3-line hook in `MatchOrchestrator.CreatePlayer`.
+- `Assets/Resources/Kits/DefaultKits.json`: four original placeholder teams (no real clubs, names or crests). `Assets/Resources/Kits/OpenFifaKit.mat` keeps the shader in player builds.
+- Tests: `KitDefinitionTests`, `KitLibraryClashTests`, `KitPrintLayoutTests`, `KitLibraryJsonTests` (`[Category("Kits")]`).
+**Decisions**:
+- Name/number atlas stores coverage data (R fill, G fill+outline, B edge height), not colour: recolouring is a material change, re-rasterizing happens only when name/number/style change.
+- Per-player material instances instead of MaterialPropertyBlocks so players stay on the SRP Batcher path.
+- Adding licensed kits: drop textures under `Resources/` and a `Resources/Kits/LicensedKits.json` (same schema; set `Licensed.AlbedoPath` etc.). It is merged after the placeholders and replaces kits with the same id or team+variant. Or author `KitDefinition`/`KitLibrary` assets (`Resources/Kits/KitLibrary.asset` wins over the JSON default).
+**Known Issues**:
+- No Unity licence on the dev VPS: C# was compiled with the editor's Roslyn against UnityEngine module DLLs and the Core tests were run outside Unity (all passing), but the shader has not been compiled by Unity and nothing has been visually inspected. First Editor run should check the console for shader errors and capture screenshots.
+- Capsules never rotate, so the kit is turned in the shader from Rigidbody velocity; remove `faceMovementDirection` once players rotate or the humanoid lands.
+**Next**: Open in the Editor, fix any shader compile issues, capture screenshots, tune `_KnitScale`/sheen under stadium lighting; switch `JerseyRenderer` to `MeshUV` with real panel rects when the humanoid jersey mesh arrives.
+
 ## 2026-03-26 Session — Phase 6-7 PRD Completion: US-044 through US-056
 
 **Status**: Completed

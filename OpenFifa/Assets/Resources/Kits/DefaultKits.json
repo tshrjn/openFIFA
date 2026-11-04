@@ -1,0 +1,387 @@
+{
+  "SchemaVersion": 1,
+  "DefaultHomeTeamId": "harbour-city",
+  "DefaultAwayTeamId": "redcliff-athletic",
+  "Teams": [
+    {
+      "Id": "harbour-city",
+      "Name": "Harbour City",
+      "Initials": "HC",
+      "Roster": [
+        {
+          "Name": "Marlow",
+          "Number": 1
+        },
+        {
+          "Name": "Okonjo",
+          "Number": 4
+        },
+        {
+          "Name": "Varga",
+          "Number": 8
+        },
+        {
+          "Name": "Lindqvist",
+          "Number": 10
+        },
+        {
+          "Name": "Reyes",
+          "Number": 9
+        }
+      ]
+    },
+    {
+      "Id": "redcliff-athletic",
+      "Name": "Redcliff Athletic",
+      "Initials": "RCA",
+      "Roster": [
+        {
+          "Name": "Hale",
+          "Number": 1
+        },
+        {
+          "Name": "Duarte",
+          "Number": 5
+        },
+        {
+          "Name": "Kowalczyk",
+          "Number": 6
+        },
+        {
+          "Name": "Abernathy",
+          "Number": 7
+        },
+        {
+          "Name": "Sato",
+          "Number": 11
+        }
+      ]
+    },
+    {
+      "Id": "northgate-rovers",
+      "Name": "Northgate Rovers",
+      "Initials": "NR",
+      "Roster": [
+        {
+          "Name": "Pryce",
+          "Number": 1
+        },
+        {
+          "Name": "Mbeki",
+          "Number": 3
+        },
+        {
+          "Name": "Castell",
+          "Number": 14
+        },
+        {
+          "Name": "Ferreira-Lund",
+          "Number": 17
+        },
+        {
+          "Name": "Oyelaran",
+          "Number": 19
+        }
+      ]
+    },
+    {
+      "Id": "ashford-vale",
+      "Name": "Ashford Vale",
+      "Initials": "AV",
+      "Roster": [
+        {
+          "Name": "Thorne",
+          "Number": 1
+        },
+        {
+          "Name": "Galloway",
+          "Number": 2
+        },
+        {
+          "Name": "Ibarra",
+          "Number": 16
+        },
+        {
+          "Name": "Nakamura",
+          "Number": 20
+        },
+        {
+          "Name": "Delacroix",
+          "Number": 23
+        }
+      ]
+    }
+  ],
+  "Kits": [
+    {
+      "Id": "harbour-city-home",
+      "TeamId": "harbour-city",
+      "Variant": "Home",
+      "PrimaryColor": "#1F4FC9",
+      "SecondaryColor": "#FFFFFF",
+      "TertiaryColor": "#E8B92E",
+      "ShortsColor": "#FFFFFF",
+      "SocksColor": "#1F4FC9",
+      "Pattern": "Solid",
+      "PatternScale": 1.0,
+      "Collar": "VNeck",
+      "FontStyle": "Block",
+      "NameLayout": "Arched",
+      "NumberColor": "#FFFFFF",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "harbour-city-away",
+      "TeamId": "harbour-city",
+      "Variant": "Away",
+      "PrimaryColor": "#F4F4F2",
+      "SecondaryColor": "#1F4FC9",
+      "TertiaryColor": "#E8B92E",
+      "ShortsColor": "#1F4FC9",
+      "SocksColor": "#F4F4F2",
+      "Pattern": "Sash",
+      "PatternScale": 1.0,
+      "Collar": "VNeck",
+      "FontStyle": "Block",
+      "NameLayout": "Arched",
+      "NumberColor": "#1F4FC9",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "harbour-city-third",
+      "TeamId": "harbour-city",
+      "Variant": "Third",
+      "PrimaryColor": "#121417",
+      "SecondaryColor": "#1BB5A6",
+      "TertiaryColor": "#1BB5A6",
+      "ShortsColor": "#121417",
+      "SocksColor": "#121417",
+      "Pattern": "Pinstripes",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Condensed",
+      "NameLayout": "Straight",
+      "NumberColor": "#1BB5A6",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "redcliff-athletic-home",
+      "TeamId": "redcliff-athletic",
+      "Variant": "Home",
+      "PrimaryColor": "#C8182B",
+      "SecondaryColor": "#FFFFFF",
+      "TertiaryColor": "#FFFFFF",
+      "ShortsColor": "#FFFFFF",
+      "SocksColor": "#C8182B",
+      "Pattern": "Stripes",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Block",
+      "NameLayout": "Straight",
+      "NumberColor": "#111111",
+      "NumberOutlineColor": "#FFFFFF",
+      "NumberOutlineWidth": 0.3,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "redcliff-athletic-away",
+      "TeamId": "redcliff-athletic",
+      "Variant": "Away",
+      "PrimaryColor": "#14213D",
+      "SecondaryColor": "#2A3F6E",
+      "TertiaryColor": "#C8182B",
+      "ShortsColor": "#14213D",
+      "SocksColor": "#14213D",
+      "Pattern": "Hoops",
+      "PatternScale": 1.2,
+      "Collar": "Polo",
+      "FontStyle": "Block",
+      "NameLayout": "Straight",
+      "NumberColor": "#FFFFFF",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "redcliff-athletic-third",
+      "TeamId": "redcliff-athletic",
+      "Variant": "Third",
+      "PrimaryColor": "#F2C230",
+      "SecondaryColor": "#E07A1F",
+      "TertiaryColor": "#14213D",
+      "ShortsColor": "#14213D",
+      "SocksColor": "#F2C230",
+      "Pattern": "Gradient",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Rounded",
+      "NameLayout": "Straight",
+      "NumberColor": "#14213D",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "northgate-rovers-home",
+      "TeamId": "northgate-rovers",
+      "Variant": "Home",
+      "PrimaryColor": "#1E7A3C",
+      "SecondaryColor": "#FFFFFF",
+      "TertiaryColor": "#FFFFFF",
+      "ShortsColor": "#FFFFFF",
+      "SocksColor": "#1E7A3C",
+      "Pattern": "Hoops",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Rounded",
+      "NameLayout": "Straight",
+      "NumberColor": "#FFFFFF",
+      "NumberOutlineColor": "#1E7A3C",
+      "NumberOutlineWidth": 0.25,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "northgate-rovers-away",
+      "TeamId": "northgate-rovers",
+      "Variant": "Away",
+      "PrimaryColor": "#E9E4D8",
+      "SecondaryColor": "#1E7A3C",
+      "TertiaryColor": "#1E7A3C",
+      "ShortsColor": "#1E7A3C",
+      "SocksColor": "#E9E4D8",
+      "Pattern": "Chevron",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Block",
+      "NameLayout": "Straight",
+      "NumberColor": "#1E7A3C",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "ashford-vale-home",
+      "TeamId": "ashford-vale",
+      "Variant": "Home",
+      "PrimaryColor": "#6D1F3A",
+      "SecondaryColor": "#8FC6E8",
+      "TertiaryColor": "#8FC6E8",
+      "ShortsColor": "#FFFFFF",
+      "SocksColor": "#6D1F3A",
+      "Pattern": "HalfAndHalf",
+      "PatternScale": 1.0,
+      "Collar": "Round",
+      "FontStyle": "Block",
+      "NameLayout": "Arched",
+      "NumberColor": "#FFFFFF",
+      "NumberOutlineColor": "#6D1F3A",
+      "NumberOutlineWidth": 0.3,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    },
+    {
+      "Id": "ashford-vale-away",
+      "TeamId": "ashford-vale",
+      "Variant": "Away",
+      "PrimaryColor": "#8FC6E8",
+      "SecondaryColor": "#6D1F3A",
+      "TertiaryColor": "#6D1F3A",
+      "ShortsColor": "#6D1F3A",
+      "SocksColor": "#8FC6E8",
+      "Pattern": "Solid",
+      "PatternScale": 1.0,
+      "Collar": "Polo",
+      "FontStyle": "Block",
+      "NameLayout": "Straight",
+      "NumberColor": "#6D1F3A",
+      "NumberOutlineColor": "#000000",
+      "NumberOutlineWidth": 0.0,
+      "ShowFrontNumber": true,
+      "FabricSheen": 0.5,
+      "Licensed": {
+        "AlbedoPath": "",
+        "NormalPath": "",
+        "MaskPath": "",
+        "CrestPath": "",
+        "SponsorPath": ""
+      }
+    }
+  ]
+}
