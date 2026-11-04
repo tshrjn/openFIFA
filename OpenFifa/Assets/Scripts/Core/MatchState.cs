@@ -11,6 +11,8 @@ namespace OpenFifa.Core
         SecondHalf = 3,
         FullTime = 4,
         GoalCelebration = 5,
-        Paused = 6
+        Paused = 6,
+        /// <summary>Dead ball after a stoppage (e.g. offside): clock stopped, restart pending.</summary>
+        Stoppage = 7
     }
 }
