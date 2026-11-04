@@ -6,12 +6,20 @@ Players can add their own leagues as local files. This page is the spec. The cod
 
 ## Data policy
 
-- **The bundled roster is fully fictional.** The league, every club, ground and player name was invented by
+- **Premier League pack (development only).** On 2026-11-04 Tushar asked for the real Premier League clubs and
+  players, with licensing handled later. The pack is a separate, swappable file:
+  `StreamingAssets/Rosters/Packs/premier_league.roster.json`, built from the hand-written squad sheet
+  `tools/rosters/premier_league/squads.txt` by `build_premier_league.py`. Its ratings and attributes are OpenFootball's
+  own estimates, not copied from any game or ratings site, and its kits use club colours, not licensed designs. Delete
+  the file (or the `Packs/` folder) and the game falls back to the fictional league. Clear the licensing before a
+  public release.
+- **The fictional roster is still bundled.** The league, every club, ground and player name was invented by
   `tools/rosters/generate_fictional_league.py`, and the attributes are on OpenFifa's own scale. The game does not
   ship any real league, club, crest, player name or third-party rating, including EA FC or sofifa data.
 - **User rosters stay on the user's device.** `LocalFileRosterSource` reads `*.roster.json` files the user puts in
   the app's Documents folder (on iPad: Files app > On My iPad > OpenFifa). This works like PES option files.
-  OpenFifa does not download, host or link to roster packs. Do not commit rosters that hold real-world data.
+  OpenFifa does not download, host or link to roster packs. Apart from the Premier League pack above, do not commit
+  rosters that hold real-world data.
 - There is no scraper in this repo, and none should be added. See
   `docs/research/research_notes/Football game fidelity research/player_data_licensing.md` for the reasons.
 
@@ -20,6 +28,7 @@ Players can add their own leagues as local files. This page is the spec. The cod
 | Source | Kind | Where |
 | --- | --- | --- |
 | `BundledRosterSource` | `Bundled` | `StreamingAssets/Rosters/default_league.json`. Gameplay passes `Application.streamingAssetsPath`, or a text reader where StreamingAssets is not a folder. |
+| `BundledRosterSource.DiscoverPacks` | `Bundled` | `StreamingAssets/Rosters/Packs/*.roster.json`, sorted by file name. `RosterMatchBuilder.LoadLeagues` puts packs first, so the Premier League is the default league when its pack is present. |
 | `LocalFileRosterSource` | `LocalFile` | `<Documents>/*.roster.json`, listed by `Discover(dir)` and sorted by file name. 8 MB limit. |
 
 Both sources implement `IRosterSource.Load()`, which returns a `RosterLoadResult` holding a `RosterLeague` (or null)
@@ -104,6 +113,29 @@ warning, so newer files still load in older builds.
 | `weakFoot`, `skillMoves` | int | 1 to 5 stars |
 | `attributes` | object | all 34 keys below, each a whole number from 1 to 20 |
 
+### Optional appearance and kit fields
+
+These are additive (no version bump) and follow Mama-Fifa's appearance contract. Files without them still load.
+
+Player:
+
+| Field | Type | Rule |
+| --- | --- | --- |
+| `squadNumber` | int | Same number as `shirtNumber`. Either may be given; when both are, they must match. |
+| `shirtName` | string | Name as printed on the back, up to 24 characters. Defaults to `knownAs` in capitals. |
+| `appearance.skinTone` | number | 0 (light) to 1 (dark) |
+| `appearance.hairStyle` | string | `buzz` `short` `curly` `afro` `long_tied` `bald` `braids` |
+| `appearance.hairColor`, `bootColor` | string | `#RRGGBB` |
+| `appearance.facialHair` | string | `none` `stubble` `beard` `moustache` |
+| `appearance.heightCm` | int | 150 to 215; defaults to the player's `heightCm` |
+| `appearance.build` | string | `slim` `average` `stocky` |
+
+Club `kits` is an object keyed by slot (`home` required; `away`, `third`, `gk` optional). Each kit has `primary`,
+`secondary`, `tertiary`, `shortsColor`, `socksColor`, `numberColor`, `numberOutline` (all `#RRGGBB`) and `pattern`
+(`solid` `stripes` `hoops` `halves` `sash` `pinstripes` `gradient` `chevron`). Field names match `KitDefinitionData`
+(kits PR #3); `RosterKit.PatternName` gives the `JerseyPattern` spelling. Clubs without `kits` get a plain home and
+away kit from `colours`, so `RosterClub.Kits` always has at least those two.
+
 ## Attributes (1-20)
 
 OpenFifa uses its own 1-20 scale (FM-style). It deliberately differs from the 0-99 scale of other games, and no
@@ -166,6 +198,7 @@ Additive, optional fields don't need a version bump. Older builds only warn abou
 | `python3 tools/rosters/generate_fictional_league.py` | Regenerates `default_league.json`. Deterministic: seed 20261104 always gives byte-identical output. 20 clubs × 25 players, quality driven by club reputation, position profiles and age. |
 | `python3 tools/rosters/import_template/import_csv.py players.csv --clubs clubs.csv --scale 99 --out my.roster.json` | Converts a user's own CSV into the roster format. |
 | `python3 tools/rosters/import_template/import_csv.py --to-csv league.json --out players.csv --clubs-out clubs.csv` | Converts a roster back to CSV, on the 1-20 scale. |
+| `python3 tools/rosters/premier_league/build_premier_league.py` | Rebuilds the Premier League pack from `squads.txt` (one line per player: number, names, positions, nation, birth year, height, foot, a 0-99 rating, trait tags, look). Each rating is calibrated so the in-game overall matches it exactly. Deterministic. Edit the sheet, not the JSON. |
 | `python3 -m unittest discover -s tools/rosters -p 'test_*.py'` | Tool tests: determinism, CSV ↔ JSON round trip, alias mapping, errors. |
 
 ### CSV columns

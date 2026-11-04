@@ -195,13 +195,18 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Loads the bundled league plus any user leagues. Returns the loaded leagues (bundled first, then local files
-        /// by name) and appends every failure report to <paramref name="problems"/>.
+        /// Loads the bundled leagues plus any user leagues. Order: shipped league packs (Rosters/Packs/*.roster.json,
+        /// by file name, so the Premier League pack is the default when present), then the fictional default league,
+        /// then the user's local files by name. Appends every failure report to <paramref name="problems"/>.
         /// </summary>
         public static List<RosterLeague> LoadLeagues(string streamingAssetsRoot, string documentsDir, List<string> problems)
         {
             var sources = new List<IRosterSource>();
-            if (streamingAssetsRoot != null) sources.Add(new BundledRosterSource(streamingAssetsRoot));
+            if (streamingAssetsRoot != null)
+            {
+                sources.AddRange(BundledRosterSource.DiscoverPacks(streamingAssetsRoot));
+                sources.Add(new BundledRosterSource(streamingAssetsRoot));
+            }
             sources.AddRange(LocalFileRosterSource.Discover(documentsDir));
             var leagues = new List<RosterLeague>();
             foreach (var src in sources)

@@ -10,6 +10,8 @@ namespace OpenFifa.Tests.Editor
     {
         public static string StreamingAssets => Path.Combine(ProjectRoot, "Assets", "StreamingAssets");
         public static string BundledRosterPath => Path.Combine(StreamingAssets, "Rosters", BundledRosterSource.DefaultFileName);
+        public static string PremierLeaguePath =>
+            Path.Combine(StreamingAssets, "Rosters", BundledRosterSource.PacksFolderName, "premier_league.roster.json");
         public static string LinesPath => Path.Combine(StreamingAssets, "Commentary", "lines.en.json");
         public static string ExampleImportPath =>
             Path.Combine(ProjectRoot, "..", "tools", "rosters", "import_template", "examples", "example_import.roster.json");

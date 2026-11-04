@@ -1,0 +1,540 @@
+# Premier League 2026/27 squad sheets for build_premier_league.py.
+# One player per line, 12 fields separated by "|":
+#   number | first name | last name | known as (blank = last name) | positions (primary first, "/" between)
+#   | nationality | birth year | height cm | foot L/R | rating 0-99 | traits | look
+# traits: space-separated tags from TRAITS in the build script (pace quick slow aerial power engine passer vision
+#   dribbler finisher shot fk cross tackler reader creator pen shotstop sweeper dist handler), wfN / smN for
+#   weak-foot and skill-move stars, sn=NAME to override the printed shirt name (use _ for spaces). "-" = none.
+# look: skin(1 light .. 9 dark) hairStyle hairColour facialHair build
+#   hair: buzz short curly afro long_tied bald braids; colour: bk db br lb bl pb rd gr wh;
+#   facial: none stubble beard moustache; build: slim average stocky
+# Squads: end of the 2026 summer window, best effort. Ratings are OpenFootball's own estimates.
+
+@arsenal
+1|David|Raya||GK|Spain|1995|183|R|86|dist sweeper|4 short bk stubble average
+13|Kepa|Arrizabalaga|Kepa|GK|Spain|1994|186|R|79|shotstop|3 short bk stubble average
+31|Illan|Meslier||GK|France|2000|197|L|76|shotstop|2 short br none slim
+2|William|Saliba||CB|France|2001|192|R|88|reader pace|7 short bk none average
+6|Gabriel|Magalhães|Gabriel|CB|Brazil|1997|190|L|87|aerial tackler power|5 short bk beard stocky
+4|Ben|White||RB/CB|England|1997|186|R|83|reader passer|2 short db beard average
+12|Jurriën|Timber||RB/CB/LB|Netherlands|2001|179|R|84|tackler quick|7 short bk stubble average
+33|Riccardo|Calafiori||LB/CB|Italy|2002|188|L|82|passer tackler|3 short db beard average
+5|Piero|Hincapié||LB/CB|Ecuador|2002|184|L|83|tackler pace|6 short bk stubble average
+3|Cristhian|Mosquera||CB|Spain|2004|188|R|79|reader pace|6 short bk none slim
+22|Ezri|Konsa||CB/RB|England|1997|183|R|83|reader pace|7 short bk stubble average
+49|Myles|Lewis-Skelly||LB/CM|England|2006|178|L|79|dribbler engine|7 short bk none slim
+41|Declan|Rice||CDM/CM|England|1999|188|R|88|engine tackler passer fk|2 short br none average
+36|Martín|Zubimendi||CDM|Spain|1999|181|R|86|passer reader|3 short db stubble average
+39|Bruno|Guimarães||CM/CDM|Brazil|1997|182|R|86|passer creator engine|5 short bk beard average
+8|Martin|Ødegaard||CAM/CM|Norway|1998|178|L|87|creator vision fk wf3 sm4|2 short lb none slim
+23|Mikel|Merino||CM/ST|Spain|1996|189|L|82|aerial engine|3 short bk stubble average
+10|Eberechi|Eze||CAM/LW|England|1998|178|R|85|dribbler shot fk sm5 wf4|7 short bk stubble slim
+56|Max|Dowman||RW/CAM|England|2009|172|L|72|dribbler sm4|2 short db none slim
+7|Bukayo|Saka||RW|England|2001|178|L|89|dribbler cross pen sm4|7 short bk none average
+20|Noni|Madueke||RW/LW|England|2002|182|L|81|dribbler pace sm4|7 short bk none slim
+11|Gabriel|Martinelli||LW|Brazil|2001|178|R|82|pace finisher|5 curly bk none slim
+19|Christos|Tzolis||LW/RW|Greece|2002|180|L|80|dribbler shot|3 short bk none slim
+14|Viktor|Gyökeres||ST|Sweden|1998|187|R|86|power finisher pen|2 short db beard stocky
+29|Kai|Havertz||ST/CAM|Germany|1999|193|L|83|aerial finisher|2 short lb none average
+
+@aston-villa
+23|Emiliano|Martínez||GK|Argentina|1992|195|R|85|shotstop|3 short br beard average
+1|Zion|Suzuki||GK|Japan|2002|190|R|78|shotstop|7 buzz bk none average
+25|Robin|Olsen||GK|Sweden|1990|196|R|72|handler|1 bald bk beard average
+2|Matty|Cash||RB|Poland|1997|185|R|80|engine tackler|2 short db beard average
+21|Aaron|Wan-Bissaka||RB|England|1997|183|R|79|tackler|8 short bk beard average
+4|Taylor|Harwood-Bellis||CB|England|2002|188|R|79|aerial reader|1 short lb none average
+14|Pau|Torres||CB|Spain|1997|191|L|83|passer reader|2 short br stubble average
+5|Tyrone|Mings||CB|England|1993|196|L|77|aerial power|7 short bk beard stocky
+22|Ian|Maatsen||LB|Netherlands|2002|167|L|80|pace dribbler|7 curly bk none slim
+3|Matteo|Ruggeri||LB|Italy|2002|187|L|79|cross|2 short db stubble average
+8|Leon|Goretzka||CM/CDM|Germany|1995|189|R|82|power shot engine|2 short br beard stocky
+7|John|McGinn||CM/LM|Scotland|1994|178|L|81|engine shot|2 short br beard stocky
+44|Boubacar|Kamara||CDM|France|1999|184|R|82|tackler reader|7 short bk stubble average
+24|Amadou|Onana||CDM/CM|Belgium|2001|195|R|80|power tackler|8 short bk none average
+15|João|Gomes||CDM/CM|Brazil|2001|176|R|81|tackler engine|6 short bk stubble average
+20|Johan|Manzambi||CM/CAM|Switzerland|2005|185|R|79|dribbler engine|8 short bk none slim
+17|Modou Kéba|Cissé|Cissé|CB|Senegal|2003|190|R|74|aerial|9 short bk none average
+19|Ibrahim|Mbaye||LW/RW|Senegal|2008|180|L|74|dribbler pace sm4|8 short bk none slim
+31|Leon|Bailey||RW|Jamaica|1997|178|L|79|pace dribbler shot|8 braids bk none slim
+27|Alejandro|Garnacho||LW|Argentina|2004|180|R|80|pace dribbler sm4|3 short db none slim
+10|Emiliano|Buendía||CAM/RW|Argentina|1996|172|R|78|creator|3 short bk stubble slim
+11|Nicolas|Jackson||ST|Senegal|2001|186|R|80|pace finisher|9 short bk none slim
+6|Ross|Barkley||CM/CAM|England|1993|189|R|76|shot power|1 short lb none stocky
+26|Lamare|Bogarde||CDM/CB|Netherlands|2004|183|R|73|tackler|7 short bk none slim
+
+@bournemouth
+1|Đorđe|Petrović|Petrović|GK|Serbia|1999|194|R|79|shotstop|2 short db stubble average
+29|Michele|Di Gregorio||GK|Italy|1997|187|R|80|shotstop|2 short db beard average
+40|Will|Dennis||GK|England|2000|188|R|65|-|2 short br none slim
+15|Adam|Smith||RB|England|1991|180|R|72|tackler|2 short br beard average
+20|Juanlu|Sánchez|Juanlu|RB/RM|Spain|2003|180|R|76|pace engine|3 short bk none slim
+2|Álex|Jiménez|Jiménez|RB|Spain|2005|182|R|74|pace|3 short db none slim
+27|Bafodé|Diakité||CB|France|2001|185|R|79|reader pace|8 short bk none average
+5|James|Hill||CB|England|2002|186|R|74|aerial|2 short db none average
+25|António|Silva||CB|Portugal|2003|187|R|80|passer reader|3 short db none average
+6|Veljko|Milosavljević||CB|Serbia|2007|192|R|72|aerial|2 short br none slim
+3|Adrien|Truffert||LB|France|2001|176|L|79|cross pace|2 short db stubble slim
+23|Julio|Soler||LB|Argentina|2005|179|L|73|engine|3 short bk none slim
+4|Lewis|Cook||CDM/CM|England|1997|175|R|77|passer tackler|1 short rd beard average
+8|Alex|Scott||CM|England|2003|175|L|79|dribbler engine|2 short lb none slim
+12|Tyler|Adams||CDM|United States|1999|175|R|80|tackler reader engine|6 buzz bk none average
+10|Ryan|Christie||CM/RM|Scotland|1995|178|R|76|engine|2 short lb beard average
+16|Marcus|Tavernier||LM/CAM|England|1999|178|L|78|fk cross|2 short db stubble slim
+19|Justin|Kluivert||LW/CAM|Netherlands|1999|172|R|80|dribbler finisher sm4|6 short bk stubble slim
+7|David|Brooks||RW|Wales|1997|173|L|75|creator|1 short br stubble slim
+11|Ben|Gannon-Doak||RW|Scotland|2005|172|R|74|pace dribbler|2 short lb none slim
+21|Amine|Adli||LW/CF|Morocco|2000|174|R|77|dribbler|5 short bk stubble slim
+9|Evanilson|-|Evanilson|ST|Brazil|1999|183|R|80|finisher|5 short bk stubble average
+22|Eli Junior|Kroupi|Kroupi|ST/CAM|France|2006|175|R|75|finisher|8 short bk none slim
+18|Álvaro|Rodríguez||ST|Uruguay|2004|191|R|75|aerial power|3 short db none average
+17|Rayan|-|Rayan|RW|Brazil|2006|177|L|74|dribbler pace|6 short bk none slim
+
+@brentford
+1|Caoimhín|Kelleher||GK|Ireland|1998|188|R|82|shotstop|1 short rd none average
+12|Hákon Rafn|Valdimarsson|Valdimarsson|GK|Iceland|2001|191|R|72|-|1 short bl none average
+22|Nathan|Collins||CB|Ireland|2001|193|R|80|aerial reader|1 short br none average
+4|Sepp|van den Berg||CB|Netherlands|2001|189|R|79|aerial tackler|1 short lb none average
+20|Kristoffer|Ajer||CB/RB|Norway|1998|198|R|77|aerial|2 short db stubble average
+5|Jannik|Schuster||CB|Austria|2006|189|L|74|reader|2 short lb none slim
+33|Michael|Kayode||RB|Italy|2004|179|R|77|engine pace|8 short bk none average
+2|Aaron|Hickey||RB/LB|Scotland|2002|181|R|76|tackler|1 short br none slim
+3|Rico|Henry||LB|England|1997|170|L|76|pace|7 short bk none average
+21|El Hadji Malick|Diouf|Diouf|LB|Senegal|2004|180|L|78|pace cross|9 short bk none slim
+23|Keane|Lewis-Potter||LB/LW|England|2001|172|L|77|cross engine|2 short db stubble slim
+27|Vitaly|Janelt||CDM|Germany|1998|184|L|77|tackler passer|2 short db stubble average
+8|Mamadou|Sangaré||CDM/CM|Mali|2002|188|R|78|engine tackler|9 short bk none average
+18|Yehor|Yarmoliuk||CM|Ukraine|2004|181|R|75|engine|2 short br none slim
+24|Mikkel|Damsgaard||CAM/CM|Denmark|2000|180|R|80|creator vision fk|2 short bl none slim
+14|Fábio|Carvalho||CAM|Portugal|2002|170|L|74|dribbler|3 short db none slim
+10|Antoni|Milambo||CM|Netherlands|2005|180|R|74|creator|7 short bk none slim
+11|Jaidon|Anthony||LW/RW|England|1999|183|R|76|pace|7 short bk stubble slim
+19|Dango|Ouattara||RW/LW|Burkina Faso|2002|170|R|79|pace dribbler|9 short bk none slim
+7|Kevin|Schade||LW/ST|Germany|2001|185|R|78|pace finisher|8 short bk none slim
+9|Igor|Thiago||ST|Brazil|2001|191|R|81|power finisher aerial|6 short bk beard stocky
+13|Callum|Wilson||ST|England|1992|180|R|74|finisher|7 short bk stubble average
+26|Gustavo|Nunes||RW|Brazil|2005|170|L|70|dribbler|5 short bk none slim
+
+@brighton
+1|Bart|Verbruggen||GK|Netherlands|2002|194|R|81|sweeper dist|2 short br none average
+23|Jason|Steele||GK|England|1990|188|R|70|dist|1 short br stubble average
+5|Lewis|Dunk||CB|England|1991|192|R|79|passer aerial|1 short br beard stocky
+24|Pascal|Struijk||CB/LB|Netherlands|1999|190|L|78|aerial passer|1 short bl stubble average
+21|Olivier|Boscagli||CB|France|1997|181|L|76|passer|2 short db beard average
+4|Michael|Svoboda||CB|Austria|1998|194|L|75|aerial|1 short db stubble average
+27|Mats|Wieffer||CDM/RB|Netherlands|1999|188|R|79|passer tackler|1 short bl none average
+2|Costinha|-|Costinha|RB|Portugal|2000|180|R|77|engine cross|3 short bk none slim
+3|Ferdi|Kadıoğlu||LB/RB|Turkey|1999|174|R|79|dribbler engine|3 short bk stubble slim
+29|Maxim|De Cuyper||LB|Belgium|2000|182|L|78|cross|2 short br none slim
+17|Jaouen|Hadjam||LB|Algeria|2003|178|L|75|pace|5 short bk none slim
+26|Yasin|Ayari||CM/CDM|Sweden|2003|172|R|78|engine passer|5 short bk none slim
+13|Jack|Hinshelwood||CM/RB|England|2005|180|R|76|engine|1 short lb none slim
+20|James|Milner||CM/RB|England|1986|176|R|70|engine passer|1 short gr none average
+33|Matt|O'Riley||CAM/CM|Denmark|2000|190|L|79|creator shot|1 short lb none average
+18|Diego|Gómez||CM/CAM|Paraguay|2003|180|R|77|engine shot|4 short bk none slim
+6|Chema|Andrés||CDM/CM|Spain|2005|190|R|75|passer|2 short db none slim
+22|Kaoru|Mitoma||LW|Japan|1997|178|R|82|dribbler sm4 wf4|3 short bk none slim
+11|Yankuba|Minteh||RW|Gambia|2004|180|L|78|pace dribbler|9 short bk none slim
+10|Brajan|Gruda||RW/CAM|Germany|2004|179|R|75|dribbler|3 short db none slim
+7|Solly|March||RW/LM|England|1994|180|L|74|cross|1 short br beard average
+14|Georginio|Rutter||CF/CAM|France|2002|182|R|79|dribbler sm4|6 curly bk none slim
+25|Femi|Azeez||RW|England|2001|177|R|72|pace|8 short bk none slim
+9|Stefanos|Tzimas||ST|Greece|2006|186|R|74|finisher|2 short db none slim
+19|Charalampos|Kostoulas||ST|Greece|2007|187|R|72|finisher aerial|2 short db none slim
+30|Zadok|Yohanna||ST|Nigeria|2006|183|R|68|pace|9 short bk none slim
+
+@chelsea
+23|Emiliano|Martínez|E. Martínez|GK|Argentina|1992|195|R|84|shotstop sn=E.MARTÍNEZ|3 short br beard average
+39|Mike|Penders||GK|Belgium|2005|201|R|72|shotstop|2 short lb none average
+44|Gabriel|Slonina||GK|United States|2004|193|R|68|-|2 short br none slim
+24|Reece|James||RB/CM|England|1999|180|R|85|cross tackler power fk|6 short bk beard stocky
+27|Malo|Gusto||RB|France|2003|179|R|80|pace engine|6 short bk none slim
+2|Marco|Palestra||RB|Italy|2005|180|R|78|pace engine|2 short db none slim
+29|Wesley|Fofana||CB|France|2000|190|R|81|reader pace|7 short bk beard average
+6|Levi|Colwill||CB/LB|England|2003|187|L|82|passer reader|2 short db none average
+14|Maxence|Lacroix||CB|France|2000|190|R|81|pace tackler|7 short bk none average
+21|Jorrel|Hato||LB/CB|Netherlands|2006|182|L|79|passer pace|7 short bk none slim
+34|Josh|Acheampong||CB/RB|England|2006|187|R|72|pace|8 short bk none slim
+3|Pep|Chavarría||LB|Spain|1998|176|L|77|pace engine|3 short bk beard slim
+33|Valentín|Barco||LB/CM|Argentina|2004|170|L|77|dribbler engine|3 short db none slim
+25|Moisés|Caicedo||CDM|Ecuador|2001|178|R|87|tackler engine reader|7 short bk none average
+45|Roméo|Lavia||CDM|Belgium|2004|181|R|79|passer reader|7 short bk none slim
+4|Jordan|Henderson||CDM/CM|England|1990|182|R|74|passer engine|1 short br beard average
+16|Dário|Essugo||CDM|Portugal|2005|178|R|73|tackler|7 short bk none slim
+10|Cole|Palmer||CAM/RW|England|2002|189|L|88|creator finisher pen sm4 wf4|2 short rd none slim
+8|Morgan|Rogers||CAM/LW|England|2002|187|R|85|dribbler power sm4|6 short bk none average
+41|Estêvão|-|Estêvão|RW|Brazil|2007|176|L|82|dribbler sm5|5 short bk none slim
+7|Pedro|Neto||RW/LW|Portugal|2000|172|L|82|pace dribbler cross|3 short bk stubble slim
+11|Jamie|Gittens||LW|England|2004|175|R|78|pace dribbler sm4|7 short bk none slim
+17|Geovany|Quenda||RW/RM|Portugal|2007|172|L|78|pace dribbler|7 short bk none slim
+20|João|Pedro||ST/CAM|Brazil|2001|182|R|84|finisher dribbler|5 short bk none slim
+9|Emmanuel|Emegha||ST|Netherlands|2003|195|R|77|aerial power|8 short bk none average
+18|Danny|Welbeck||ST|England|1990|185|R|73|finisher|7 short bk beard average
+
+@coventry
+1|Carl|Rushworth||GK|England|2001|189|R|75|shotstop|2 short br none average
+13|Ben|Wilson||GK|England|1992|190|R|68|-|2 short br beard average
+40|Daniel|Bentley||GK|England|1993|188|L|70|-|1 short br beard average
+27|Milan|van Ewijk||RB|Netherlands|2000|180|R|75|engine cross|3 short db none slim
+4|Bobby|Thomas||CB|England|2001|185|R|73|aerial|5 short bk none average
+6|Ethan|Pinnock||CB|Jamaica|1993|194|L|75|aerial power|7 short bk beard stocky
+5|Aurèle|Amenda||CB|Switzerland|2003|194|R|73|aerial|7 short bk none average
+22|Joel|Latibeaudiere||CB|Jamaica|2000|183|R|71|tackler|7 short bk beard average
+3|Jay|Dasilva||LB|England|1998|170|L|72|engine|7 short bk beard slim
+15|Luis|Binks||CB|England|2001|191|L|70|aerial|1 short br none average
+2|Stephen|Mfuni||CB|England|2006|187|R|65|-|8 short bk none slim
+8|Matt|Grimes||CDM/CM|England|1995|178|R|74|passer pen|2 short db beard average
+29|Victor|Torp||CM|Denmark|1999|181|R|72|engine shot|1 short bl none average
+14|Ben|Sheaf||CDM|England|1998|182|R|71|tackler|2 short db beard average
+19|Frank|Onyeka||CDM/CM|Nigeria|1998|183|R|74|engine tackler|9 short bk beard average
+10|Gustavo|Hamer||CM/CAM|Netherlands|1997|169|R|75|creator shot fk|3 short bk beard slim
+26|Caleb|Yirenkyi||CM|Ghana|2006|180|R|69|engine|9 short bk none slim
+7|Tatsuhiro|Sakamoto||RW|Japan|1996|171|R|71|dribbler|3 short bk none slim
+11|Ephron|Mason-Clark||LW|England|1999|180|R|72|pace|7 short bk stubble slim
+18|Loum|Tchaouna||RW|France|2003|180|L|73|dribbler|8 short bk none slim
+17|Jack|Rudoni||CAM/CM|England|2001|180|R|72|engine|2 short db none slim
+9|Ellis|Simms||ST|England|2001|183|R|72|finisher|1 short db none average
+33|Haji|Wright||ST|United States|1998|191|R|74|finisher shot|6 short bk none average
+24|Taiwo|Awoniyi||ST|Nigeria|1997|183|R|73|power aerial|9 short bk none average
+20|Brandon|Thomas-Asante||ST/LW|Ghana|1998|180|R|70|pace|8 short bk none slim
+21|Sidiki|Cherif||ST|France|2006|186|R|69|finisher|8 short bk none slim
+
+@crystal-palace
+1|Dean|Henderson||GK|England|1997|188|R|82|shotstop|1 short br beard average
+44|Walter|Benítez||GK|Argentina|1993|191|R|74|-|2 short bk beard average
+26|Chris|Richards||CB/RB|United States|2000|188|R|79|aerial tackler|6 short bk none average
+2|Takehiro|Tomiyasu||RB/CB|Japan|1998|188|R|76|tackler|3 short bk none average
+3|Tyrick|Mitchell||LB/LWB|England|1999|175|L|78|engine tackler|7 short bk stubble slim
+4|Óscar|Mingueza||RB/CB|Spain|1999|184|R|77|engine|3 short db stubble average
+21|Ben|Chilwell||LB|England|1996|178|L|73|cross|1 short br beard average
+16|Axel|Disasi||CB|France|1998|190|R|77|aerial power|8 short bk beard average
+6|Jaydee|Canvot||CB|France|2006|188|R|74|reader|8 short bk none slim
+34|Honest|Ahanor||CB|Italy|2008|190|L|71|-|8 short bk none slim
+8|Jefferson|Lerma||CDM|Colombia|1994|179|R|77|tackler engine|7 short bk beard average
+20|Adam|Wharton||CDM/CM|England|2004|179|L|83|passer vision|2 short br none slim
+19|Will|Hughes||CM|England|1995|185|L|74|passer|1 short lb beard average
+18|Daichi|Kamada||CM/CAM|Japan|1996|180|R|77|creator|3 short bk none slim
+23|Quinten|Timber||CM|Netherlands|2001|177|R|77|engine|7 short bk stubble slim
+11|Dwight|McNeil||LW/CAM|England|1999|183|L|77|cross fk|1 short lb stubble slim
+7|Ismaïla|Sarr||RW|Senegal|1998|185|R|80|pace finisher|9 short bk stubble slim
+10|Yéremy|Pino||LW/RW|Spain|2002|172|R|79|dribbler|3 short bk none slim
+29|Anan|Khalaili||RW/RB|Israel|2004|175|R|74|pace|4 short bk none slim
+17|Zavier|Gozo||RW|United States|2007|170|L|67|dribbler|7 short bk none slim
+24|Darío|Osorio||RW|Chile|2004|176|L|72|dribbler|4 short bk none slim
+14|Jean-Philippe|Mateta||ST|France|1997|192|R|82|power finisher aerial|8 short bk beard stocky
+9|Eddie|Nketiah||ST|England|1999|175|R|74|finisher|8 short bk none slim
+30|Evann|Guessand||ST/RW|Ivory Coast|2001|186|R|75|power|8 short bk none average
+
+@everton
+1|Jordan|Pickford||GK|England|1994|185|L|83|shotstop dist|1 short br none average
+12|Mark|Travers||GK|Ireland|1999|191|R|72|-|1 short br none average
+32|Jarrad|Branthwaite||CB|England|2002|195|L|81|aerial reader pace|1 short br none average
+6|James|Tarkowski||CB|England|1992|185|R|78|aerial tackler|1 short br beard stocky
+15|Jake|O'Brien||CB/RB|Ireland|2001|197|R|77|aerial|1 short br none average
+5|Michael|Keane||CB|England|1993|188|R|73|aerial|1 short br beard average
+16|Vitalii|Mykolenko||LB|Ukraine|1999|180|L|77|tackler|1 short br none slim
+3|Ainsley|Maitland-Niles||RB/CM|England|1997|177|R|73|pace|7 short bk beard slim
+37|James|Garner||CM/RB|England|2001|182|R|78|passer engine fk|1 short lb none average
+27|Idrissa|Gueye||CDM|Senegal|1989|174|R|74|tackler engine|9 bald bk beard average
+8|Christian|Nørgaard||CDM|Denmark|1994|187|R|76|passer reader|1 short bl beard average
+22|Kiernan|Dewsbury-Hall||CM/CAM|England|1998|178|R|78|engine creator|1 short br beard slim
+24|Carlos|Alcaraz||CM/CAM|Argentina|2002|181|R|74|engine|3 short bk none slim
+20|Hayden|Hackney||CM|England|2002|185|R|76|passer|1 short br none slim
+34|Merlin|Röhl||CAM/CM|Germany|2002|188|R|75|engine shot|1 short br none average
+18|Jack|Grealish||LW/CAM|England|1995|180|R|80|dribbler creator sm4|1 short br stubble average
+10|Brennan|Johnson||RW/ST|Wales|2001|179|R|79|pace finisher|5 short bk none slim
+19|Tyrique|George||LW|England|2006|180|R|74|pace dribbler|7 short bk none slim
+7|Harrison|Armstrong||CM|England|2007|180|R|69|engine|1 short br none slim
+11|Thierno|Barry||ST|France|2002|195|R|77|aerial power|8 short bk none average
+
+@fulham
+1|Bernd|Leno||GK|Germany|1992|190|R|81|shotstop dist|2 short br beard average
+23|Benjamin|Lecomte||GK|France|1991|186|R|68|-|2 short db beard average
+2|Kenny|Tete||RB|Netherlands|1995|180|R|77|tackler|7 short bk beard slim
+21|Timothy|Castagne||RB/LB|Belgium|1995|185|R|76|engine|2 short db stubble average
+5|Joachim|Andersen||CB|Denmark|1996|192|R|80|passer aerial|1 short bl stubble average
+3|Calvin|Bassey||CB/LB|Nigeria|1999|185|L|79|power tackler|8 short bk none stocky
+4|David|Affengruber||CB|Austria|2001|189|R|75|aerial|2 short br none average
+31|Jorge|Cuenca||CB|Spain|1999|190|L|73|aerial|3 short bk stubble average
+33|Antonee|Robinson||LB|United States|1997|183|L|81|pace cross engine|6 short bk none slim
+30|Ryan|Sessegnon||LB/LW|England|2000|178|L|74|pace|6 short bk none slim
+16|Sander|Berge||CDM/CM|Norway|1998|195|R|78|passer power|1 short bl none average
+24|Shea|Charles||CDM|Northern Ireland|2003|183|R|73|passer|1 short br none slim
+6|Harrison|Reed||CDM|England|1995|178|R|73|tackler engine|1 short br beard average
+10|Tom|Cairney||CM|Scotland|1991|185|L|72|passer|1 short br beard average
+32|Emile|Smith Rowe||CAM/LW|England|2000|182|R|78|creator dribbler|6 short bk none slim
+18|Andreas|Pereira||CAM/CM|Brazil|1996|178|R|77|fk creator|3 short bk beard slim
+26|Manuel|Ángel||CM|Spain|2007|178|R|66|passer|3 short bk none slim
+17|Alex|Iwobi||LW/CM|Nigeria|1996|180|R|79|creator engine|8 short bk beard average
+11|Adama|Traoré||RW|Spain|1996|178|R|75|pace power dribbler|8 short bk beard stocky
+19|Samuel|Chukwueze||RW|Nigeria|1999|172|L|76|dribbler|9 short bk none slim
+7|Kevin|-|Kevin|LW|Brazil|2003|175|L|75|dribbler sm4|5 short bk none slim
+29|César|Palacios||CAM|Spain|2004|178|R|67|creator|3 short bk none slim
+9|Rodrigo|Muniz||ST|Brazil|2001|185|R|77|finisher aerial|3 short bk none average
+14|Gonzalo|García|G. García|ST|Spain|2004|182|R|77|finisher sn=G.GARCÍA|3 short bk none slim
+20|Jonah|Kusi-Asare||ST|Sweden|2007|196|R|67|aerial|8 short bk none slim
+
+@hull
+1|Jack|Butland||GK|England|1993|196|R|74|shotstop|1 short br beard average
+13|Konstantinos|Tzolakis||GK|Greece|2002|188|R|72|-|2 short bk stubble average
+2|Lewie|Coyle||RB|England|1995|173|R|69|engine|1 short br beard average
+22|Brooke|Norton-Cuffy||RB|England|2004|180|R|73|pace|7 short bk none slim
+3|Ryan|Giles||LB|England|2000|180|L|71|cross|1 short br none slim
+33|Matt|Targett||LB|England|1995|183|L|70|cross|1 short br beard average
+5|John|Egan||CB|Ireland|1992|186|R|70|aerial|1 short br beard stocky
+6|Semi|Ajayi||CB|Nigeria|1993|193|R|71|aerial power|8 short bk beard stocky
+4|Charlie|Hughes||CB|England|2003|189|L|70|aerial|1 short br none average
+15|Nobel|Mendy||CB|France|2004|190|R|71|reader|9 short bk none slim
+26|Lucas|Herrington||CB|Australia|2007|188|L|67|-|1 short br none slim
+27|Regan|Slater||CM/CDM|England|1999|170|R|70|engine tackler|1 short br stubble slim
+18|John|Lundstram||CDM/CM|England|1994|183|R|71|passer|1 short rd beard average
+8|Hidemasa|Morita||CM|Japan|1995|177|R|75|passer|3 short bk none slim
+21|Tim|Iroegbunam||CDM|England|2003|184|R|71|tackler|8 short bk none average
+14|Lucas|Gourna-Douath||CDM|France|2003|182|R|72|tackler engine|8 short bk none slim
+20|Christos|Mouzakitis||CM|Greece|2006|175|R|70|passer|2 short db none slim
+16|Jens|Hjertø-Dahl||CM|Norway|2006|178|R|68|-|1 short bl none slim
+25|Matt|Crooks||CAM/ST|England|1994|193|R|69|aerial|1 short br beard average
+10|Mohamed|Belloumi||RW|Algeria|2002|176|L|71|dribbler|5 short bk none slim
+11|Mohamed-Ali|Cho||LW/RW|France|2004|179|R|73|pace dribbler|8 short bk none slim
+7|Sorba|Thomas||RW/LM|Wales|1999|185|L|70|cross|7 short bk stubble slim
+19|Joe|Gelhardt||ST/CAM|England|2002|175|R|70|finisher|1 short br none slim
+9|Oli|McBurnie||ST|Scotland|1996|188|R|70|aerial power|1 short br beard average
+17|Ilyas|Ansah||ST|Germany|2004|182|R|71|pace|8 short bk none slim
+23|Robinho|Vaz||ST|Portugal|2007|185|R|66|-|7 short bk none slim
+
+@ipswich
+31|Alex|Palmer||GK|England|1996|191|R|74|shotstop|1 short br beard average
+28|Christian|Walton||GK|England|1995|196|R|69|-|1 short br stubble average
+1|Kjell|Scherpen||GK|Netherlands|2000|204|R|72|-|1 short bl none average
+3|Leif|Davis||LB|England|1999|176|L|76|cross pace engine|1 short br none slim
+2|Darnell|Furlong||RB|England|1995|178|R|71|engine|7 short bk beard average
+4|Dara|O'Shea||CB|Ireland|1999|188|R|74|aerial|1 short br none average
+24|Jacob|Greaves||CB|England|2000|191|L|72|aerial passer|1 short br none average
+22|Cédric|Kipré||CB|Ivory Coast|1996|192|R|72|aerial power|8 short bk beard stocky
+5|Issa|Diop||CB|France|1997|194|R|73|aerial|8 short bk beard average
+26|Abdoul|Ouattara||RW|Ivory Coast|2004|173|R|69|pace|9 short bk none slim
+12|Jens|Cajuste||CM|Sweden|1999|184|R|74|engine|6 short bk none average
+6|Azor|Matusiwa||CDM|Netherlands|1998|180|R|74|tackler|8 short bk beard average
+8|Exequiel|Palacios||CM|Argentina|1998|177|R|80|passer engine|3 short db beard slim
+14|Florentino|Luís|Florentino|CDM|Portugal|1999|184|R|76|tackler reader|8 short bk none average
+25|Saša|Lukić||CM|Serbia|1996|183|R|73|engine|2 short db beard average
+18|Jack|Taylor||CM|Ireland|1998|185|R|70|engine|1 short br beard average
+16|Marcelino|Núñez||CM/CAM|Chile|2000|174|R|73|fk passer|3 short bk stubble slim
+7|Jaden|Philogene||LW/RW|England|2002|178|R|74|dribbler|7 short bk none slim
+47|Jack|Clarke||LW|England|2000|179|R|74|dribbler cross|1 short br none slim
+19|Julio|Enciso||CAM/RW|Paraguay|2004|170|R|76|dribbler shot|4 short bk none slim
+11|Abdul|Fatawu||RW|Ghana|2004|177|L|75|dribbler pace|9 short bk none slim
+15|Daizen|Maeda||LW|Japan|1997|173|R|76|pace engine|3 short bk none slim
+10|Zian|Flemming||CAM/ST|Netherlands|1998|186|R|72|finisher|1 short br beard average
+9|Chuba|Akpom||ST|England|1995|185|R|72|finisher|8 short bk none average
+20|Emersonn|-|Emersonn|ST|Brazil|2005|186|R|71|power|5 short bk none slim
+29|Ivan|Azón||ST|Spain|2002|187|R|71|aerial|3 short bk none average
+37|Sindre|Walle Egeli||RW|Norway|2006|180|R|67|pace|1 short bl none slim
+
+@leeds
+1|James|Trafford||GK|England|2002|196|L|79|shotstop sweeper|1 short br none average
+13|Michael|Zetterer||GK|Germany|1995|187|R|72|-|1 short br beard average
+24|Jayden|Bogle||RB|England|2000|178|R|75|engine|7 short bk beard slim
+6|Joe|Rodon||CB|Wales|1997|193|R|77|aerial tackler|1 short br stubble average
+15|Jaka|Bijol||CB|Slovenia|1999|190|R|77|aerial reader|1 short br stubble average
+4|Nico|Elvedi||CB|Switzerland|1996|189|R|76|reader|1 short br none average
+5|Tarik|Muharemović||CB/LB|Bosnia and Herzegovina|2003|188|L|75|passer|2 short db none average
+3|Gabriel|Gudmundsson||LB|Sweden|1999|180|L|74|pace|1 short bl none slim
+2|James|Justin||RB/LB|England|1998|183|R|73|tackler|6 short bk beard average
+12|Melvin|Bard||LB|France|2000|172|L|73|cross|6 short bk none slim
+8|Ethan|Ampadu||CDM/CB|Wales|2000|182|R|77|tackler reader|7 short bk none average
+18|Anton|Stach||CM/CDM|Germany|1998|194|R|77|engine shot fk|1 short br beard average
+44|Ilia|Gruev||CDM|Bulgaria|2000|183|R|72|passer|1 short br stubble average
+22|Ao|Tanaka||CM|Japan|1998|180|R|74|passer|3 short bk none slim
+21|Sean|Longstaff||CM|England|1997|181|R|72|engine|1 short br none average
+11|Brenden|Aaronson||CAM/RW|United States|2000|177|R|74|engine dribbler|1 short bl none slim
+20|Daniel|James||LW/RW|Wales|1997|170|R|75|pace|2 short br beard slim
+7|Harry|Wilson||RW|Wales|1997|173|L|77|fk shot cross|1 short br stubble slim
+19|Jean-Mattéo|Bahoya||LW|France|2005|179|R|71|dribbler pace|7 short bk none slim
+10|Noah|Okafor||LW/ST|Switzerland|2000|185|R|76|pace finisher|6 short bk none slim
+9|Dominic|Calvert-Lewin||ST|England|1997|189|R|76|aerial finisher|5 short bk beard average
+14|Lukas|Nmecha||ST|Germany|1998|185|R|72|finisher|6 short bk beard average
+
+@liverpool
+1|Alisson|Becker|Alisson|GK|Brazil|1992|193|R|87|shotstop sweeper dist|2 short db beard average
+25|Giorgi|Mamardashvili||GK|Georgia|2000|199|R|81|shotstop|2 short db none average
+28|Freddie|Woodman||GK|England|1997|188|R|67|-|1 short br stubble average
+4|Virgil|van Dijk||CB|Netherlands|1991|193|R|87|aerial reader passer|7 short bk beard stocky
+2|Joe|Gomez||CB/RB|England|1997|188|R|78|pace reader|7 short bk beard average
+5|Jérémy|Jacquet||CB|France|2005|190|R|78|reader pace|2 short db none slim
+15|Giovanni|Leoni||CB|Italy|2006|195|R|74|aerial|2 short br none slim
+3|Ronald|Araújo||CB/RB|Uruguay|1999|188|R|82|power pace tackler|5 short bk beard stocky
+30|Jeremie|Frimpong||RB/RWB|Netherlands|2000|171|R|81|pace dribbler|7 short bk none slim
+12|Conor|Bradley||RB|Northern Ireland|2003|181|R|78|engine tackler|1 short br none slim
+6|Milos|Kerkez||LB|Hungary|2003|180|L|81|pace cross engine|2 short db none slim
+10|Alexis|Mac Allister||CM/CDM|Argentina|1998|176|R|86|passer tackler|3 long_tied lb none average
+38|Ryan|Gravenberch||CDM/CM|Netherlands|2002|190|R|86|dribbler reader|7 short bk none average
+8|Dominik|Szoboszlai||CM/CAM|Hungary|2000|186|R|85|shot fk engine|2 short bl none average
+7|Florian|Wirtz||CAM/LW|Germany|2003|177|R|88|creator dribbler sm5 wf4|2 short br none slim
+33|Wataru|Endo||CDM|Japan|1993|178|R|74|tackler|3 short bk none average
+9|Alexander|Isak||ST|Sweden|1999|192|R|88|finisher dribbler sm4|7 short bk none slim
+22|Hugo|Ekitiké||ST/LW|France|2002|190|R|84|dribbler finisher sm4|6 short bk none slim
+18|Cody|Gakpo||LW|Netherlands|1999|193|R|84|shot finisher|6 short bk none average
+19|Bradley|Barcola||LW/RW|France|2002|182|R|84|pace dribbler sm4|6 short bk none slim
+14|Federico|Chiesa||RW/LW|Italy|1997|175|R|76|dribbler|2 short br stubble slim
+11|Víctor|Muñoz||LW|Spain|2003|180|R|78|pace dribbler|3 short bk none slim
+73|Rio|Ngumoha||LW|England|2008|170|R|72|dribbler pace sm4|8 short bk none slim
+
+@man-city
+25|Gianluigi|Donnarumma||GK|Italy|1999|196|R|88|shotstop|2 short bk beard average
+13|Gerónimo|Rulli||GK|Argentina|1992|189|R|78|shotstop|2 short db beard average
+30|Scott|Carson||GK|England|1985|188|R|58|-|1 bald br stubble average
+3|Rúben|Dias||CB|Portugal|1997|187|R|86|reader tackler aerial|3 short bk beard average
+24|Joško|Gvardiol||CB/LB|Croatia|2002|185|L|86|tackler passer|2 short br none average
+15|Marc|Guéhi||CB|England|2000|182|R|84|reader pace|8 short bk none average
+45|Abdukodir|Khusanov||CB|Uzbekistan|2004|186|R|79|pace power|3 short bk none average
+27|Matheus|Nunes||RB/CM|Portugal|1998|183|R|80|engine dribbler|5 short bk stubble slim
+82|Rico|Lewis||RB/CM|England|2004|169|R|79|passer|5 short bk none slim
+33|Nico|O'Reilly||LB/CM|England|2005|190|L|80|engine|2 short db none average
+21|Rayan|Aït-Nouri||LB|Algeria|2001|179|L|82|dribbler pace|5 curly bk none slim
+6|Enzo|Fernández||CM/CDM|Argentina|2001|178|R|86|passer vision shot|3 long_tied db stubble average
+8|Elliot|Anderson||CM/CDM|England|2002|179|R|84|engine tackler passer|1 short br none average
+16|Ayyoub|Bouaddi||CDM|France|2007|180|R|77|reader passer|5 short bk none slim
+18|Mateo|Kovačić||CM|Croatia|1994|177|R|80|dribbler passer|2 short db beard average
+14|Allan|-|Allan|CDM|Brazil|2004|177|R|72|tackler|5 short bk none slim
+47|Phil|Foden||CAM/LW|England|2000|171|L|86|creator dribbler shot sm4|2 short br none slim
+10|Rayan|Cherki||CAM/RW|France|2003|177|R|85|dribbler creator sm5 wf5|4 curly bk none slim
+11|Jérémy|Doku||LW|Belgium|2002|173|R|84|pace dribbler sm5|8 short bk none slim
+52|Oscar|Bobb||RW|Norway|2003|174|L|76|dribbler|7 short bk none slim
+42|Antoine|Semenyo||RW/LW|Ghana|2000|185|R|83|power shot pace|8 short bk none stocky
+17|Iliman|Ndiaye||LW/CAM|Senegal|2000|180|R|81|dribbler sm4|8 short bk none slim
+9|Erling|Haaland||ST|Norway|2000|195|L|91|finisher power pace pen|1 long_tied bl none stocky
+
+@man-united
+1|Senne|Lammens||GK|Belgium|2002|193|R|79|shotstop|2 short db none average
+23|Karl|Darlow||GK|Wales|1990|185|R|68|-|1 short br beard average
+22|Tom|Heaton||GK|England|1986|188|R|60|-|1 short br stubble average
+4|Matthijs|de Ligt||CB|Netherlands|1999|189|R|82|aerial power|1 short bl none stocky
+15|Leny|Yoro||CB|France|2005|190|R|80|reader pace|7 short bk none slim
+5|Harry|Maguire||CB|England|1993|194|R|77|aerial passer|1 short br stubble stocky
+6|Lisandro|Martínez|L. Martínez|CB/LB|Argentina|1998|175|L|82|tackler passer sn=LISANDRO|3 short db stubble stocky
+26|Ayden|Heaven||CB|England|2006|188|L|74|pace|7 short bk none slim
+2|Diogo|Dalot||RB/LB|Portugal|1999|183|R|79|engine|3 short bk beard average
+3|Noussair|Mazraoui||RB/LB|Morocco|1997|183|R|78|tackler|4 short bk beard average
+13|Patrick|Dorgu||LWB/LB|Denmark|2004|187|L|78|pace power|8 short bk none average
+24|Luke|Shaw||LB|England|1995|181|L|76|cross|1 short br stubble stocky
+8|Bruno|Fernandes|B. Fernandes|CAM/CM|Portugal|1994|179|R|86|creator vision shot pen fk sn=B.FERNANDES|3 short db stubble average
+37|Kobbie|Mainoo||CM|England|2005|175|R|80|dribbler passer|7 short bk none slim
+25|Manuel|Ugarte||CDM|Uruguay|2001|182|R|79|tackler engine|3 short bk none average
+20|Carlos|Baleba||CDM/CM|Cameroon|2004|179|R|83|engine tackler dribbler|9 short bk none average
+14|Youri|Tielemans||CM|Belgium|1997|176|R|81|passer shot|6 short bk none average
+12|Andrey|Santos||CM/CDM|Brazil|2004|180|R|78|engine|5 short bk none average
+7|Mason|Mount||CAM/CM|England|1999|181|R|77|engine creator|1 short br none slim
+19|Bryan|Mbeumo||RW|Cameroon|1999|171|L|85|finisher dribbler fk|8 short bk none slim
+10|Matheus|Cunha||LW/CF|Brazil|1999|184|R|84|dribbler shot sm4|5 short bk none average
+30|Benjamin|Šeško||ST|Slovenia|2003|195|R|82|power finisher aerial|2 short br none average
+16|Amad|Diallo|Amad|RW|Ivory Coast|2002|173|L|81|dribbler sm4|8 short bk none slim
+11|Joshua|Zirkzee||ST|Netherlands|2001|193|R|75|creator|7 short bk none average
+32|Chido|Obi||ST|Denmark|2007|186|R|67|finisher|8 short bk none slim
+28|Cristian|Orozco||RW|Colombia|2007|175|R|66|dribbler|5 short bk none slim
+
+@newcastle
+22|Nick|Pope||GK|England|1992|191|R|81|shotstop|1 short br stubble average
+1|Aaron|Ramsdale||GK|England|1998|190|R|77|dist|1 short br stubble average
+26|John|Ruddy||GK|England|1986|193|R|60|-|1 short br beard stocky
+21|Tino|Livramento||RB/LB|England|2002|182|R|80|pace engine|5 short bk none slim
+2|Amar|Dedić||RB|Bosnia and Herzegovina|2002|181|R|77|pace|2 short db none slim
+5|Fabian|Schär||CB|Switzerland|1991|186|R|77|passer shot|1 long_tied br beard average
+4|Sven|Botman||CB|Netherlands|2000|195|L|80|aerial reader|1 short br none average
+12|Malick|Thiaw||CB|Germany|2001|194|R|80|aerial pace|7 short bk none average
+33|Dan|Burn||CB/LB|England|1992|201|L|77|aerial power|1 bald br beard stocky
+3|Lewis|Hall||LB|England|2004|179|L|80|cross passer|1 short br none slim
+24|Aladji|Bamba||CB|France|2006|190|R|68|-|9 short bk none slim
+39|Nico|González|Nico|CDM/CM|Spain|2002|188|R|81|passer reader|3 short bk none slim
+7|Joelinton|-|Joelinton|CM/ST|Brazil|1996|186|R|81|power engine tackler|5 short bk beard stocky
+8|Sean|Steur||CM|Netherlands|2007|177|R|70|passer|1 short bl none slim
+41|Jacob|Ramsey||CM/CAM|England|2001|180|R|77|engine dribbler|1 short br none slim
+67|Lewis|Miley||CM|England|2006|186|R|76|passer engine|1 short br none slim
+28|Joe|Willock||CM|England|1999|186|R|74|engine|7 short bk beard slim
+11|Harvey|Barnes||LW|England|1997|174|R|78|finisher pace|2 short br stubble slim
+23|Jacob|Murphy||RW|England|1995|179|R|77|cross engine|1 short br beard average
+20|Anthony|Elanga||RW/LW|Sweden|2002|178|R|80|pace|7 short bk none slim
+17|Matias|Fernandez-Pardo||LW/ST|Belgium|2005|185|R|74|finisher|2 short db none slim
+9|Yoane|Wissa||ST|DR Congo|1996|176|R|81|finisher dribbler|8 short bk beard average
+14|Bazoumana|Touré||LW|Ivory Coast|2006|170|R|72|pace dribbler|9 short bk none slim
+18|William|Osula||ST|Denmark|2003|190|R|72|pace power|8 short bk none average
+
+@nottingham-forest
+26|Matz|Sels||GK|Belgium|1992|188|R|81|shotstop|1 short br beard average
+1|Steven|Benda||GK|Germany|1998|194|R|69|-|1 short br none average
+13|John|Victor||GK|Brazil|1996|192|R|70|-|5 short bk stubble average
+7|Neco|Williams||RB/LB|Wales|2001|183|R|77|engine|1 short br none slim
+5|Murillo|-|Murillo|CB|Brazil|2002|182|L|82|passer tackler pace|5 short bk none average
+31|Nikola|Milenković||CB|Serbia|1997|195|R|81|aerial power|2 short db beard stocky
+34|Ola|Aina||RB/LB|Nigeria|1996|184|R|78|pace tackler|8 short bk beard average
+21|Daniel|Muñoz||RB/RWB|Colombia|1996|180|R|79|engine cross|5 short bk beard average
+3|Ousmane|Diomande||CB|Ivory Coast|2003|190|R|81|reader pace|9 short bk none average
+4|Jair|Cunha||CB|Brazil|2005|190|R|73|aerial|5 short bk none slim
+37|Nicolò|Savona||RB/CB|Italy|2003|187|R|74|-|2 short db none average
+6|Ibrahim|Sangaré||CDM|Ivory Coast|1997|191|R|77|tackler power|9 short bk none average
+16|Nicolás|Domínguez||CM|Argentina|1998|179|R|76|engine|3 short bk beard average
+24|Xaver|Schlager||CDM/CM|Austria|1997|174|R|79|tackler engine|1 short br stubble average
+10|Morgan|Gibbs-White||CAM|England|2000|171|R|83|creator dribbler fk|2 short db stubble slim
+8|James|McAtee||CAM/CM|England|2002|180|R|76|creator|1 short br none slim
+14|Callum|Hudson-Odoi||LW/RW|England|2000|177|R|78|dribbler|7 short bk none slim
+11|Dan|Ndoye||RW/LW|Switzerland|2000|184|R|78|pace dribbler|7 short bk none slim
+9|Liam|Delap||ST|England|2003|186|R|78|power pace|1 short br none stocky
+20|Chris|Wood||ST|New Zealand|1991|191|R|79|aerial finisher|1 short br beard stocky
+19|Igor|Jesus||ST|Brazil|2001|188|R|77|power finisher|5 short bk none average
+15|Arnaud|Kalimuendo||ST|France|2002|175|R|76|finisher|7 short bk none slim
+
+@sunderland
+1|Robin|Roefs||GK|Netherlands|2003|192|R|78|shotstop|2 short br none slim
+22|Simon|Moore||GK|England|1990|190|R|62|-|1 short br stubble average
+32|Trai|Hume||RB|Northern Ireland|2002|182|R|75|engine|1 short br none slim
+20|Nordi|Mukiele||RB/CB|France|1997|187|R|77|tackler|8 short bk beard average
+2|Thomas|Meunier||RB|Belgium|1991|190|R|72|cross|1 short br beard average
+5|Dan|Ballard||CB|Northern Ireland|1999|188|R|75|aerial|1 short br none average
+15|Omar|Alderete||CB|Paraguay|1996|188|L|76|aerial tackler|3 short bk beard average
+13|Luke|O'Nien||CB/RB|England|1994|176|R|71|engine|1 short br beard average
+4|Kevin|Danso||CB|Austria|1998|190|R|76|power|8 short bk none average
+17|Reinildo|Mandava|Reinildo|LB|Mozambique|1994|180|L|75|tackler|9 short bk beard average
+6|Lutsharel|Geertruida||CB/RB|Netherlands|2000|183|R|75|-|7 short bk none slim
+34|Granit|Xhaka||CDM/CM|Switzerland|1992|186|L|81|passer shot vision|2 short db beard average
+27|Noah|Sadiki||CDM|DR Congo|2004|181|R|76|engine tackler|8 short bk none slim
+19|Habib|Diarra||CM|Senegal|2004|180|R|76|engine|9 short bk none slim
+28|Enzo|Le Fée||CM/CAM|France|2000|169|R|77|creator fk|2 short db none slim
+11|Chris|Rigg||CAM/CM|England|2007|177|R|73|dribbler|1 short br none slim
+7|Chemsdine|Talbi||RW|Morocco|2005|173|L|74|dribbler|4 short bk none slim
+24|Simon|Adingra||LW|Ivory Coast|2002|175|R|76|pace dribbler|9 short bk none slim
+25|Bertrand|Traoré||RW|Burkina Faso|1995|180|L|74|dribbler|9 short bk beard slim
+10|Malick|Fofana||LW|Belgium|2005|170|R|78|pace dribbler sm4|8 short bk none slim
+18|Wilson|Isidor||ST|France|2000|180|R|76|pace finisher|7 short bk none slim
+9|Brian|Brobbey||ST|Netherlands|2002|179|R|75|power|7 short bk none stocky
+29|Dayann|Méthalie||CAM|France|2003|175|R|70|-|7 short bk none slim
+21|Jules|Ahoka||LW|Belgium|2005|178|R|67|-|9 short bk none slim
+
+@tottenham
+31|Antonín|Kinský||GK|Czechia|2003|190|R|77|shotstop|1 short br none slim
+1|Martin|Dúbravka||GK|Slovakia|1989|190|R|74|-|1 short br stubble average
+40|Brandon|Austin||GK|England|1999|188|R|60|-|7 short bk none average
+23|Pedro|Porro||RB|Spain|1999|173|R|82|cross fk passer|3 short bk stubble slim
+37|Micky|van de Ven||CB|Netherlands|2001|193|L|84|pace reader|1 short bl none average
+4|Jan Paul|van Hecke||CB|Netherlands|2000|189|R|80|passer aerial|1 short br none average
+5|Tosin|Adarabioyo||CB|England|1997|196|R|77|aerial|8 short bk beard average
+6|Marcos|Senesi||CB|Argentina|1997|185|L|78|passer tackler|2 short db stubble average
+13|Destiny|Udogie||LB|Italy|2002|188|L|79|pace engine|8 short bk none slim
+26|Andy|Robertson||LB|Scotland|1994|178|L|79|cross engine|1 short br stubble average
+33|Ben|Davies||LB/CB|Wales|1993|181|L|72|-|1 short br stubble average
+14|Archie|Gray||CM/RB|England|2006|180|R|77|engine passer|1 short br none slim
+8|Sandro|Tonali||CDM/CM|Italy|2000|181|R|85|passer tackler shot|2 long_tied db beard average
+18|Mateus|Fernandes||CM|Portugal|2004|175|R|80|engine dribbler|3 short bk none slim
+30|Rodrigo|Bentancur||CM|Uruguay|1997|187|R|78|passer|3 long_tied db beard average
+38|Yves|Bissouma||CDM|Mali|1996|182|R|75|tackler|9 short bk beard average
+15|Lucas|Bergvall||CM|Sweden|2006|187|L|79|dribbler engine|1 short bl none slim
+10|James|Maddison||CAM|England|1996|175|R|80|creator fk|1 short br beard slim
+21|Dejan|Kulusevski||RW/CAM|Sweden|2000|186|L|81|creator power|1 short bl none average
+7|Xavi|Simons||CAM/LW|Netherlands|2003|179|R|82|dribbler creator sm4|5 braids bk none slim
+20|Mohammed|Kudus||RW|Ghana|2000|177|L|82|dribbler power shot sm4|9 short bk none average
+11|Sávio|-|Savinho|RW|Brazil|2004|176|L|81|dribbler pace sm4 sn=SAVINHO|5 short bk none slim
+17|Omar|Marmoush||ST/LW|Egypt|1999|183|R|82|finisher shot|5 short bk beard average
+28|Wilson|Odobert||LW|France|2004|180|R|75|dribbler|7 short bk none slim
+22|Mathys|Tel||LW/ST|France|2005|183|R|77|pace finisher|7 short bk none slim
+12|Mykhailo|Mudryk||LW|Ukraine|2001|175|R|72|pace|1 short br none slim
+9|Richarlison|de Andrade|Richarlison|ST|Brazil|1997|184|R|76|aerial finisher sn=RICHARLISON|6 short bk stubble average
+19|Dominic|Solanke||ST|England|1997|187|R|81|finisher aerial|6 short bk beard average

@@ -15,11 +15,16 @@ namespace OpenFifa.Core
         private static readonly HashSet<string> RootKeys = Set("format", "schemaVersion", "league", "provenance", "clubs");
         private static readonly HashSet<string> LeagueKeys = Set("id", "name", "shortName", "country", "season");
         private static readonly HashSet<string> ProvenanceKeys = Set("source", "fictional", "generator", "seed", "notes", "license");
-        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players");
+        private static readonly HashSet<string> ClubKeys = Set("id", "name", "shortName", "colours", "stadium", "formation", "reputation", "players", "kits");
+        private static readonly HashSet<string> KitKeys = Set("primary", "secondary", "tertiary", "pattern", "shortsColor",
+            "socksColor", "numberColor", "numberOutline");
+        private static readonly HashSet<string> AppearanceKeys = Set("skinTone", "hairStyle", "hairColor", "facialHair",
+            "heightCm", "build", "bootColor");
         private static readonly HashSet<string> ColourKeys = Set("primary", "secondary", "away");
         private static readonly HashSet<string> StadiumKeys = Set("name", "capacity");
         private static readonly HashSet<string> PlayerKeys = Set("id", "firstName", "lastName", "knownAs", "shirtNumber",
-            "nationality", "age", "heightCm", "positions", "preferredFoot", "weakFoot", "skillMoves", "attributes");
+            "nationality", "age", "heightCm", "positions", "preferredFoot", "weakFoot", "skillMoves", "attributes",
+            "squadNumber", "shirtName", "appearance");
 
         private readonly List<RosterIssue> _issues = new List<RosterIssue>();
         private readonly HashSet<string> _clubIds = new HashSet<string>(StringComparer.Ordinal);
@@ -223,6 +228,7 @@ namespace OpenFifa.Core
                 Error(Join(path, "formation"), "must be an outfield shape whose lines add up to 10, like \"4-3-3\" (got \"" + formation + "\")", club.Get("formation"));
 
             RequireInt(club, "reputation", path, RosterSchema.StarMin, RosterSchema.StarMax);
+            ValidateKits(club.Get("kits"), Join(path, "kits"));
 
             var players = club.Get("players");
             string pp = Join(path, "players");
@@ -244,6 +250,60 @@ namespace OpenFifa.Core
                 Error(pp, "needs at least one player whose first position is GK", players);
         }
 
+        private void RequireColour(JsonNode obj, string key, string path)
+        {
+            string c = RequireString(obj, key, path, 7);
+            if (c != null && !RosterSchema.IsHexColour(c))
+                Error(Join(path, key), "must be a colour like \"#1A2B3C\" (got \"" + c + "\")", obj.Get(key));
+        }
+
+        private void RequireToken(JsonNode obj, string key, string path, string[] allowed, bool optional)
+        {
+            var n = obj.Get(key);
+            if (n == null && optional) return;
+            string s = RequireString(obj, key, path, 16);
+            if (s != null && Array.IndexOf(allowed, s) < 0)
+                Error(Join(path, key), "must be one of " + string.Join(", ", allowed) + " (got \"" + s + "\")", n);
+        }
+
+        private void ValidateKits(JsonNode kits, string path)
+        {
+            if (kits == null) return;
+            if (!kits.IsObject) { Error(path, "must be an object like {\"home\": {...}, \"away\": {...}}", kits); return; }
+            if (!kits.Has("home")) Error(path, "needs at least a \"home\" kit", kits);
+            foreach (var m in kits.Members)
+            {
+                string kp = Join(path, m.Key);
+                if (Array.IndexOf(RosterKit.Slots, m.Key) < 0)
+                {
+                    Warn(kp, "unknown kit slot (ignored); use home, away, third or gk", m.Value);
+                    continue;
+                }
+                var k = m.Value;
+                if (!k.IsObject) { Error(kp, "must be an object", k); continue; }
+                WarnUnknownKeys(k, KitKeys, kp);
+                foreach (var key in new[] { "primary", "secondary", "tertiary", "shortsColor", "socksColor", "numberColor", "numberOutline" })
+                    RequireColour(k, key, kp);
+                RequireToken(k, "pattern", kp, RosterKit.Patterns, optional: false);
+            }
+        }
+
+        private void ValidateAppearance(JsonNode a, string path)
+        {
+            if (a == null) return;
+            if (!a.IsObject) { Error(path, "must be an object", a); return; }
+            WarnUnknownKeys(a, AppearanceKeys, path);
+            var tone = a.Get("skinTone");
+            if (tone != null && (!tone.IsNumber || tone.NumberValue < 0 || tone.NumberValue > 1))
+                Error(Join(path, "skinTone"), "must be a number from 0 (light) to 1 (dark) (got " + Describe(tone) + ")", tone);
+            RequireToken(a, "hairStyle", path, RosterAppearance.HairStyles, optional: true);
+            RequireToken(a, "facialHair", path, RosterAppearance.FacialHairStyles, optional: true);
+            RequireToken(a, "build", path, RosterAppearance.Builds, optional: true);
+            if (a.Has("hairColor")) RequireColour(a, "hairColor", path);
+            if (a.Has("bootColor")) RequireColour(a, "bootColor", path);
+            if (a.Has("heightCm")) CheckInt(a.Get("heightCm"), Join(path, "heightCm"), RosterSchema.HeightMinCm, RosterSchema.HeightMaxCm);
+        }
+
         private void ValidatePlayer(JsonNode p, string path, HashSet<int> shirts, ref int keepers)
         {
             WarnUnknownKeys(p, PlayerKeys, path);
@@ -256,9 +316,21 @@ namespace OpenFifa.Core
             OptionalString(p, "knownAs", path, 40);
             RequireString(p, "nationality", path, 40);
 
-            int? shirt = RequireInt(p, "shirtNumber", path, RosterSchema.ShirtMin, RosterSchema.ShirtMax);
+            // shirtNumber (v1) and squadNumber (appearance contract) name the same number: one is required, and
+            // when both are given they must agree.
+            int? shirt = null;
+            string numberKey = p.Has("shirtNumber") || !p.Has("squadNumber") ? "shirtNumber" : "squadNumber";
+            shirt = RequireInt(p, numberKey, path, RosterSchema.ShirtMin, RosterSchema.ShirtMax);
+            if (numberKey == "shirtNumber" && p.Has("squadNumber"))
+            {
+                int? squad = CheckInt(p.Get("squadNumber"), Join(path, "squadNumber"), RosterSchema.ShirtMin, RosterSchema.ShirtMax);
+                if (shirt.HasValue && squad.HasValue && squad.Value != shirt.Value)
+                    Error(Join(path, "squadNumber"), "must match shirtNumber " + shirt.Value + " (got " + squad.Value + ")", p.Get("squadNumber"));
+            }
             if (shirt.HasValue && !shirts.Add(shirt.Value))
-                Error(Join(path, "shirtNumber"), "shirt number " + shirt.Value + " is already used in this club", p.Get("shirtNumber"));
+                Error(Join(path, numberKey), "shirt number " + shirt.Value + " is already used in this club", p.Get(numberKey));
+            OptionalString(p, "shirtName", path, 24);
+            ValidateAppearance(p.Get("appearance"), Join(path, "appearance"));
 
             RequireInt(p, "age", path, RosterSchema.AgeMin, RosterSchema.AgeMax);
             RequireInt(p, "heightCm", path, RosterSchema.HeightMinCm, RosterSchema.HeightMaxCm);
