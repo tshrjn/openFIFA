@@ -37,6 +37,9 @@ namespace OpenFifa.Gameplay
         /// <summary>Raised with true when the game moves onto a monitor and false when it comes back to the iPad.</summary>
         public static event Action<bool> ExternalDisplayChanged;
 
+        /// <summary>Raised when a canvas is moved to another display (args: canvas, new target display), e.g. to redo safe-area layout.</summary>
+        public static event Action<Canvas, int> CanvasRouted;
+
         /// <summary>Test seam: overrides Display.displays.Length and skips native display calls.</summary>
         internal static Func<int> DisplayCountOverride;
 
@@ -57,9 +60,11 @@ namespace OpenFifa.Gameplay
         private bool _simulated;
         private int _gameDisplay = ExternalIndex;
         private int _knownDisplayCount;
+        private int _lastCameraCount = -1;
         private float _nextPoll;
         private float _delayedRouteAt = -1f;
         private int _attachAttemptsLeft;
+        private bool _attachFailed;
         private int _frameRate;
         private DeviceThermalLevel _thermal;
         private PixelSize _nativeSize;
@@ -135,6 +140,9 @@ namespace OpenFifa.Gameplay
 
             // Default: the iPad shows only its own UI, so all GPU time goes to the monitor.
             _mode = (ExternalDisplayMode)Mathf.Clamp(PlayerPrefs.GetInt(ModePrefKey, (int)ExternalDisplayMode.ControllerOnly), 0, 2);
+            // Review/QA override: -ofExternalDisplayMode companion|mirror|controlleronly (not persisted).
+            var modeArg = ArgValue("-ofExternalDisplayMode");
+            if (modeArg != null && Enum.TryParse(modeArg, true, out ExternalDisplayMode argMode)) _mode = argMode;
             Display.onDisplaysUpdated += OnDisplaysUpdated;
             SceneManager.sceneLoaded += OnSceneLoaded;
 
@@ -157,6 +165,14 @@ namespace OpenFifa.Gameplay
             SceneManager.sceneLoaded -= OnSceneLoaded;
             if (_active) Deactivate();
             Instance = null;
+        }
+
+        private static string ArgValue(string name)
+        {
+            var args = Environment.GetCommandLineArgs();
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i] == name) return args[i + 1];
+            return null;
         }
 
         private static bool TryParseSimulation(out int width, out int height)
@@ -188,8 +204,18 @@ namespace OpenFifa.Gameplay
 
         private void Update()
         {
+            // Display.displays is a cached array: this compare is a field read, no native call or allocation.
             if (!_simulated && DisplayCount != _knownDisplayCount) Evaluate();
-            if (!_active) return;
+            if (!_active)
+            {
+                // Monitor present but no external scene yet (it can connect a moment after the screen): keep checking.
+                if (!_simulated && _knownDisplayCount > ExternalIndex && !_attachFailed && Time.unscaledTime >= _nextPoll)
+                {
+                    _nextPoll = Time.unscaledTime + PollInterval;
+                    Evaluate();
+                }
+                return;
+            }
 
             if (_attachAttemptsLeft > 0 && UsesNativeDisplays)
             {
@@ -199,8 +225,13 @@ namespace OpenFifa.Gameplay
                 }
                 else if (--_attachAttemptsLeft == 0)
                 {
-                    Debug.LogWarning("[ExternalDisplay] Unity's external window never reached the external-display scene; " +
-                                     $"monitor may stay black (scene present: {ExternalDisplayNative.HasExternalScene})");
+                    // Never reached the external scene (mirroring, Stage Manager, or a shell without the role):
+                    // put the game back on the iPad rather than rendering to a display nobody sees.
+                    Debug.LogWarning("[ExternalDisplay] Unity's external window never reached the external-display scene " +
+                                     $"(scene present: {ExternalDisplayNative.HasExternalScene}); staying on the iPad screen");
+                    _attachFailed = true;
+                    Deactivate();
+                    return;
                 }
             }
 
@@ -213,7 +244,20 @@ namespace OpenFifa.Gameplay
             if (Time.unscaledTime >= _nextPoll)
             {
                 _nextPoll = Time.unscaledTime + PollInterval;
-                RouteScene();
+
+                // The monitor can go away without UIKit posting a screen-disconnect (e.g. when we registered it
+                // through the scene). The external scene disappearing is the reliable signal.
+                if (UsesNativeDisplays && ExternalDisplayNative.IsSupported && !ExternalDisplayNative.HasExternalScene)
+                {
+                    Deactivate();
+                    return;
+                }
+
+                // New full-screen cameras are cheap to detect; canvases are rerouted on scene load, connect and
+                // RequestRoute(), and existing ones are re-checked for touchability below without a scene search.
+                if (Camera.allCamerasCount != _lastCameraCount) RouteScene();
+                else RecheckKnownCanvases();
+
                 var thermal = (DeviceThermalLevel)Mathf.Clamp(ExternalDisplayNative.ThermalState, 0, 3);
                 if (thermal != _thermal)
                 {
@@ -223,6 +267,14 @@ namespace OpenFifa.Gameplay
             }
 
             if (_governor.AddFrame(FrameWorkSeconds())) ApplyRenderResolution();
+        }
+
+        /// <summary>
+        /// Ask for a routing pass now, e.g. right after building a HUD or menu canvas while a monitor is connected.
+        /// </summary>
+        public void RequestRoute()
+        {
+            if (_active) RouteScene();
         }
 
         private void LateUpdate()
@@ -239,9 +291,15 @@ namespace OpenFifa.Gameplay
         private void Evaluate()
         {
             if (_simulated) return;
-            _knownDisplayCount = DisplayCount;
-            bool connected = _knownDisplayCount > ExternalIndex;
-            if (connected && !_active) Activate();
+            int count = DisplayCount;
+            if (count != _knownDisplayCount) _attachFailed = false; // a new plug event gets a fresh attempt
+            _knownDisplayCount = count;
+            bool connected = count > ExternalIndex;
+            // On iPad, only take over when iPadOS handed us an external-display scene. Without one the system is
+            // mirroring or the monitor is a Stage Manager desktop, where the game window lives wherever the user puts it.
+            if (connected && UsesNativeDisplays && ExternalDisplayNative.IsSupported && !ExternalDisplayNative.HasExternalScene)
+                connected = false;
+            if (connected && !_active && !_attachFailed) Activate();
             else if (!connected && _active) Deactivate();
         }
 
@@ -311,7 +369,7 @@ namespace OpenFifa.Gameplay
 
             foreach (var pair in _routedCanvases)
             {
-                if (pair.Key != null) pair.Key.targetDisplay = pair.Value;
+                if (pair.Key != null) MoveCanvas(pair.Key, pair.Value);
             }
             _routedCanvases.Clear();
             _deviceCanvases.Clear();
@@ -376,6 +434,8 @@ namespace OpenFifa.Gameplay
                 cam.rect = new Rect(_viewport.X, _viewport.Y, _viewport.Width, _viewport.Height);
             }
 
+            _lastCameraCount = Camera.allCamerasCount;
+
             var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var canvas in canvases)
             {
@@ -388,11 +448,46 @@ namespace OpenFifa.Gameplay
                     continue;
                 }
                 _routedCanvases[canvas] = canvas.targetDisplay;
-                canvas.targetDisplay = _gameDisplay;
+                MoveCanvas(canvas, _gameDisplay);
             }
 
             PruneDestroyed();
+            RecheckKnownCanvases();
             if (_primaryGameCamera == null) _primaryGameCamera = FindPrimaryGameCamera();
+        }
+
+        /// <summary>
+        /// Touchability can change after a canvas was placed (a HUD gains a button, a menu loses its buttons), so
+        /// known canvases are re-checked on every routing pass and poll without searching the scene.
+        /// </summary>
+        private void RecheckKnownCanvases()
+        {
+            _canvasKeys.Clear();
+            foreach (var canvas in _routedCanvases.Keys)
+                if (canvas != null && StaysOnDevice(canvas)) _canvasKeys.Add(canvas);
+            foreach (var canvas in _canvasKeys)
+            {
+                MoveCanvas(canvas, _routedCanvases[canvas]);
+                _routedCanvases.Remove(canvas);
+                _deviceCanvases.Add(canvas);
+            }
+
+            _canvasKeys.Clear();
+            foreach (var canvas in _deviceCanvases)
+                if (canvas != null && !StaysOnDevice(canvas)) _canvasKeys.Add(canvas);
+            foreach (var canvas in _canvasKeys)
+            {
+                _deviceCanvases.Remove(canvas);
+                _routedCanvases[canvas] = canvas.targetDisplay;
+                MoveCanvas(canvas, _gameDisplay);
+            }
+        }
+
+        private static void MoveCanvas(Canvas canvas, int display)
+        {
+            if (canvas.targetDisplay == display) return;
+            canvas.targetDisplay = display;
+            CanvasRouted?.Invoke(canvas, display);
         }
 
         /// <summary>

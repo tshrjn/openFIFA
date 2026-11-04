@@ -188,15 +188,12 @@ namespace OpenFifa.Gameplay
             DisplayChanged?.Invoke(display.name);
         }
 
-        private int MinExternalHeight
-        {
-            get
-            {
-                int min = int.MaxValue;
-                foreach (int h in _config.TierHeights) if (h < min) min = h;
-                return min;
-            }
-        }
+        /// <summary>
+        /// An external display at least this tall is preferred over the built-in panel. 1080 rather than 1440 because
+        /// macOS may report a HiDPI monitor in points (a 4K panel set to "looks like 1080p"); still to be verified
+        /// on a real Mac.
+        /// </summary>
+        private int MinExternalHeight => _config.EmergencyHeight;
 
         /// <summary>
         /// Applies the governor's render height as URP render scale to the active pipeline asset (looked up each

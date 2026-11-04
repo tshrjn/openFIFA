@@ -10,8 +10,9 @@
 // external window into the scene once both exist. C# (ExternalDisplayManager) calls
 // OFExternalDisplay_AttachWindow after Display.Activate and keeps retrying, a frame at a time and with a
 // cap, until OFExternalDisplay_IsAttached reports success, because Unity may create the window a frame
-// later. Real connects/disconnects still reach Unity through UIKit's own UIScreen notifications, which
-// Unity's DisplayManager observes; nothing here re-posts them.
+// later. Connects normally reach Unity through UIKit's UIScreen notifications; when they don't, the screen is
+// registered directly here, and sceneDidDisconnect: hands the matching disconnect to Unity so the display
+// list never keeps a monitor that is gone. Nothing here posts UIKit notifications.
 
 #import <UIKit/UIKit.h>
 #include "UnityAppController.h"
@@ -20,6 +21,7 @@
 // Implemented by the trampoline's DisplayManager but not declared in its header.
 @interface DisplayManager (OFExternalDisplay)
 - (void)registerScreen:(UIScreen*)screen;
+- (void)screenDidDisconnect:(NSNotification*)notification;
 @end
 
 static BOOL OFUnityReady(void)
@@ -82,6 +84,22 @@ static BOOL OFAttachScene(UIWindowScene* scene)
         OFAttachScene((UIWindowScene*)scene);
 }
 
+// A non-interactive external-display scene is torn down when its monitor goes away. If Unity still lists the
+// screen (we registered it ourselves, so UIKit may never post the matching disconnect), run Unity's own
+// disconnect handler directly so Display.displays shrinks and the C# side moves the game back to the iPad.
+- (void)sceneDidDisconnect:(UIScene*)scene
+{
+    if (![scene isKindOfClass: [UIWindowScene class]] || !OFUnityReady())
+        return;
+    UIScreen* screen = ((UIWindowScene*)scene).screen;
+    DisplayManager* dm = [DisplayManager Instance];
+    if (screen != nil && screen != UIScreen.mainScreen && [dm displayAvailable: screen] &&
+        [dm respondsToSelector: @selector(screenDidDisconnect:)])
+    {
+        [dm screenDidDisconnect: [NSNotification notificationWithName: UIScreenDidDisconnectNotification object: screen]];
+    }
+}
+
 @end
 
 extern "C" {
@@ -128,10 +146,5 @@ void OFExternalDisplay_NativeSize(int* width, int* height)
     *height = (int)mode.size.height;
 }
 
-// NSProcessInfoThermalState: 0 nominal .. 3 critical (same signal FramePacer uses).
-int OFExternalDisplay_ThermalState(void)
-{
-    return (int)[[NSProcessInfo processInfo] thermalState];
-}
 
 }

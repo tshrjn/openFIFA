@@ -15,14 +15,15 @@ namespace OpenFifa.Gameplay
         [DllImport("__Internal")] private static extern int OFExternalDisplay_HasScene();
         [DllImport("__Internal")] private static extern int OFExternalDisplay_MaxFramesPerSecond();
         [DllImport("__Internal")] private static extern void OFExternalDisplay_NativeSize(out int width, out int height);
-        [DllImport("__Internal")] private static extern int OFExternalDisplay_ThermalState();
+        // Shared with FramePacer: defined in Plugins/iOS/OFThermalState.mm (NSProcessInfoThermalState 0..3).
+        [DllImport("__Internal")] private static extern int OFThermalState();
 
         public static bool IsSupported => true;
         public static bool AttachWindow() => OFExternalDisplay_AttachWindow() != 0;
         public static bool IsAttached => OFExternalDisplay_IsAttached() != 0;
         public static bool HasExternalScene => OFExternalDisplay_HasScene() != 0;
         public static int MaxFramesPerSecond => OFExternalDisplay_MaxFramesPerSecond();
-        public static int ThermalState => OFExternalDisplay_ThermalState();
+        public static int ThermalState => OFThermalState();
 
         public static void NativeSize(out int width, out int height) => OFExternalDisplay_NativeSize(out width, out height);
 #else

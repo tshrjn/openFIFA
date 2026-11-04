@@ -92,6 +92,44 @@ namespace OpenFifa.Tests.Runtime
             Assert.AreEqual((1f - _gameCamera.rect.width) / 2f, _gameCamera.rect.x, 0.0001f, "bars are centred");
         }
 
+        [UnityTest]
+        public IEnumerator Canvas_GainsButtonAfterRouting_MovesBackToIPad()
+        {
+            _displayCount = 2;
+            _manager = new GameObject("[ExternalDisplayManager]").AddComponent<ExternalDisplayManager>();
+            yield return null;
+            Assert.AreEqual(1, _hud.targetDisplay);
+
+            int routedTo = -1;
+            System.Action<Canvas, int> onRouted = (c, d) => { if (c == _hud) routedTo = d; };
+            ExternalDisplayManager.CanvasRouted += onRouted;
+            try
+            {
+                var button = new GameObject("Skip", typeof(RectTransform), typeof(Image), typeof(Button));
+                button.transform.SetParent(_hud.transform, false);
+                _manager.RequestRoute();
+                Assert.AreEqual(0, _hud.targetDisplay, "a canvas that became touchable returns to the iPad");
+                Assert.AreEqual(0, routedTo, "CanvasRouted reports the move (FullMatchHUD redoes its safe area)");
+            }
+            finally
+            {
+                ExternalDisplayManager.CanvasRouted -= onRouted;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator Canvas_CreatedAfterConnect_RoutedOnRequest()
+        {
+            _displayCount = 2;
+            _manager = new GameObject("[ExternalDisplayManager]").AddComponent<ExternalDisplayManager>();
+            yield return null;
+
+            var late = NewCanvas("LateScoreboard");
+            Assert.AreEqual(0, late.targetDisplay);
+            _manager.RequestRoute();
+            Assert.AreEqual(1, late.targetDisplay);
+        }
+
         private Camera NewCamera(string name, Rect rect)
         {
             var go = new GameObject(name);
