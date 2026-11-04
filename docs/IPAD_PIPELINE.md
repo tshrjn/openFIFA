@@ -1,6 +1,6 @@
 # iPad build, test and TestFlight pipeline
 
-OpenFifa is built as an **iPad-only** app from the Linux VPS, with no Mac. The pipeline reuses the owner's
+OpenFootball (repo: openFIFA) is built as an **iPad-only** app from the Linux VPS, with no Mac. The pipeline reuses the owner's
 ios-factory setup (`~/ios-factory`): the same `macos-26` runner, the same App Store Connect (ASC) API key,
 the same distribution certificate, and profile naming. Status: **written and linted but never run.** See
 "Unverified" below.
@@ -38,12 +38,12 @@ ci/ipad/ship.sh
 
 ## Settings applied at build time (IosBuild.cs)
 
-- Bundle ID `com.tshrjn.openfifa`, following ios-factory's `com.tshrjn.<slug>` convention. Override with `-ipadBundleId`.
+- Bundle ID `com.tshrjn.openfootball`, following ios-factory's `com.tshrjn.<slug>` convention. Override with `-ipadBundleId`.
 - Target device **iPad only**. **Landscape left and right only**. `UIRequiresFullScreen=YES`: a landscape-only iPad app has to opt out of multitasking.
 - IL2CPP, ARM64, Metal only, IL2CPP code generation "optimize size" to cut Xcode compile time, minimum iOS 16.0.
 - `CFBundleVersion` comes from `-ipadBuildNumber` (ship.sh passes 10-second ticks, as ios-ship does). `-ipadMarketingVersion` is optional.
 - `ITSAppUsesNonExemptEncryption=false` is written into Info.plist by the postprocess step.
-- Device export: `DeviceSDK`, with manual signing on the app target: `Apple Distribution` plus the profile `ios-factory com.tshrjn.openfifa`, which is the name ios-factory's `asc profile` creates. `UnityFramework` gets the identity but no profile. `DEVELOPMENT_TEAM` comes from the repo variable `APPLE_TEAM_ID`.
+- Device export: `DeviceSDK`, with manual signing on the app target: `Apple Distribution` plus the profile `ios-factory com.tshrjn.openfootball`, which is the name ios-factory's `asc profile` creates. `UnityFramework` gets the identity but no profile. `DEVELOPMENT_TEAM` comes from the repo variable `APPLE_TEAM_ID`.
 - Simulator export: `SimulatorSDK` with ARM64, unsigned.
 
 ## How to run (from the VPS, after the one-time steps)
@@ -83,10 +83,10 @@ ci/ipad/ship.sh --ref main --no-shots
 3. **Copy the signing secrets to openFIFA:** `ci/ipad/sync-secrets.sh` sets `DIST_P12_B64`, `DIST_P12_PASSWORD`,
    `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_P8_B64` and the variable `APPLE_TEAM_ID`. `IOS_PROFILE_B64` is set
    automatically by `ship.sh` from `asc profile` on the first upload run.
-4. **App record for `com.tshrjn.openfifa`.** Apple's API cannot create apps:
-   `~/ios-factory/bin/asc bundle com.tshrjn.openfifa "OpenFifa"`, then either `ios-apple-login` (2FA, typed by you) followed by
-   `~/ios-factory/bin/ios-create-app com.tshrjn.openfifa "OpenFifa" openfifa`, or create it on
-   appstoreconnect.apple.com (iOS, bundle `com.tshrjn.openfifa`, SKU `openfifa`). The name "OpenFifa" may be taken
+4. **App record for `com.tshrjn.openfootball`.** Apple's API cannot create apps:
+   `~/ios-factory/bin/asc bundle com.tshrjn.openfootball "OpenFootball"`, then either `ios-apple-login` (2FA, typed by you) followed by
+   `~/ios-factory/bin/ios-create-app com.tshrjn.openfootball "OpenFootball" openfootball`, or create it on
+   appstoreconnect.apple.com (iOS, bundle `com.tshrjn.openfootball`, SKU `openfootball`). The name "OpenFootball" may be taken
    or trigger trademark review. `ios-create-app` retries with a suffix. Note that ios-factory's spare `slot` records
    use other bundle IDs, so claiming one would mean changing `-ipadBundleId`.
 5. **Merge `ipad.yml` to `main` once.** `workflow_dispatch` only sees workflows on the default branch. After that,

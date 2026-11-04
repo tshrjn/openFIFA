@@ -8,8 +8,8 @@
 set -euo pipefail
 REPO=${OPENFIFA_REPO:-tshrjn/openFIFA}
 FACTORY=${IOS_FACTORY:-$HOME/ios-factory}
-BUNDLE_ID=${IPAD_BUNDLE_ID:-com.tshrjn.openfifa}
-APP_NAME=${IPAD_APP_NAME:-OpenFifa}
+BUNDLE_ID=${IPAD_BUNDLE_ID:-com.tshrjn.openfootball}
+APP_NAME=${IPAD_APP_NAME:-OpenFootball}
 ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*" >&2; }
 die() { printf '\033[1;31mxx\033[0m %s\n' "$*" >&2; exit "${2:-1}"; }
@@ -47,8 +47,8 @@ if [ $check = 0 ]; then
   [ -f "$FACTORY/.secrets/asc.env" ] || die "no App Store Connect API key in $FACTORY/.secrets (ios-factory one-time setup)" 3
   app_id=$("$ASC" app "$BUNDLE_ID" 2>/dev/null | kv app_id || true)
   [ -n "$app_id" ] || die "no App Store Connect app record for $BUNDLE_ID. Create it once:
-   $FACTORY/bin/asc bundle $BUNDLE_ID \"$APP_NAME\" && $FACTORY/bin/ios-create-app $BUNDLE_ID \"$APP_NAME\" openfifa
-   (needs a valid ios-apple-login session) or on https://appstoreconnect.apple.com/apps (iOS, bundle $BUNDLE_ID, SKU openfifa)" 10
+   $FACTORY/bin/asc bundle $BUNDLE_ID \"$APP_NAME\" && $FACTORY/bin/ios-create-app $BUNDLE_ID \"$APP_NAME\" openfootball
+   (needs a valid ios-apple-login session) or on https://appstoreconnect.apple.com/apps (iOS, bundle $BUNDLE_ID, SKU openfootball)" 10
   # Refresh the App Store profile and push it when it changed.
   "$ASC" profile "$BUNDLE_ID" "$out/AppStore.mobileprovision" >/dev/null
   sum=$(sha256sum "$out/AppStore.mobileprovision" | cut -c1-16)

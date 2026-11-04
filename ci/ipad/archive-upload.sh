@@ -4,7 +4,7 @@
 # Env: XCODE_DIR, BUNDLE_ID, PROFILE_NAME, BUILD_NUMBER, APPLE_TEAM_ID, ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH, RUNNER_TEMP.
 set -euo pipefail
 LOGS="$RUNNER_TEMP/logs"; mkdir -p "$LOGS"
-ARCHIVE="$RUNNER_TEMP/OpenFifa.xcarchive"; EXPORT="$RUNNER_TEMP/export"
+ARCHIVE="$RUNNER_TEMP/OpenFootball.xcarchive"; EXPORT="$RUNNER_TEMP/export"
 PBX="$XCODE_DIR/Unity-iPhone.xcodeproj/project.pbxproj"
 : "${APPLE_TEAM_ID:?APPLE_TEAM_ID repo variable missing}"
 grep -q "PROVISIONING_PROFILE_SPECIFIER = \"$PROFILE_NAME\"" "$PBX" || {

@@ -29,7 +29,8 @@ namespace OpenFifa.Editor
     /// </summary>
     public static class IosBuild
     {
-        public const string DefaultBundleId = "com.tshrjn.openfifa";
+        public const string DefaultBundleId = "com.tshrjn.openfootball";
+        public const string ProductName = "OpenFootball";
         public const string MinimumIosVersion = "16.0";
         public const string ProvisioningProfilePrefix = "ios-factory ";
 
@@ -122,6 +123,7 @@ namespace OpenFifa.Editor
         {
             var ios = NamedBuildTarget.iOS;
             PlayerSettings.SetApplicationIdentifier(ios, ctx.BundleId);
+            PlayerSettings.productName = ProductName;
             if (!string.IsNullOrEmpty(marketingVersion))
             {
                 PlayerSettings.bundleVersion = marketingVersion;

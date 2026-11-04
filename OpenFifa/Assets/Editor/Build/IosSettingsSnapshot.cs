@@ -12,6 +12,7 @@ namespace OpenFifa.Editor
     {
         private string _bundleId;
         private string _bundleVersion;
+        private string _productName;
         private string _buildNumber;
         private iOSTargetDevice _targetDevice;
         private UIOrientation _orientation;
@@ -41,6 +42,7 @@ namespace OpenFifa.Editor
             {
                 _bundleId = PlayerSettings.GetApplicationIdentifier(ios),
                 _bundleVersion = PlayerSettings.bundleVersion,
+                _productName = PlayerSettings.productName,
                 _buildNumber = PlayerSettings.iOS.buildNumber,
                 _targetDevice = PlayerSettings.iOS.targetDevice,
                 _orientation = PlayerSettings.defaultInterfaceOrientation,
@@ -70,6 +72,7 @@ namespace OpenFifa.Editor
             var ios = NamedBuildTarget.iOS;
             PlayerSettings.SetApplicationIdentifier(ios, _bundleId);
             PlayerSettings.bundleVersion = _bundleVersion;
+            PlayerSettings.productName = _productName;
             PlayerSettings.iOS.buildNumber = _buildNumber;
             PlayerSettings.iOS.targetDevice = _targetDevice;
             PlayerSettings.defaultInterfaceOrientation = _orientation;
