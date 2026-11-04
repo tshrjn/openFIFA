@@ -178,6 +178,9 @@ namespace OpenFifa.Tests.Editor.Integration
         private struct LevelStats
         {
             public int HumanGoals, AIGoals, AIShots, HumanShots, AIPasses, AIPassesCompleted;
+            /// <summary>Shots on target faced by each keeper: saved, or scored (a shot followed by a save or a goal
+            /// before any other pass, tackle, interception, woodwork or out-of-play).</summary>
+            public int UserGkSaved, UserGkConceded, AIGkSaved, AIGkConceded;
             public float AIPossession;
             public float AIPassRate => AIPasses > 0 ? AIPassesCompleted / (float)AIPasses : 0f;
         }
@@ -189,12 +192,14 @@ namespace OpenFifa.Tests.Editor.Integration
             var s = NewSession(level, seed, half);
             var bot = new ScriptedGamepadBot();
             finite = true;
+            bool userShotLive = false, aiShotLive = false;
             int guard = 0;
             while (!s.IsFinished)
             {
                 var ev = s.StepOnce(bot);
                 for (int i = 0; i < ev.Count; i++)
                 {
+                    TrackShot(ev[i], ref st, ref userShotLive, ref aiShotLive);
                     if (ev[i].Team != SimTeam.Away) continue;
                     if (ev[i].Type == MatchEventType.Pass) st.AIPasses++;
                     else if (ev[i].Type == MatchEventType.PassCompleted) st.AIPassesCompleted++;
@@ -209,6 +214,34 @@ namespace OpenFifa.Tests.Editor.Integration
             st.HumanShots = r.HomeShots;
             st.AIPossession = 1f - r.HomePossession;
             return st;
+        }
+
+        /// <summary>Shot-outcome bookkeeping for the keeper save rate (the user is Home, the AI Away).</summary>
+        private static void TrackShot(in MatchEvent e, ref LevelStats st, ref bool userShotLive, ref bool aiShotLive)
+        {
+            switch (e.Type)
+            {
+                case MatchEventType.Shot:
+                    if (e.Team == SimTeam.Home) userShotLive = true; else if (e.Team == SimTeam.Away) aiShotLive = true;
+                    break;
+                case MatchEventType.Save:
+                    if (e.Team == SimTeam.Away && userShotLive) { st.AIGkSaved++; userShotLive = false; }
+                    else if (e.Team == SimTeam.Home && aiShotLive) { st.UserGkSaved++; aiShotLive = false; }
+                    break;
+                case MatchEventType.Goal:
+                    if (e.Team == SimTeam.Home && userShotLive) st.AIGkConceded++;
+                    else if (e.Team == SimTeam.Away && aiShotLive) st.UserGkConceded++;
+                    userShotLive = aiShotLive = false;
+                    break;
+                case MatchEventType.Pass:
+                case MatchEventType.OutOfPlay:
+                case MatchEventType.Interception:
+                case MatchEventType.Tackle:
+                case MatchEventType.PostHit:
+                case MatchEventType.CrossbarHit:
+                    userShotLive = aiShotLive = false;
+                    break;
+            }
         }
 
         private static bool IsFinite(SinglePlayerMatchSession s)
@@ -245,6 +278,10 @@ namespace OpenFifa.Tests.Editor.Integration
                 t.HumanShots += g.HumanShots;
                 t.AIPasses += g.AIPasses;
                 t.AIPassesCompleted += g.AIPassesCompleted;
+                t.UserGkSaved += g.UserGkSaved;
+                t.UserGkConceded += g.UserGkConceded;
+                t.AIGkSaved += g.AIGkSaved;
+                t.AIGkConceded += g.AIGkConceded;
                 t.AIPossession += g.AIPossession / seeds;
             }
             return totals;
@@ -260,12 +297,21 @@ namespace OpenFifa.Tests.Editor.Integration
         /// Fixed, representative seed set: seeds 1..24, full-length 2 x 6-minute halves, all seven levels (168 matches).
         /// Outcomes are chaotic in the seed (any parameter change reshuffles every match), so fewer seeds or shorter halves
         /// are not representative: with 4-minute halves World Class and Legendary tie on goal difference, and with seeds
-        /// 1..16 some steps shrink to +10 goals. Measured on this set (Nov 2026 ladder retune, after the keeper-delta
-        /// review), totals over 24 matches: goal difference -68 / -29 / 0 / 16 / 28 / 64 / 91 (steps 39 29 16 12 36 27) and
-        /// balance -101.0 / -39.2 / 6.2 / 49.6 / 76.6 / 131.0 / 182.4 (steps 61.8 45.4 43.4 27.0 54.4 51.4). Over 48
-        /// seeds every step is at least 2.5 standard errors of the paired difference in goal difference and 3.9 in balance.
-        /// The thresholds (each step at least 0.25 goals and 0.5 balance per match) sit at about half the smallest
-        /// measured step.
+        /// 1..16 some steps shrink to +10 goals. Measured on this set (Nov 2026 ladder retune, keeper deltas after the
+        /// save-rate review), totals over 24 matches: goal difference -68 / -29 / 1 / 18 / 35 / 65 / 94 (steps 39 30 17 17
+        /// 30 29) and balance -101.0 / -39.2 / 8.2 / 49.0 / 82.4 / 135.6 / 185.2 (steps 61.8 47.4 40.8 33.4 53.2 49.6).
+        /// Over 48 seeds every step is at least 2.5 standard errors of the paired difference in goal difference and 3.7
+        /// in balance. The thresholds (each step at least 0.25 goals and 0.5 balance per match) sit at about half the
+        /// smallest measured step.
+        /// </para>
+        /// <para>
+        /// Keeper save rate (on-target shots saved / (saved + scored)) targets 55-80% for both keepers at every level; over
+        /// 48 seeds every level sits in that band (55.1-78.1%). Each keeper is judged on this test's own seeds only when it
+        /// faced at least <see cref="MinKeeperSample"/> shots on target (Ultimate's and Legendary's AI keepers face 10-13,
+        /// so they are skipped and logged). The assertion allows for sampling error: the observed rate must lie within two
+        /// binomial standard errors (at the band edge) of the band, so a keeper only fails when its rate is clearly outside
+        /// it. Measured on seeds 1..24: user keeper 85.0% (17/20), 70.0, 54.5, 67.0, 66.1, 62.2, 60.3%; AI keeper 50.0%
+        /// (62/124), 51.3 (40/78), 63.8, 60.0 (18/30), 76.9 (20/26), skipped, skipped.
         /// </para>
         /// <para>
         /// The matches run in parallel on all cores: 3.2 minutes on 12 cores under Mono (26 CPU-minutes, so about half an hour on one
@@ -297,12 +343,39 @@ namespace OpenFifa.Tests.Editor.Integration
 
             var beg = t[(int)TeamAIDifficultyLevel.Beginner];
             var ult = t[(int)TeamAIDifficultyLevel.Ultimate];
-            // Beginner: the user clearly wins (measured 72 goals to 4); Ultimate: the AI clearly does (measured 102 to 11).
+            // Beginner: the user clearly wins (measured 72 goals to 4); Ultimate: the AI clearly does (measured 105 to 11).
             Assert.Greater(beg.HumanGoals, 2 * beg.AIGoals + seeds / 2, "the user should clearly outscore the Beginner AI");
             Assert.Greater(ult.AIGoals, 2 * ult.HumanGoals + seeds, "the Ultimate AI should clearly outscore the user");
             // Threat and the user's chances move the right way end to end.
             Assert.GreaterOrEqual(ult.AIShots, 4 * beg.AIShots, "Ultimate AI should be far more threatening than Beginner");
             Assert.Greater(beg.HumanShots, 2 * ult.HumanShots, "the user should get far more shots against Beginner");
+
+            for (int i = 0; i < t.Length; i++)
+            {
+                string name = TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i);
+                AssertSaveRate(name + " user keeper", t[i].UserGkSaved, t[i].UserGkConceded);
+                AssertSaveRate(name + " AI keeper", t[i].AIGkSaved, t[i].AIGkConceded);
+            }
+        }
+
+        /// <summary>Smallest number of on-target shots a keeper must face for its save rate to be judged.</summary>
+        private const int MinKeeperSample = 20;
+        private const float SaveRateLow = 0.55f, SaveRateHigh = 0.80f;
+
+        private static void AssertSaveRate(string who, int saved, int conceded)
+        {
+            int n = saved + conceded;
+            if (n < MinKeeperSample)
+            {
+                Log($"{who}: {saved}/{n} on-target shots saved, too few to judge (< {MinKeeperSample})");
+                return;
+            }
+            float rate = saved / (float)n;
+            float seLow = (float)Math.Sqrt(SaveRateLow * (1f - SaveRateLow) / n);
+            float seHigh = (float)Math.Sqrt(SaveRateHigh * (1f - SaveRateHigh) / n);
+            Log($"{who}: {saved}/{n} = {rate:P1} saved");
+            Assert.GreaterOrEqual(rate, SaveRateLow - 2f * seLow, $"{who} saves too few: {saved}/{n} = {rate:P1}");
+            Assert.LessOrEqual(rate, SaveRateHigh + 2f * seHigh, $"{who} saves too many: {saved}/{n} = {rate:P1}");
         }
 
         private static int GoalDifference(in LevelStats s) => s.AIGoals - s.HumanGoals;

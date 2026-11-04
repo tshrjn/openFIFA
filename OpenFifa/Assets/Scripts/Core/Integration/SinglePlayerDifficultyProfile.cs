@@ -53,8 +53,8 @@ namespace OpenFifa.Core
     public static class SinglePlayerDifficulty
     {
         //                                         Beg   Ama   Semi  Pro   WC    Leg   Ult
-        private static readonly int[] OppKeeper = { -6, -4, -2, 0, 0, 0, 1 };
-        private static readonly int[] HumanKeeper = { 0, 0, 0, 0, -3, -6, -9 };
+        private static readonly int[] OppKeeper = { -6, -2, -2, 5, 5, 5, 5 };
+        private static readonly int[] HumanKeeper = { -2, -2, -2, -2, -3, -6, -9 };
         private static readonly float[] PassAssists = { 1.0f, 0.9f, 0.8f, 0.6f, 0.5f, 0.4f, 0.35f };
         private static readonly float[] ShotAssists = { 0.95f, 0.85f, 0.75f, 0.6f, 0.5f, 0.4f, 0.35f };
         private static readonly float[] DefenceSwitch = { 18f, 22f, 26f, 0f, 0f, 0f, 0f };

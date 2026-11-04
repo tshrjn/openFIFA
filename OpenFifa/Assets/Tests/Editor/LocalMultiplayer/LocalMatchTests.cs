@@ -84,11 +84,11 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             AssertRealRatings(s, original, SimTeam.Home);
             AssertRealRatings(s, original, SimTeam.Away);
             // The team AI's cached skills are re-read too: they match a session whose ratings were never shifted.
-            var neutral = new SinglePlayerMatchSession(Options());
+            var neutral = new SimTeamAIAdapter(new MatchSim(new MatchSimConfig(), MatchSetup.CreateDefault(opts.Seed)));
             for (int id = 0; id < MatchSimState.PlayerCount; id++)
             {
-                Assert.AreEqual(neutral.AI.World.Players[id].Shooting, s.AI.World.Players[id].Shooting, 1e-6f, "shooting " + id);
-                Assert.AreEqual(neutral.AI.World.Players[id].Goalkeeping, s.AI.World.Players[id].Goalkeeping, 1e-6f, "keeping " + id);
+                Assert.AreEqual(neutral.World.Players[id].Shooting, s.AI.World.Players[id].Shooting, 1e-6f, "shooting " + id);
+                Assert.AreEqual(neutral.World.Players[id].Goalkeeping, s.AI.World.Players[id].Goalkeeping, 1e-6f, "keeping " + id);
             }
         }
 
