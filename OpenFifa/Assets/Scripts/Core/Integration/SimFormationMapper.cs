@@ -10,8 +10,7 @@ namespace OpenFifa.Core
     /// </summary>
     public static class SimFormationMapper
     {
-        private static readonly TeamAIFormation[] All =
-            { TeamAIFormation.F433, TeamAIFormation.F4231, TeamAIFormation.F442, TeamAIFormation.F352 };
+        private static readonly TeamAIFormation[] All = TeamAIFormations.All;
 
         /// <summary>
         /// Fills <paramref name="aiSlotOfSimSlot"/> (length 11) with the template slot of each sim slot and returns the

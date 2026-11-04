@@ -91,6 +91,10 @@ namespace OpenFifa.Core
         public bool IndirectFreeKick;
         /// <summary>Match clock in seconds (sim time, never wall time).</summary>
         public float Time;
+        /// <summary>Goals scored, per team (0 = home, 1 = away). Read by the manager (<see cref="TeamAIManager"/>).</summary>
+        public readonly int[] Score = new int[2];
+        /// <summary>How far through the match we are: 0 at kick-off, 0.5 at half-time, 1 at full time.</summary>
+        public float MatchProgress;
         /// <summary>Human calls to AI teammates, per team (0 = home, 1 = away). See <see cref="TeamAIUserDirectives"/>.</summary>
         public readonly TeamAIUserDirectives[] Directives = { TeamAIUserDirectives.None, TeamAIUserDirectives.None };
 

@@ -53,6 +53,12 @@ namespace OpenFifa.Core
         /// <summary>Null = fitted to the setup's kick-off shape.</summary>
         public TeamAITactics HomeTactics;
         public TeamAITactics AwayTactics;
+        /// <summary>
+        /// The AI side has a manager (<see cref="TeamAIManager.ForDifficulty"/>): mentality follows the score and the
+        /// clock, and its style is carried out in proportion to the difficulty. False keeps its tactics exactly as given
+        /// for the whole match.
+        /// </summary>
+        public bool AIManager = true;
         /// <summary>Spoken/HUD names and roster ids per sim id (0-21); optional.</summary>
         public string[] PlayerNames;
         public string[] PlayerIds;
@@ -125,6 +131,10 @@ namespace OpenFifa.Core
             Director.Brains[0].BallModel = ballModel;
             Director.Brains[1].BallModel = ballModel;
             AddHumanSlot(Options.HumanTeam);
+            // The AI side has a manager on the touchline: it changes mentality with the score and the clock. The human's
+            // AI team-mates keep the user's tactics.
+            if (Options.AIManager)
+                Director.Brains[SimTeamAIAdapter.TeamIndex(AITeam)].Manager.ForDifficulty(Profile.Ladder.OpponentTheta);
             Animation = new SimAnimActionTracker();
             Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds);
             CameraYaw = Options.CameraYaw;
