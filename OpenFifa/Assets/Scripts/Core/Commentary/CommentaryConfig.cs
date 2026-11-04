@@ -18,9 +18,9 @@ namespace OpenFifa.Core
         /// <summary>A queued analyst line older than this is dropped.</summary>
         public double MaxAnalystDelay { get; set; } = 10.0;
         /// <summary>Minimum seconds between two analyst lines.</summary>
-        public double AnalystMinGap { get; set; } = 15.0;
-        /// <summary>Chance (0..1) that a stoppage gets an analyst line at all.</summary>
-        public double AnalystChance { get; set; } = 0.65;
+        public double AnalystMinGap { get; set; } = 12.0;
+        /// <summary>Chance (0..1) that a stoppage gets an analyst line (big moments always do, unless this is 0).</summary>
+        public double AnalystChance { get; set; } = 0.8;
         /// <summary>A line is not reused within this many seconds while alternatives exist.</summary>
         public double LineRepeatWindow { get; set; } = 900.0;
         /// <summary>Minute from which a go-ahead goal counts as a late winner.</summary>
