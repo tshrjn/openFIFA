@@ -14,7 +14,7 @@ The gamepad layout follows the functional conventions of the common console foot
 | North | Y | Triangle | Through ball | — |
 | East | B | Circle | Shoot (hold to charge) | Tackle |
 | Right trigger | RT | R2 | Sprint | Sprint |
-| Left trigger | LT | L2 | Shield | Jockey |
+| Left trigger | LT | L2 | Shield; with Shoot: knuckleball | Jockey |
 | Left shoulder | LB | L1 | Modifier | Switch player (smart) |
 | Right shoulder | RB | R1 | Modifier | Hold: teammate press |
 | Right stick flick | RS | R | Skill move (8 directions) | Switch player in the flick direction |
@@ -29,12 +29,13 @@ The gamepad layout follows the functional conventions of the common console foot
 | LB + Shoot | LB + B | L1 + Circle | Chip shot |
 | RB + Shoot | RB + B | R1 + Circle | Finesse shot |
 | LB + RB + Shoot | LB + RB + B | L1 + R1 + Circle | Driven (power) shot |
+| LT + Shoot | LT + B | L2 + Circle | Knuckleball (almost no spin; wobbles and dips) |
 | RB + Pass | RB + A | R1 + Cross | Driven pass |
 | LB + Through | LB + Y | L1 + Triangle | Lobbed through ball |
 | LB + RB + Through | LB + RB + Y | L1 + R1 + Triangle | Driven through ball |
 | LB + RB + Lob | LB + RB + X | L1 + R1 + Square | Driven lob / cross |
 
-A modifier counts if it is held at any point while the kick button is down.
+A modifier counts if it is held at any point while the kick button is down. LT + Shoot takes priority over the shoulder modifiers (LT + LB + Shoot is still a knuckleball), and it only changes shots: LT with Pass, Lob or Through plays the normal kick. Because LT is also Shield, a shot struck while shielding is a knuckleball.
 
 ### Alternate preset
 
@@ -45,6 +46,7 @@ This preset puts Shoot on West (X / Square) and Lob/Cross on East (B / Circle). 
 | LB + Shoot | Finesse shot |
 | RB + Shoot | Driven shot |
 | LB + RB + Shoot | Chip shot |
+| LT + Shoot | Knuckleball (same as Classic) |
 
 Defence follows the roles in both presets: the Shoot button tackles and the Lob button slides.
 
@@ -81,11 +83,11 @@ The left side has a **floating stick**: it appears where the thumb lands in the 
 | Button | Attack | Defence |
 |---|---|---|
 | Primary | **Pass**: tap = pass, hold = more power, swipe up = lob (cross in a crossing zone) | **Switch**: tap = smart switch, swipe = switch in that direction |
-| Strike | **Shoot**: hold to charge, swipe up = chip, swipe left/right = finesse, swipe down = low shot | **Tackle**: tap = tackle, swipe = slide tackle in that direction |
+| Strike | **Shoot**: hold to charge, swipe up = chip, swipe left/right = finesse, swipe down = low shot, swipe down + Sprint tap during the charge = knuckleball | **Tackle**: tap = tackle, swipe = slide tackle in that direction |
 | Through | **Through**: tap = through ball, swipe up = lobbed through | **Press**: hold = contain, swipe up and hold = teammate press, swipe down and hold = jockey |
 | Sprint | Sprint; tap during a kick's charge = driven (see below) | Sprint |
 
-**Driven kicks.** Press a kick button first, then press Sprint while it is still down; release the kick button as usual. Pass becomes a driven pass, Shoot a driven shot and Through a driven through ball (tap kicks only; swipes keep their own meaning). Sprint has to go down at least 0.05 s after the kick button (`TouchControlScheme.DrivenSprintMinDelaySeconds`), so these do not count:
+**Driven kicks.** Press a kick button first, then press Sprint while it is still down; release the kick button as usual. Pass becomes a driven pass, Shoot a driven shot and Through a driven through ball (tap kicks only; swipes keep their own meaning, except Shoot swiped down, which becomes a knuckleball instead of a low shot). Sprint has to go down at least 0.05 s after the kick button (`TouchControlScheme.DrivenSprintMinDelaySeconds`), so these do not count:
 
 - holding Sprint while running and then pressing a kick button: normal kick;
 - pressing Sprint and the kick button together (within 0.05 s): normal kick.

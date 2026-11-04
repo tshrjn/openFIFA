@@ -28,6 +28,8 @@ namespace OpenFifa.Core
         DrivenShot,
         LowShot,
         ChipShot,
+        /// <summary>Knuckleball: struck with almost no spin so it wobbles and dips (<see cref="KickStyle.Knuckle"/>).</summary>
+        KnuckleShot,
 
         // Attack: dribbling
         SkillMove,
@@ -209,9 +211,9 @@ namespace OpenFifa.Core
             }
         }
 
-        public static bool IsKickAction(ControlAction a) => a >= ControlAction.Pass && a <= ControlAction.ChipShot;
+        public static bool IsKickAction(ControlAction a) => a >= ControlAction.Pass && a <= ControlAction.KnuckleShot;
 
-        public static bool IsShotAction(ControlAction a) => a >= ControlAction.Shoot && a <= ControlAction.ChipShot;
+        public static bool IsShotAction(ControlAction a) => a >= ControlAction.Shoot && a <= ControlAction.KnuckleShot;
     }
 
     /// <summary>Tunable feel settings shared by gamepad and touch.</summary>

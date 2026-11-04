@@ -184,6 +184,28 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
+        public void ResolveAttack_SwipeDownDriven_IsKnuckle_PlainSwipeDownIsLow()
+        {
+            Assert.AreEqual(ControlAction.KnuckleShot, TouchControlScheme.ResolveAttack(TouchSlot.Strike, TouchGesture.SwipeDown, true, false));
+            Assert.AreEqual(ControlAction.LowShot, TouchControlScheme.ResolveAttack(TouchSlot.Strike, TouchGesture.SwipeDown, false, false));
+        }
+
+        [Test]
+        public void ShootSwipeDown_WithSprintTappedDuringCharge_IsKnuckle()
+        {
+            var s = new TouchControlScheme();
+            ControlVec2 sprint = s.Layout.GetButton(TouchSlot.Sprint).Center;
+            ControlVec2 shoot = s.Layout.GetButton(TouchSlot.Strike).Center;
+            s.Tick(One(2, shoot, ControlTouchPhase.Began), ControlContext.Attack(0f));
+            s.Tick(new[] { new TouchPoint(2, shoot, ControlTouchPhase.Stationary), new TouchPoint(1, sprint, ControlTouchPhase.Began) },
+                ControlContext.Attack(0.15f));
+            s.Tick(new[] { new TouchPoint(1, sprint, ControlTouchPhase.Ended), new TouchPoint(2, shoot, ControlTouchPhase.Stationary) },
+                ControlContext.Attack(0.25f));
+            var i = s.Tick(One(2, shoot + new ControlVec2(0f, -0.1f), ControlTouchPhase.Ended), ControlContext.Attack(0.4f));
+            Assert.AreEqual(ControlAction.KnuckleShot, i.Action);
+        }
+
+        [Test]
         public void HoldToCharge_LongerHoldMorePower()
         {
             var s = new TouchControlScheme();

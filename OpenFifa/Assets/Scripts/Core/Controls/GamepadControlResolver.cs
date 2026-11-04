@@ -50,6 +50,7 @@ namespace OpenFifa.Core
         private GamepadButton _chargeButton;
         private bool _latchLeft;
         private bool _latchRight;
+        private bool _latchTrigger;
         private float _lastShootRelease = float.NegativeInfinity;
         private bool _swallowShootRelease;
         private bool _flickArmed = true;
@@ -123,6 +124,7 @@ namespace OpenFifa.Core
                         _chargeButton = b;
                         _latchLeft = lb;
                         _latchRight = rb;
+                        _latchTrigger = lt;
                     }
                 }
 
@@ -130,10 +132,11 @@ namespace OpenFifa.Core
                 {
                     _latchLeft |= lb;
                     _latchRight |= rb;
+                    _latchTrigger |= lt;
                     if ((released & _chargeButton) != 0)
                     {
                         float power = _meter.Release(ctx.Time);
-                        ControlAction action = Preset.ResolveAttack(_chargeRole, _latchLeft, _latchRight, ctx.InCrossingZone);
+                        ControlAction action = Preset.ResolveAttack(_chargeRole, _latchLeft, _latchRight, ctx.InCrossingZone, _latchTrigger);
                         _buffer.Push(action, power, intent.Move.Normalized, ctx.Time);
                         if (_chargeRole == FaceRole.Shoot) _lastShootRelease = ctx.Time;
                     }

@@ -50,6 +50,59 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
+        public void LeftTriggerShoot_IsKnuckleShot_InBothPresets()
+        {
+            var classic = new GamepadControlResolver(ControlPreset.Classic());
+            Assert.AreEqual(ControlAction.KnuckleShot,
+                PressAndRelease(classic, GamepadButton.East, GamepadButton.LeftTrigger, 0.1f).Action);
+            var alt = new GamepadControlResolver(ControlPreset.Alternate());
+            Assert.AreEqual(ControlAction.KnuckleShot,
+                PressAndRelease(alt, GamepadButton.West, GamepadButton.LeftTrigger, 0.1f).Action);
+        }
+
+        [Test]
+        public void LeftTriggerShoot_OverridesShoulderModifiers()
+        {
+            var r = new GamepadControlResolver(ControlPreset.Classic());
+            Assert.AreEqual(ControlAction.KnuckleShot,
+                PressAndRelease(r, GamepadButton.East, GamepadButton.LeftTrigger | GamepadButton.RightShoulder, 0.1f).Action);
+            Assert.AreEqual(ControlAction.KnuckleShot,
+                PressAndRelease(r, GamepadButton.East,
+                    GamepadButton.LeftTrigger | GamepadButton.LeftShoulder | GamepadButton.RightShoulder, 0.1f).Action);
+        }
+
+        [Test]
+        public void LeftTrigger_PressedDuringShotCharge_StillKnuckle()
+        {
+            var r = new GamepadControlResolver(ControlPreset.Classic());
+            float t = 1f;
+            r.Tick(new GamepadFrame(GamepadButton.East), ControlContext.Attack(t, true));
+            t += 0.1f;
+            r.Tick(new GamepadFrame(GamepadButton.East | GamepadButton.LeftTrigger), ControlContext.Attack(t, true));
+            t += Dt;
+            var fired = r.Tick(new GamepadFrame(GamepadButton.None), ControlContext.Attack(t, true));
+            Assert.AreEqual(ControlAction.KnuckleShot, fired.Action);
+        }
+
+        [Test]
+        public void LeftTrigger_DoesNotChangeOtherKicks()
+        {
+            var r = new GamepadControlResolver(ControlPreset.Classic());
+            Assert.AreEqual(ControlAction.Pass, PressAndRelease(r, GamepadButton.South, GamepadButton.LeftTrigger, 0.1f).Action);
+            Assert.AreEqual(ControlAction.ThroughBall, PressAndRelease(r, GamepadButton.North, GamepadButton.LeftTrigger, 0.1f).Action);
+            Assert.AreEqual(ControlAction.Lob, PressAndRelease(r, GamepadButton.West, GamepadButton.LeftTrigger, 0.1f).Action);
+            Assert.AreEqual(ControlAction.Shoot, PressAndRelease(r, GamepadButton.East, GamepadButton.None, 0.1f).Action);
+        }
+
+        [Test]
+        public void KnuckleShot_IsAShotKick()
+        {
+            Assert.IsTrue(ControlIntent.IsShotAction(ControlAction.KnuckleShot));
+            Assert.IsTrue(ControlIntent.IsKickAction(ControlAction.KnuckleShot));
+            Assert.IsFalse(ControlIntent.IsShotAction(ControlAction.SkillMove));
+        }
+
+        [Test]
         public void Alternate_ShotModifiers_ResolveFinesseDrivenAndChip()
         {
             var r = new GamepadControlResolver(ControlPreset.Alternate());

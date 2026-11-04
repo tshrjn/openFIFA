@@ -75,7 +75,8 @@ namespace OpenFifa.Core
                 case ControlAction.Cross: return IntentAction.Cross;
                 case ControlAction.Shoot:
                 case ControlAction.LowShot:
-                case ControlAction.ChipShot: return IntentAction.Shoot;
+                case ControlAction.ChipShot:
+                case ControlAction.KnuckleShot: return IntentAction.Shoot;
                 case ControlAction.FinesseShot: return IntentAction.FinesseShot;
                 case ControlAction.DrivenShot: return IntentAction.DrivenShot;
                 case ControlAction.Tackle: return IntentAction.Tackle;
@@ -99,6 +100,7 @@ namespace OpenFifa.Core
                 case ControlAction.LobbedThrough: return KickStyle.LobbedThrough;
                 case ControlAction.ChipShot: return KickStyle.Chip;
                 case ControlAction.LowShot: return KickStyle.Low;
+                case ControlAction.KnuckleShot: return KickStyle.Knuckle;
                 default: return KickStyle.Default;
             }
         }
@@ -106,7 +108,7 @@ namespace OpenFifa.Core
         /// <summary>
         /// Translates the control layer's output for the controlled player into a sim intent. Variants keep their base
         /// action (<see cref="MapAction"/>) and carry the difference in <see cref="PlayerIntent.Style"/>
-        /// (<see cref="MapStyle"/>): chip and low shots, driven passes, through balls and lobs, lobbed through balls.
+        /// (<see cref="MapStyle"/>): chip, low and knuckle shots, driven passes, through balls and lobs, lobbed through balls.
         /// Passes use <see cref="AimAssist.PassDirection"/> over <paramref name="teammates"/>; shots aim at a point on
         /// the opponents' goal line from <see cref="AimAssist.ShotTarget"/>.
         /// </summary>
