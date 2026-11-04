@@ -227,7 +227,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
         {
             var w = PassScenario(out int owner, out int open, out int marked);
             var from = w.Ball.Position;
-            float tOpen = TeamAIOnBall.GroundPassTime(TeamAIMath.FlatDistance(from, w.Players[open].Position));
+            float tOpen = TeamAIBallModel.Default.GroundPassTime(TeamAIMath.FlatDistance(from, w.Players[open].Position));
             float riskOpen = TeamAIOnBall.InterceptionRisk(w, 0, from, w.Players[open].Position, tOpen, false);
             float riskMarked = TeamAIOnBall.InterceptionRisk(w, 0, from, w.Players[marked].Position, tOpen, false);
             Assert.Less(riskOpen, riskMarked);

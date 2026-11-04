@@ -122,6 +122,7 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreNotSame(TeamAIBallModel.Default, brain.BallModel);
 
             var b = Rolling(wet, 14f);
+#pragma warning disable CS0618 // compares against the obsolete default-config helper on purpose
             foreach (float t in new[] { 1f, 2f, 3f, 4f, 6f })
             {
                 var truth = BallIntegrator.PredictBall(b, wet, s.Sim.Config.Pitch, t).Position;
@@ -135,6 +136,7 @@ namespace OpenFifa.Tests.Editor.Integration
             // A null model still means the default ball.
             Assert.AreEqual(TeamAIMath.PredictBall(b.Position, b.Velocity, 2f).Z,
                 TeamAIMath.PredictBall(b.Position, b.Velocity, 2f, null).Z, 1e-6f);
+#pragma warning restore CS0618
         }
 
         [Test]
