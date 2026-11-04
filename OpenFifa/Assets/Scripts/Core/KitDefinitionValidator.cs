@@ -35,7 +35,7 @@ namespace OpenFifa.Core
 
             KitVariant variant;
             if (!KitDefinitionConverter.TryParseEnum(kit.Variant, out variant))
-                errors.Add($"Kit '{label}': unknown Variant '{kit.Variant}' (expected Home, Away or Third).");
+                errors.Add($"Kit '{label}': unknown Variant '{kit.Variant}' (expected Home, Away, Third or Goalkeeper).");
 
             CheckColor(errors, label, "PrimaryColor", kit.PrimaryColor);
             CheckColor(errors, label, "SecondaryColor", kit.SecondaryColor);
