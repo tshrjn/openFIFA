@@ -28,6 +28,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public string OutputDir;
         public float Seconds = 30f;
         public int Fps = 30;
+        /// <summary>-spKitStills: after the clip, close-ups of kits (back, front) and faces (kit_*.png).</summary>
+        public bool KitStills;
 
         private SinglePlayerMatchController _c;
         private int _frame;
@@ -40,6 +42,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 if (args[i] == "-spCapture") OutputDir = args[i + 1];
                 else if (args[i] == "-spCaptureSeconds") float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Seconds);
                 else if (args[i] == "-spCaptureFps") int.TryParse(args[i + 1], out Fps);
+                if (args[i] == "-spKitStills" || args[i + 1] == "-spKitStills") KitStills = true;
             }
             _c = GetComponent<SinglePlayerMatchController>();
             if (string.IsNullOrEmpty(OutputDir))
@@ -121,12 +124,62 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 _c.BroadcastCamera.GoalSide = 1;
                 yield return ModeStill(SinglePlayerCamera.Mode.GoalArea, "still_goal_area.png");
             }
+            if (KitStills) yield return KitCloseUps();
+
             var r = _c.Session.Result;
             File.WriteAllText(Path.Combine(OutputDir, "capture.txt"),
                 $"frames={total} fps={Fps} level={_c.Level} seed={_c.Seed} goalTick={goalTick} startTick={startTick} " +
                 $"endTick={_c.Session.Sim.Tick} score={r.HomeScore}-{r.AwayScore}\n");
             Debug.Log("[capture] done");
             Application.Quit(0);
+        }
+
+        /// <summary>
+        /// Kit review stills: for a home outfielder, an away outfielder and a goalkeeper, the camera is placed behind
+        /// (name + number), in front (crest, front number) and close to the face, with the match frozen.
+        /// </summary>
+        private IEnumerator KitCloseUps()
+        {
+            var cam = _c.BroadcastCamera;
+            var camT = cam.transform;
+            var hud = GetComponent<SinglePlayerHud>();
+            bool hudWas = hud != null && hud.enabled;
+            if (hud != null) hud.enabled = false;
+            cam.enabled = false;
+            _c.Frozen = true;
+            var oldPos = camT.position;
+            var oldRot = camT.rotation;
+            var unityCam = cam.GetComponent<Camera>();
+            float oldFov = unityCam != null ? unityCam.fieldOfView : 0f;
+            int per = MatchSetup.PlayersPerTeam;
+            int[] ids = { 9, per + 7, 0, 4, per + 3, per };
+            string[] tags = { "home9", "away7", "homegk", "home4", "away3", "awaygk" };
+            for (int n = 0; n < ids.Length; n++)
+            {
+                var p = _c.PlayerTransform(ids[n]);
+                if (p == null || !p.gameObject.activeInHierarchy) continue;
+                var fwd = p.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+                var chest = p.position + Vector3.up * 1.25f;
+                var face = p.position + Vector3.up * 1.62f;
+                if (unityCam != null) unityCam.fieldOfView = 30f;
+                camT.position = chest - fwd * 2.6f + Vector3.up * 0.15f;
+                camT.LookAt(chest);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_back_{tags[n]}.png"));
+                camT.position = chest + fwd * 2.6f + Vector3.up * 0.15f;
+                camT.LookAt(chest);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_front_{tags[n]}.png"));
+                camT.position = face + fwd * 0.75f + p.right * 0.25f;
+                camT.LookAt(face);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_face_{tags[n]}.png"));
+            }
+            if (unityCam != null) unityCam.fieldOfView = oldFov;
+            camT.SetPositionAndRotation(oldPos, oldRot);
+            cam.enabled = true;
+            if (hud != null) hud.enabled = hudWas;
+            _c.Frozen = false;
         }
 
         /// <summary>Holds the sim (without the pause menu) for one frame, renders with another camera mode, saves, restores.</summary>

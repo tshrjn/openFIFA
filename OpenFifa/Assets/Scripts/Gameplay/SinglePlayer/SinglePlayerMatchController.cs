@@ -441,6 +441,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var root = new GameObject("Players").transform;
             root.SetParent(transform, false);
             _playersRoot = root;
+            bool kits = prefab != null && SinglePlayerKitDresser.Prepare(HomeClub, AwayClub);
             for (int id = 0; id < MatchSimState.PlayerCount; id++)
             {
                 bool homeTeam = id < MatchSetup.PlayersPerTeam;
@@ -460,6 +461,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     if (animator == null) animator = model.AddComponent<Animator>();
                     if (AnimatorController != null) animator.runtimeAnimatorController = AnimatorController;
                     animator.applyRootMotion = false;
+                    if (!kits || !SinglePlayerKitDresser.Dress(model, Session, HomeClub, AwayClub, id))
                     foreach (var r in model.GetComponentsInChildren<Renderer>())
                     {
                         var block = new MaterialPropertyBlock();
