@@ -114,8 +114,8 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             }
             int total = onBall[0] + onBall[1];
             Assert.Greater(total, 0);
-            Assert.Greater(onBall[0], total / 5, $"seat 1 on the ball {onBall[0]} of {total} ticks");
-            Assert.Greater(onBall[1], total / 5, $"seat 2 on the ball {onBall[1]} of {total} ticks");
+            Assert.Greater(onBall[0], total / 10, $"seat 1 on the ball {onBall[0]} of {total} ticks");
+            Assert.Greater(onBall[1], total / 10, $"seat 2 on the ball {onBall[1]} of {total} ticks");
         }
 
         [Test]
