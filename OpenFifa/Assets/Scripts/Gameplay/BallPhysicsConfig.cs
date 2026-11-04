@@ -7,7 +7,7 @@ namespace OpenFifa.Gameplay
     /// ScriptableObject holding ball physics configuration.
     /// Exposes tunable values in the Unity Inspector.
     /// </summary>
-    [CreateAssetMenu(fileName = "BallPhysicsConfig", menuName = "OpenFifa/Config/Ball Physics")]
+    [CreateAssetMenu(fileName = "BallPhysicsConfig", menuName = "OpenFootball/Config/Ball Physics")]
     public class BallPhysicsConfig : ScriptableObject
     {
         [Header("Rigidbody")]

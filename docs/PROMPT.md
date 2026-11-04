@@ -1,4 +1,4 @@
-# OpenFifa: Game Specification
+# OpenFootball: Game Specification
 
 > **This document is frozen.** It defines what we're building. Changes require explicit approval.
 > Last updated: 2026-02-27
@@ -7,7 +7,7 @@
 
 ## Game Concept
 
-**OpenFifa** is a **5v5 AAA arcade-style soccer game** for macOS (desktop). It targets premium-quality gameplay with fast, fun matches over simulation realism. Matches are short (6 minutes total), controls follow standard FIFA-style mappings (keyboard/mouse + Xbox-like gamepad), and the visual style is clean and readable.
+**OpenFootball** is a **5v5 AAA arcade-style soccer game** for macOS (desktop). It targets premium-quality gameplay with fast, fun matches over simulation realism. Matches are short (6 minutes total), controls follow standard FIFA-style mappings (keyboard/mouse + Xbox-like gamepad), and the visual style is clean and readable.
 
 The game is single-player vs AI for v1, with local multiplayer (keyboard + gamepad) as the final feature. **AAA Gameplay** is a core design goal — every interaction should feel polished, responsive, and premium.
 

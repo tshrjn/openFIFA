@@ -28,7 +28,7 @@ namespace OpenFifa.Core
     public class MenuNavigationLogic
     {
         /// <summary>Game title string.</summary>
-        public string GameTitle => "OpenFifa";
+        public string GameTitle => "OpenFootball";
 
         /// <summary>
         /// Get the target scene name for a menu button.

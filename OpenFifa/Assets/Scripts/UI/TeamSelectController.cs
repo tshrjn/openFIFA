@@ -81,7 +81,7 @@ namespace OpenFifa.UI
     /// <summary>
     /// TeamData ScriptableObject for team configuration.
     /// </summary>
-    [CreateAssetMenu(fileName = "NewTeam", menuName = "OpenFifa/Team Data")]
+    [CreateAssetMenu(fileName = "NewTeam", menuName = "OpenFootball/Team Data")]
     public class TeamData : ScriptableObject
     {
         [SerializeField] private string _teamName = "Team";

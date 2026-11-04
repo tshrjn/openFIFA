@@ -6,7 +6,7 @@ namespace OpenFifa.Gameplay
     /// <summary>
     /// ScriptableObject holding broadcast camera configuration.
     /// </summary>
-    [CreateAssetMenu(fileName = "BroadcastCameraConfig", menuName = "OpenFifa/Config/Broadcast Camera")]
+    [CreateAssetMenu(fileName = "BroadcastCameraConfig", menuName = "OpenFootball/Config/Broadcast Camera")]
     public class BroadcastCameraConfig : ScriptableObject
     {
         [Header("Camera Positioning")]

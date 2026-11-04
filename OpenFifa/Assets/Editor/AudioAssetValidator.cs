@@ -204,7 +204,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Menu item to validate all audio assets in the project.
         /// </summary>
-        [MenuItem("OpenFifa/Audio/Validate All Audio Assets")]
+        [MenuItem("OpenFootball/Audio/Validate All Audio Assets")]
         public static void ValidateAllAudioAssetsMenu()
         {
             var results = ValidateAllAudioAssets();
@@ -238,7 +238,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Menu item to validate the audio bank configurations.
         /// </summary>
-        [MenuItem("OpenFifa/Audio/Validate Audio Banks")]
+        [MenuItem("OpenFootball/Audio/Validate Audio Banks")]
         public static void ValidateAudioBanksMenu()
         {
             var config = new AudioAssetConfig();

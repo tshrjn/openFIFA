@@ -15,7 +15,7 @@ namespace OpenFifa.Editor
         private CrowdPlacementConfig _crowdConfig;
         private Vector2 _scrollPos;
 
-        [MenuItem("OpenFifa/Stadium Inspector")]
+        [MenuItem("OpenFootball/Stadium Inspector")]
         public static void ShowWindow()
         {
             var window = GetWindow<StadiumImporter>("Stadium Inspector");
