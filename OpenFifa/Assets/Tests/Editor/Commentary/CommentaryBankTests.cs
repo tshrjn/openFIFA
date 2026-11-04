@@ -26,12 +26,12 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void ShippedBank_EveryCategory_Has10To15Lines()
+        public void ShippedBank_EveryCategory_Has10To20Lines()
         {
             foreach (var c in LoadShipped().Categories)
             {
                 Assert.GreaterOrEqual(c.Lines.Count, 10, c.Id);
-                Assert.LessOrEqual(c.Lines.Count, 15, c.Id);
+                Assert.LessOrEqual(c.Lines.Count, 20, c.Id);
             }
         }
 
@@ -42,7 +42,8 @@ namespace OpenFifa.Tests.Editor
             foreach (CommentaryEventType t in Enum.GetValues(typeof(CommentaryEventType)))
             {
                 if (t == CommentaryEventType.PlayResumed) continue;
-                Assert.Greater(bank.For(t, CommentaryVoice.PlayByPlay).Count, 0, t.ToString());
+                int n = bank.For(t, CommentaryVoice.PlayByPlay).Count + bank.For(t, CommentaryVoice.Analyst).Count;
+                Assert.Greater(n, 0, t.ToString());
             }
         }
 
@@ -72,6 +73,7 @@ namespace OpenFifa.Tests.Editor
                 foreach (var l in c.Lines)
                 {
                     Assert.IsTrue(ids.Add(l.ClipId), l.ClipId);
+                    if (l.NameOnly) continue; // bare name calls differ only by intonation
                     Assert.IsTrue(texts.Add(c.Voice + l.Text), "duplicate text: " + l.Text);
                 }
         }

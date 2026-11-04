@@ -19,6 +19,7 @@ namespace OpenFifa.Core
         private readonly MatchSim _sim;
         private readonly string[] _names;
         private readonly string[] _ids;
+        private readonly string[] _teamNames;
         private readonly List<CommentaryEvent> _out = new List<CommentaryEvent>(4);
 
         private int _passCount;
@@ -38,11 +39,14 @@ namespace OpenFifa.Core
 
         /// <param name="playerNames">Spoken names (roster KnownAs) per sim id; null entries are allowed.</param>
         /// <param name="playerIds">Roster ids per sim id; may be null.</param>
-        public SimCommentaryAdapter(MatchSim sim, string[] playerNames = null, string[] playerIds = null)
+        /// <param name="teamNames">Spoken club names { home, away } for "{team}" lines; may be null.</param>
+        public SimCommentaryAdapter(MatchSim sim, string[] playerNames = null, string[] playerIds = null,
+            string[] teamNames = null)
         {
             _sim = sim;
             _names = playerNames ?? new string[MatchSimState.PlayerCount];
             _ids = playerIds ?? new string[MatchSimState.PlayerCount];
+            _teamNames = teamNames ?? new string[2];
         }
 
         /// <summary>Displayed match minute (each half maps to 45 minutes).</summary>
@@ -65,6 +69,10 @@ namespace OpenFifa.Core
                 var e = events[i];
                 switch (e.Type)
                 {
+                    case MatchEventType.KickOff: // the sim emits kick-offs as their own type, not RestartTaken
+                        _lastRestartTaken = RestartType.KickOff;
+                        Add(CommentaryEventType.KickOff, e, now, e.PlayerId);
+                        break;
                     case MatchEventType.RestartTaken:
                         _lastRestartTaken = (RestartType)e.Detail;
                         Add(e.Detail == (int)RestartType.KickOff ? CommentaryEventType.KickOff : CommentaryEventType.PlayResumed, e, now, e.PlayerId);
@@ -81,6 +89,8 @@ namespace OpenFifa.Core
                             var c = Add(CommentaryEventType.PassSequence, e, now, e.PlayerId);
                             c.PassCount = _passCount;
                         }
+                        // Receiver on the ball: name calls carry the build-up (the engine rate-limits them).
+                        else Add(CommentaryEventType.OnTheBall, e, now, e.PlayerId).PassCount = _passCount;
                         break;
                     case MatchEventType.Interception:
                     case MatchEventType.PossessionChange:
@@ -102,6 +112,9 @@ namespace OpenFifa.Core
                         _shotRestart = s.LastKickRestart;
                         var goal = new SimVec3(0f, 0f, _sim.AttackSign(e.Team) * _sim.Config.Pitch.HalfLength);
                         _shotDistance = SimMath.FlatDistance(e.Position, goal);
+                        var st = Add(CommentaryEventType.ShotTaken, e, now, e.PlayerId);
+                        st.ShotQuality = _shotXg;
+                        st.DistanceMetres = _shotDistance;
                         break;
                     case MatchEventType.Save:
                         if (_shotPending) AddShot(CommentaryEventType.ShotSaved, e, now, e.PlayerId);
@@ -115,7 +128,8 @@ namespace OpenFifa.Core
                         if (_shotPending) AddShot(CommentaryEventType.ShotWide, e, now, -1);
                         break;
                     case MatchEventType.Corner:
-                        if (_shotPending) AddShot(CommentaryEventType.ShotWide, e, now, -1);
+                        // A shot that goes out for a corner was deflected or tipped: not "wide". The corner call covers it.
+                        _shotPending = false;
                         Add(CommentaryEventType.Corner, e, now, -1);
                         break;
                     case MatchEventType.Goal:
@@ -159,6 +173,7 @@ namespace OpenFifa.Core
                 Time = now,
                 Minute = Minute(_sim),
                 Team = e.Team == SimTeam.Away ? 1 : 0,
+                TeamName = _teamNames[e.Team == SimTeam.Away ? 1 : 0],
                 HomeScore = s.HomeScore,
                 AwayScore = s.AwayScore,
             };
@@ -181,6 +196,7 @@ namespace OpenFifa.Core
             _shotPending = false;
             var c = Add(type, e, now, _shooter, keeper);
             c.Team = _shotTeam == SimTeam.Away ? 1 : 0;
+            c.TeamName = _teamNames[c.Team];
             c.ShotQuality = _shotXg;
             c.DistanceMetres = _shotDistance;
         }

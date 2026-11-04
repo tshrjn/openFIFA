@@ -2,7 +2,8 @@ namespace OpenFifa.Core
 {
     /// <summary>
     /// One pre-rendered audio file. Ids match the TTS manifest (tools/commentary/build_tts_manifest.py):
-    /// "line.&lt;lineId&gt;" for lines, "name.&lt;slug&gt;.&lt;intonation&gt;" for name call-outs.
+    /// "line.&lt;lineId&gt;" for lines, "name.&lt;slug&gt;.&lt;intonation&gt;" for player call-outs (lead voice) and
+    /// "team.&lt;slug&gt;.&lt;intonation&gt;" for club names (both voices).
     /// </summary>
     public sealed class CommentaryClip
     {
@@ -23,6 +24,9 @@ namespace OpenFifa.Core
 
         public static string NameClipId(string spokenName, CommentaryIntonation intonation) =>
             "name." + RosterSchema.Slug(spokenName) + "." + intonation.ToString().ToLowerInvariant();
+
+        public static string TeamClipId(string spokenTeam, CommentaryIntonation intonation) =>
+            "team." + RosterSchema.Slug(spokenTeam) + "." + intonation.ToString().ToLowerInvariant();
 
         public override string ToString() => ClipId;
     }

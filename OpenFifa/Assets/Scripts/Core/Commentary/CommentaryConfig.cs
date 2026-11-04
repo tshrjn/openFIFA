@@ -25,5 +25,26 @@ namespace OpenFifa.Core
         public double LineRepeatWindow { get; set; } = 900.0;
         /// <summary>Minute from which a go-ahead goal counts as a late winner.</summary>
         public int LateWinnerMinute { get; set; } = 85;
+        /// <summary>Goals up to this minute get "early_goal" lines.</summary>
+        public int EarlyGoalMinute { get; set; } = 5;
+        /// <summary>From this minute a chance for a team that is not ahead gets "late_chance" lines.</summary>
+        public int LateChanceMinute { get; set; } = 82;
+        /// <summary>From this minute lull chatter uses "late_on" lines.</summary>
+        public int LateOnMinute { get; set; } = 78;
+        /// <summary>
+        /// Seconds of silence in live play before the engine fills it (a Lull event: colour, match situation). 0 disables.
+        /// </summary>
+        public double LullSeconds { get; set; } = 11.0;
+        /// <summary>Chance (0..1) that a lull goes to the analyst rather than the lead voice (when it has lull lines).</summary>
+        public double AnalystLullShare { get; set; } = 0.55;
+        /// <summary>Analyst "live" lines (after a save, in a lull) need the lead voice quiet for this long first.</summary>
+        public double AnalystLiveQuiet { get; set; } = 1.0;
+        /// <summary>
+        /// A higher-priority line waits instead of cutting the current one when that ends within this many seconds, so
+        /// "Okafor shoots..." finishes before "...and it's saved!".
+        /// </summary>
+        public double InterruptGrace { get; set; } = 0.45;
+        /// <summary>Lead lines below this priority (name calls) never cut the analyst; they are dropped while it talks.</summary>
+        public int AnalystYieldPriority { get; set; } = 25;
     }
 }
