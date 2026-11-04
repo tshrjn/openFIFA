@@ -33,6 +33,10 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
         private readonly Dictionary<int, float> _stickX = new Dictionary<int, float>();
         private readonly Transform[] _markers = new Transform[ControllerAssignment.MaxSeats];
         private GUIStyle _big;
+        private SinglePlayerMatchSession _attached;
+        /// <summary>SinglePlayerCapture (-spCapture) starts the match itself, possibly more than once; we seat the
+        /// pads in whatever session it starts.</summary>
+        private bool _captureDrivesStart;
 
         private void Awake()
         {
@@ -41,11 +45,17 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "-lmBots") _bots = true;
+                else if (args[i] == "-spCapture") _captureDrivesStart = true;
                 else if (args[i] == "-lmAutoStart") _autoStart = true;
                 else if (args[i] == "-lmMode" && i + 1 < args.Length)
                     _botMode = args[i + 1] == "coop" ? LocalMatchMode.CoopVsAI : LocalMatchMode.HeadToHead;
             }
-            if (_match != null) _match.AutoStart = false;
+            if (_match != null)
+            {
+                _match.AutoStart = false;
+                // The capture's probe must use the same seat driver as P1, so P1's side must be set before it runs.
+                if (_bots) _match.HumanTeam = SimTeam.Home;
+            }
         }
 
         private void OnEnable() => InputSystem.onDeviceChange += OnDeviceChange;
@@ -62,7 +72,7 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
                 Controllers.Push(90002, _botMode == LocalMatchMode.CoopVsAI ? -1 : +1);
             }
             foreach (var pad in Gamepad.all) Controllers.Connect(pad.deviceId);
-            if (_autoStart || _bots) Kickoff();
+            if ((_autoStart || _bots) && !_captureDrivesStart) Kickoff();
         }
 
         private void OnDeviceChange(InputDevice device, InputDeviceChange change)
@@ -83,15 +93,15 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
 
         private void Update()
         {
+            // Started (or restarted) by someone else: the single-player picker or the review capture.
+            if (_match != null && _match.Started && _match.Session != _attached)
+            {
+                if (Controllers.CanStart && _match.Session.HumanTeam == LocalMatch.PrimaryTeam(Controllers)) Attach();
+                return;
+            }
             if (Match == null)
             {
-                // Kicked off from the single-player picker instead: seat the pads in that session if the sides fit.
-                if (_match != null && _match.Started)
-                {
-                    if (Controllers.CanStart && _match.Session.HumanTeam == LocalMatch.PrimaryTeam(Controllers)) Attach();
-                    return;
-                }
-                SideSelect();
+                if (_match == null || !_match.Started) SideSelect();
                 return;
             }
             if (Controllers.AwaitingReconnect)
@@ -149,7 +159,9 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
 
         private void Attach()
         {
+            Match?.End();
             var session = _match.Session;
+            _attached = session;
             var settings = new ControlSettings { AssistLevel = session.Profile.PassAssist };
             Match = new LocalMatch(session, Controllers, seat => InputFor(seat, settings));
             Debug.Log($"[{SinglePlayerMatchController.ProductName}] local multiplayer: {Match.Mode}, {Controllers.Seats.Count} pads");
