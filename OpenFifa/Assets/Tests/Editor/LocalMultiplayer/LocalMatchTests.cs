@@ -241,5 +241,61 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             Assert.IsFalse(s.Sim.State.Players[id].SentOff);
             Assert.AreEqual(0L, otherSeats & (1L << id), "never onto the partner's player");
         }
+
+        private static float Excursion(SinglePlayerMatchSession s, int id)
+        {
+            var p = s.Sim.State.Players[id].Position;
+            var pitch = s.Sim.Config.Pitch;
+            return System.Math.Max(System.Math.Abs(p.X) - pitch.HalfWidth, System.Math.Abs(p.Z) - pitch.HalfLength);
+        }
+
+        [Test]
+        public void Seats_NoInputFor10Seconds_StayWithinTheFieldPlus2m()
+        {
+            var m = new LocalMatch(Options(), Seats(2, 0), _ => new LocalGamepadInput());
+            var s = m.Session;
+            for (int i = 0; i < 60 * 10; i++)
+            {
+                s.StepOnce(null);
+                for (int k = 0; k < 2; k++)
+                {
+                    int id = s.HumanSlots[k].ControlledId;
+                    Assert.LessOrEqual(Excursion(s, id), 2f, $"seat {k} player {id} at {s.Sim.State.Players[id].Position}, tick {s.Sim.Tick}");
+                }
+            }
+        }
+
+        [Test]
+        public void Seats_PlayStopped_SeatPlayersWalkBackOntoThePitch()
+        {
+            // Bots chase the ball out of play; while play is stopped the guard walks them back on (the sim alone
+            // lets them stand 4 m into the run-off).
+            var m = new LocalMatch(new SinglePlayerMatchOptions
+            {
+                Level = TeamAIDifficultyLevel.Professional, Seed = 1, Config = new MatchSimConfig { HalfDurationSeconds = 360f },
+            }, Seats(2, 0), _ => new ScriptedGamepadBot());
+            var s = m.Session;
+            Assert.IsInstanceOf<SeatRestartGuard>(s.HumanSlots[0].Input);
+            float worst = 0f;
+            for (int i = 0; i < 60 * 200 && !s.IsFinished; i++)
+            {
+                s.StepOnce(null);
+                if (s.Sim.State.Phase == SimMatchPhase.InPlay) continue;
+                for (int k = 0; k < 2; k++) worst = System.Math.Max(worst, Excursion(s, s.HumanSlots[k].ControlledId));
+            }
+            Assert.Less(worst, 2.5f, "a seat player stood deep in the run-off while play was stopped");
+        }
+
+        [Test]
+        public void PitchToStick_InvertsTheCameraMapping()
+        {
+            for (float yaw = -3f; yaw < 3f; yaw += 0.7f)
+            {
+                var dir = new SimVec3(0.6f, 0f, -0.8f);
+                var back = TeammateCallResolver.StickToPitch(SeatRestartGuard.PitchToStick(dir, yaw), yaw);
+                Assert.AreEqual(dir.X, back.X, 1e-4f);
+                Assert.AreEqual(dir.Z, back.Z, 1e-4f);
+            }
+        }
     }
 }
