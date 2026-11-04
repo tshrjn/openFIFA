@@ -23,6 +23,12 @@ namespace OpenFifa.Core
         public TeamAIMatchPhase MatchPhase;
         /// <summary>Offside line depth for our attackers (0..1 from our goal).</summary>
         public float OffsideDepth;
+        /// <summary>A human teammate is calling for the ball (see <see cref="CalledReceiver"/>).</summary>
+        public bool HasCall;
+        /// <summary>World index of the teammate calling for the ball; only read when <see cref="HasCall"/>.</summary>
+        public int CalledReceiver;
+        /// <summary>The caller asked for a through ball rather than to feet.</summary>
+        public bool CalledThrough;
     }
 
     /// <summary>
@@ -44,6 +50,9 @@ namespace OpenFifa.Core
         public TeamAIOption LastCarry;
         /// <summary>Chosen option of the last decision.</summary>
         public TeamAIOption LastChoice;
+
+        private int _calledReceiver = -1;
+        private bool _calledThrough;
 
         /// <summary>Approximate expected threat of having the ball at a point (0..~0.2).</summary>
         public static float Threat(SimVec3 p, int attackSign, PitchSpec pitch)
@@ -112,6 +121,8 @@ namespace OpenFifa.Core
             float ownerDepth = TeamAIMath.Depth(ballPos.Z, sign, pitch);
             float pressure = NearestOpponentDistance(world, team, ballPos);
 
+            _calledReceiver = ctx.HasCall && ctx.CalledReceiver >= 0 && ctx.CalledReceiver != ownerIndex ? ctx.CalledReceiver : -1;
+            _calledThrough = ctx.CalledThrough;
             LastBestPass = new TeamAIOption { Score = -999f, TargetIndex = -1 };
             LastShot = new TeamAIOption { Score = -999f, TargetIndex = -1 };
             LastCarry = new TeamAIOption { Score = -999f, TargetIndex = -1 };
@@ -141,7 +152,8 @@ namespace OpenFifa.Core
 
                 // Through ball into space for forward-minded players who are onside now.
                 bool forwardRole = rec.Role == TeamAIRole.ST || rec.Role == TeamAIRole.W || rec.Role == TeamAIRole.AM ||
-                                   (rec.Role == TeamAIRole.FB && phase != TeamAIPhase.BuildUp);
+                                   (rec.Role == TeamAIRole.FB && phase != TeamAIPhase.BuildUp) ||
+                                   (j == _calledReceiver && _calledThrough);
                 if (!offside && forwardRole && recDepth > ownerDepth - 0.02f && !ctx.IsGoalkeeper && recDepth < 0.93f)
                 {
                     float lead = 7f + 0.6f * TeamAIMath.Clamp(SimVec3.Dot(rec.Velocity, attackDir), 0f, 8f);
@@ -231,6 +243,12 @@ namespace OpenFifa.Core
             if (action == TeamAIAction.Cross) score += 0.05f;
             score *= technique;
             score += rng.NextSigned() * diff.DecisionNoise;
+            if (recIndex == _calledReceiver)
+            {
+                // A human teammate is calling for it: strongly prefer the requested kind of pass.
+                bool kindMatches = _calledThrough ? action == TeamAIAction.ThroughPass : action != TeamAIAction.ThroughPass;
+                score += kindMatches ? TeamAIUserDirectives.PassCallBonus : TeamAIUserDirectives.PassCallBonus * 0.5f;
+            }
 
             if (score > LastBestPass.Score)
             {

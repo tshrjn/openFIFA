@@ -43,6 +43,10 @@ namespace OpenFifa.Core
         private readonly bool[] _oppTaken = new bool[TeamAIWorld.MaxPlayers];
         private readonly int[] _supporters = new int[2];
         private SimVec3 _firstSupportSpot;
+        /// <summary>AI teammate making a run a human asked for this tick, -1 when none.</summary>
+        public int DirectedRunnerIndex { get; private set; } = -1;
+        /// <summary>AI teammate pressing because a human asked for it this tick, -1 when none.</summary>
+        public int RequestedPresserIndex { get; private set; } = -1;
 
         public TeamAIBrain(int team, TeamAITactics tactics, float difficulty, ulong seed)
         {
@@ -114,7 +118,17 @@ namespace OpenFifa.Core
             // ---- Pressers (out of possession) ----
             PresserIndex = -1;
             SecondPresserIndex = -1;
-            if (!hasPossession && ownerIndex >= 0 && ownerTeam != Team) SelectPressers(world, ball);
+            RequestedPresserIndex = -1;
+            if (!hasPossession && ownerIndex >= 0 && ownerTeam != Team)
+            {
+                SelectPressers(world, ball);
+                if (world.Directives[Team].PressActive(world.Time)) ApplyPressRequest(world, ball);
+            }
+
+            // ---- Human-directed run ----
+            DirectedRunnerIndex = -1;
+            if (hasPossession && ownerIndex >= 0 && ownerTeam == Team && world.Directives[Team].RunActive(world.Time))
+                DirectedRunnerIndex = ResolveDirectedRunner(world, ownerIndex, sign);
 
             for (int i = 0; i < TeamAIWorld.MaxPlayers; i++) _oppTaken[i] = false;
             _supporters[0] = -1;
@@ -132,7 +146,7 @@ namespace OpenFifa.Core
                 if (p.Team != Team) continue;
                 ref var cmd = ref output[i];
                 cmd = AIPlayerCommand.Idle(p.Id, p.Position);
-                if (!p.Active) continue;
+                if (!p.Active || p.HumanControlled) continue; // humans move themselves; the adapter ignores their command
 
                 var anchor = AnchorFor(p);
 
@@ -207,6 +221,17 @@ namespace OpenFifa.Core
                 MatchPhase = world.MatchPhase,
                 OffsideDepth = OffsideDepth
             };
+            ref readonly var calls = ref world.Directives[Team];
+            if (calls.PassCallActive(world.Time))
+            {
+                int caller = world.IndexOfId(calls.PassCallerId);
+                if (caller >= 0 && caller != i && world.Players[caller].Team == Team && world.Players[caller].Active)
+                {
+                    ctx.HasCall = true;
+                    ctx.CalledReceiver = caller;
+                    ctx.CalledThrough = calls.PassCallThrough;
+                }
+            }
             OnBall.Decide(world, i, phase, Difficulty, Rng, ctx, ref cmd);
         }
 
@@ -221,6 +246,28 @@ namespace OpenFifa.Core
             bool attacking = phase == TeamAIPhase.Progression || phase == TeamAIPhase.FinalThird;
             bool ownerOurs = ownerIndex >= 0 && world.Players[ownerIndex].Team == Team;
             float myDepth = TeamAIMath.Depth(p.Position.Z, sign, pitch);
+
+            // A human asked for this run: go now, regardless of timing (the user owns the offside risk).
+            if (i == DirectedRunnerIndex)
+            {
+                ref readonly var d = ref world.Directives[Team];
+                runners++;
+                _running[i] = true;
+                _runStart[i] = world.Time;
+                SimVec3 target;
+                if (d.RunHasTarget)
+                {
+                    target = TeamAIMath.ClampToPitch(d.RunTarget, pitch, 1.5f);
+                }
+                else
+                {
+                    float targetDepth = Math.Min(Math.Max(OffsideDepth, myDepth) + 0.12f, 0.95f);
+                    target = TeamAIMath.ClampToPitch(new SimVec3(TeamAIMath.Lerp(p.Position.X, 0f, 0.3f), 0f,
+                        TeamAIMath.DepthToZ(targetDepth, sign, pitch)), pitch, 1.5f);
+                }
+                SetMove(ref cmd, p, target, true, TeamAIIntent.RunInBehind);
+                return;
+            }
 
             // Run in behind, timed against the offside line.
             if (ownerOurs && attacking && runners < 2 &&
@@ -435,6 +482,12 @@ namespace OpenFifa.Core
                     break;
             }
             if (second && !PressTriggerActive && phase != TeamAIPhase.CounterPress) pressAllowed = false;
+            if (i == RequestedPresserIndex)
+            {
+                // Teammate press asked for by a human: close down all the way, as the first presser would.
+                pressAllowed = true;
+                second = false;
+            }
 
             if (!pressAllowed)
             {
@@ -619,6 +672,52 @@ namespace OpenFifa.Core
             if (!twoPressers || Tactics.PressingIntensity < 0.3f) SecondPresserIndex = -1;
         }
 
+        /// <summary>Teammate press: the AI outfielder who gets to the ball first presses it, as a second man when
+        /// the first presser is a human.</summary>
+        private void ApplyPressRequest(TeamAIWorld world, SimVec3 ball)
+        {
+            int best = -1;
+            float bt = float.MaxValue;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team != Team || o.Role == TeamAIRole.GK || o.HumanControlled) continue;
+                float t = TeamAIMath.TimeToIntercept(o, ball, 0.2f);
+                if (t < bt) { bt = t; best = j; }
+            }
+            if (best < 0) return;
+            RequestedPresserIndex = best;
+            if (best != PresserIndex) SecondPresserIndex = best;
+        }
+
+        /// <summary>The asked-for runner if he is an active AI teammate, else the AI outfielder best placed to run
+        /// beyond the ball (furthest forward, forward roles first).</summary>
+        private int ResolveDirectedRunner(TeamAIWorld world, int ownerIndex, int sign)
+        {
+            ref readonly var d = ref world.Directives[Team];
+            int asked = world.IndexOfId(d.RunnerId);
+            if (asked >= 0 && asked != ownerIndex)
+            {
+                var a = world.Players[asked];
+                if (a.Active && a.Team == Team && !a.HumanControlled && a.Role != TeamAIRole.GK) return asked;
+            }
+            int best = -1;
+            float bestScore = float.MinValue;
+            var ownerPos = world.Players[ownerIndex].Position;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (j == ownerIndex || !o.Active || o.Team != Team || o.HumanControlled) continue;
+                if (o.Role == TeamAIRole.GK || o.Role == TeamAIRole.CB) continue;
+                bool forward = o.Role == TeamAIRole.ST || o.Role == TeamAIRole.W || o.Role == TeamAIRole.AM;
+                float ahead = (o.Position.Z - ownerPos.Z) * sign;
+                float score = (forward ? 10f : 0f) - Math.Abs(ahead - 8f) * 0.3f - TeamAIMath.FlatDistance(o.Position, ownerPos) * 0.05f;
+                if (d.RunHasTarget) score -= TeamAIMath.FlatDistance(o.Position, d.RunTarget) * 0.4f;
+                if (score > bestScore) { bestScore = score; best = j; }
+            }
+            return best;
+        }
+
         private void SelectSupporters(TeamAIWorld world, int ownerIndex)
         {
             float b1 = float.MaxValue, b2 = float.MaxValue;
@@ -627,7 +726,7 @@ namespace OpenFifa.Core
             {
                 var p = world.Players[j];
                 if (j == ownerIndex || !p.Active || p.Team != Team || p.Role == TeamAIRole.GK || p.Role == TeamAIRole.ST) continue;
-                if (_running[j]) continue;
+                if (_running[j] || p.HumanControlled || j == DirectedRunnerIndex) continue;
                 float d = TeamAIMath.FlatDistance(p.Position, o);
                 if (d < b1) { b2 = b1; _supporters[1] = _supporters[0]; b1 = d; _supporters[0] = j; }
                 else if (d < b2) { b2 = d; _supporters[1] = j; }

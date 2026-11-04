@@ -80,6 +80,8 @@ namespace OpenFifa.Core
         public int RestartTeam = -1;
         /// <summary>Match clock in seconds (sim time, never wall time).</summary>
         public float Time;
+        /// <summary>Human calls to AI teammates, per team (0 = home, 1 = away). See <see cref="TeamAIUserDirectives"/>.</summary>
+        public readonly TeamAIUserDirectives[] Directives = { TeamAIUserDirectives.None, TeamAIUserDirectives.None };
 
         public TeamAIWorld(PitchSpec pitch)
         {
