@@ -37,10 +37,10 @@ namespace OpenFifa.Editor
         /// <summary>Set while one of our exports runs, read by <see cref="IosBuildPostprocess"/>.</summary>
         internal static IosExportContext Current { get; private set; }
 
-        [MenuItem("OpenFifa/Build/iPad (Device Xcode project)")]
+        [MenuItem("OpenFootball/Build/iPad (Device Xcode project)")]
         public static void ExportDevice() => Run(new[] { IosExportKind.Device });
 
-        [MenuItem("OpenFifa/Build/iPad (Simulator Xcode project)")]
+        [MenuItem("OpenFootball/Build/iPad (Simulator Xcode project)")]
         public static void ExportSimulator() => Run(new[] { IosExportKind.Simulator });
 
         public static void ExportFromCommandLine()

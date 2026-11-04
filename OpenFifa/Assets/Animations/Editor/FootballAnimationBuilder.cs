@@ -30,7 +30,7 @@ namespace OpenFifa.Editor
         /// <summary>Natural speeds (m/s) used as blend-tree positions. Must match PlayerAnimationDriver.authoredSpeeds.</summary>
         public static readonly float WalkSpeed = 1.4f, JogSpeed = 3.4f, SprintSpeed = 6.5f, JockeySpeed = 1.4f;
 
-        [MenuItem("OpenFifa/Animation/Build Footballer Animator")]
+        [MenuItem("OpenFootball/Animation/Build Footballer Animator")]
         public static void BuildAll()
         {
             EnsureFolder(GeneratedDir);
