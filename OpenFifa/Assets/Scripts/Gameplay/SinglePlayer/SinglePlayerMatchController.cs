@@ -56,7 +56,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public int LeagueIndex { get; set; }
         /// <summary>Club ids asked for on the command line (null = default), resolved after the rosters load.</summary>
         public string ArgLeague, ArgHome, ArgAway;
-        /// <summary>-spHomeStyle / -spAwayStyle: force a team style (e.g. park-the-bus, high-press) over the club's own.</summary>
+        /// <summary>
+        /// -spHomeStyle / -spAwayStyle: force a team style (e.g. park-the-bus, high-press) over the club's own. The preset
+        /// is used as written (TeamAITactics.FromStyle): the club's reputation offset (RosterMatchBuilder.TacticsFor) is
+        /// dropped, so two clubs forced to one style press and hold their line identically. Meant for captures and tests.
+        /// </summary>
         public string ArgHomeStyle, ArgAwayStyle;
         private int _defaultLeague, _defaultHome, _defaultAway = 1;
         public RosterClub HomeClub { get; private set; }
