@@ -2,7 +2,7 @@
   "format": "openfootball-commentary-lines",
   "schemaVersion": 1,
   "language": "en",
-  "notes": "Original lines written for OpenFifa. Line ids are categoryId.NN by position: append new lines, do not reorder, or re-render the clips. {name} may appear once, at the start or end.",
+  "notes": "Original lines written for OpenFootball. Line ids are categoryId.NN by position: append new lines, do not reorder, or re-render the clips. One {name} (player, lead voice only) or {team} (club) token may appear, at the start or end; a line that is only {name} is a bare name call.",
   "categories": [
     {
       "id": "kickoff", "event": "KickOff", "voice": "pbp", "priority": 40, "interruptible": true, "tone": "neutral",
@@ -18,7 +18,9 @@
         "Both sides settled, the whistle blows, and we begin.",
         "It's started. Let's see who blinks first.",
         "Away we go. A big occasion for both clubs.",
-        "Play is live, and the noise goes up a notch."
+        "Play is live, and the noise goes up a notch.",
+        "{team} get us underway.",
+        "Starting us off, it's {team}"
       ]
     },
     {
@@ -48,7 +50,8 @@
         "The game restarts. Time for a reply.",
         "Kick-off once more, with the crowd still buzzing.",
         "They get it going again from the middle.",
-        "And we go again."
+        "And we go again.",
+        "{team} get it going again."
       ]
     },
     {
@@ -71,6 +74,28 @@
       ]
     },
     {
+      "id": "on_the_ball", "event": "OnTheBall", "voice": "pbp", "priority": 12, "interruptible": true, "cooldown": 3.5, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "{name}",
+        "{name}...",
+        {"text": "{name}", "nameTone": "question"},
+        {"text": "{name}...", "nameTone": "question"},
+        "Now {name}",
+        "Into {name}",
+        "Finds {name}",
+        "Here's {name}",
+        "Out to {name}",
+        "On to {name}",
+        "{name} on the ball.",
+        "{name} has it now.",
+        "{name}, looking for options.",
+        "{name}, head up.",
+        "Played to {name}",
+        "Back to {name}",
+        {"text": "{name}, involved again.", "minPassCount": 4}
+      ]
+    },
+    {
       "id": "through_ball", "event": "ThroughBall", "voice": "pbp", "priority": 35, "interruptible": true, "cooldown": 6, "maxCrowd": 0.9, "tone": "neutral", "nameTone": "neutral",
       "lines": [
         "Slipped through, and there's a runner.",
@@ -85,6 +110,39 @@
         "Through ball from {name}",
         {"text": "{name} with the pass, can someone get on the end of it?", "nameTone": "question"},
         {"text": "{name} spots the run and finds it.", "nameTone": "excited"}
+      ]
+    },
+    {
+      "id": "shot.taken", "event": "ShotTaken", "voice": "pbp", "priority": 55, "interruptible": true, "resolution": true, "tone": "excited", "nameTone": "excited",
+      "lines": [
+        "{name} shoots!",
+        "{name}, has a go!",
+        "{name} lets fly!",
+        "{name}, strikes it!",
+        "Shot from {name}",
+        "Shot!",
+        "He's gone for goal!",
+        "Has a go!",
+        "And the shot comes in!",
+        {"text": "Tries his luck from distance!", "minDistance": 24},
+        {"text": "{name}, from range!", "minDistance": 24},
+        {"text": "Chance here for {name}", "minQuality": 0.3},
+        {"text": "Big chance!", "minQuality": 0.35}
+      ]
+    },
+    {
+      "id": "shot.taken.late_chance", "event": "ShotTaken", "voice": "pbp", "context": "late_chance", "priority": 58, "interruptible": true, "resolution": true, "tone": "excited", "nameTone": "excited",
+      "lines": [
+        "Late chance, this!",
+        "Could this be the moment?",
+        "{name}, late on!",
+        "Here's an opportunity, right at the death!",
+        "{name}, for the points!",
+        "One last chance, maybe!",
+        "Now then, {name}!",
+        "A late sight of goal!",
+        "This is the moment for {name}",
+        "Last-gasp effort!"
       ]
     },
     {
@@ -106,6 +164,21 @@
       ]
     },
     {
+      "id": "shot.saved.late_chance", "event": "ShotSaved", "voice": "pbp", "context": "late_chance", "priority": 76, "interruptible": true, "resolution": true, "tone": "excited", "nameTone": "neutral",
+      "lines": [
+        "Saved! And that might have been the last chance!",
+        "Kept out! Time is running away from them!",
+        "The keeper denies them when it matters most!",
+        "What a moment for the goalkeeper, so late in the game!",
+        "Denied! They needed that one to go in.",
+        "Stopped! The clock keeps ticking.",
+        "Saved! They'll wonder if that was the last of it.",
+        "A huge stop in the dying minutes!",
+        "Denied late on! The keeper stands firm!",
+        "Kept out! Agony for the attackers."
+      ]
+    },
+    {
       "id": "shot.wide", "event": "ShotWide", "voice": "pbp", "priority": 70, "interruptible": true, "resolution": true, "tone": "neutral", "nameTone": "neutral",
       "lines": [
         "Wide of the post.",
@@ -121,6 +194,21 @@
         {"text": "Hopeful from long distance. Not troubling anyone.", "minDistance": 28},
         "{name} pulls it wide.",
         {"text": "{name} will be kicking himself after that.", "minQuality": 0.3}
+      ]
+    },
+    {
+      "id": "shot.wide.late_chance", "event": "ShotWide", "voice": "pbp", "context": "late_chance", "priority": 71, "interruptible": true, "resolution": true, "tone": "excited", "nameTone": "neutral",
+      "lines": [
+        "Wide! And the chances are running out!",
+        "Off target, at the worst possible time.",
+        "That was the opportunity, and it's gone.",
+        "They had to hit the target there. They didn't.",
+        "So late in the game, and it drifts wide.",
+        "Hands on heads. That was the chance.",
+        "Wide, and you sense that might be that.",
+        "Off target! Precious seconds gone.",
+        "The final chance? It's gone wide.",
+        "Missed! And the clock shows no mercy."
       ]
     },
     {
@@ -282,7 +370,9 @@
         "All square! The stadium is shaking!",
         "{name} levels it!",
         "{name}! The equaliser!",
-        "Back on level terms, thanks to {name}"
+        "Back on level terms, thanks to {name}",
+        "{team} are level!",
+        "Back on terms! It's all square for {team}!"
       ]
     },
     {
@@ -298,7 +388,9 @@
         "Remarkable! They've turned this match on its head!",
         "{name} completes the turnaround!",
         "{name}! The comeback has its hero!",
-        "Inspired by {name}"
+        "Inspired by {name}",
+        "What a fightback from {team}!",
+        "{team} have dragged themselves back into it!"
       ]
     },
     {
@@ -314,7 +406,54 @@
         "There's barely time to restart! What a moment!",
         "{name} wins it at the death!",
         "{name}! Surely that's the winner!",
-        "A last-gasp winner from {name}"
+        "A last-gasp winner from {name}",
+        "Surely that wins it for {team}!"
+      ]
+    },
+    {
+      "id": "goal.hat_trick", "event": "Goal", "voice": "pbp", "context": "hat_trick", "priority": 97, "interruptible": false, "resolution": true, "tone": "excited", "nameTone": "excited",
+      "lines": [
+        "Hat-trick! Three for {name}",
+        "{name} has a hat-trick!",
+        "{name}! That's three today!",
+        "Three goals! He'll be taking the match ball home!",
+        "The hat-trick is complete!",
+        "That's his third! What a performance!",
+        "Treble! An afternoon he'll never forget!",
+        "One, two, three! Hat-trick!",
+        "{name} completes the set!",
+        "Another one! He simply can't stop scoring!"
+      ]
+    },
+    {
+      "id": "goal.brace", "event": "Goal", "voice": "pbp", "context": "brace", "priority": 96, "interruptible": false, "resolution": true, "tone": "excited", "nameTone": "excited",
+      "lines": [
+        "{name} again!",
+        "That's two for {name}",
+        "He's got his second!",
+        "Twice now for {name}",
+        "Another for {name}!",
+        "His second of the game!",
+        "Double for him today!",
+        "He's at it again!",
+        "Two goals now, and he's loving it!",
+        "{name}, with his second!",
+        "That man again!"
+      ]
+    },
+    {
+      "id": "goal.early_goal", "event": "Goal", "voice": "pbp", "context": "early_goal", "priority": 95, "interruptible": false, "resolution": true, "tone": "excited", "nameTone": "excited",
+      "lines": [
+        "What a start! It's in already!",
+        "Barely a couple of minutes gone, and they're ahead!",
+        "An early goal! The perfect start!",
+        "Some of the crowd are still finding their seats, and it's a goal!",
+        "Straight out of the blocks! Goal!",
+        "{name} with an early strike!",
+        "A dream opening! It's in!",
+        "{team} are off to a flyer!",
+        "Inside the opening minutes, and the net is rippling!",
+        "No time wasted! Goal!"
       ]
     },
     {
@@ -396,7 +535,9 @@
         "Out for a corner. A chance to load the box.",
         "Corner. Let's see what they've worked on in training.",
         "Behind for a corner kick.",
-        "They've won a corner."
+        "They've won a corner.",
+        "Corner to {team}.",
+        "{team} win a corner."
       ]
     },
     {
@@ -616,6 +757,238 @@
         "One or two moments of quality decided it.",
         "They'll be glad to hear that final whistle.",
         "A match that had a bit of everything."
+      ]
+    },
+    {
+      "event": "Lull", "voice": "pbp", "priority": 15, "interruptible": true, "cooldown": 30, "maxCrowd": 0.8, "tone": "neutral", "id": "lull",
+      "lines": [
+        "A quieter spell in the game now.",
+        "Both sides catching their breath.",
+        "The tempo has dropped a little.",
+        "Plenty of the ball in midfield, not much in the way of penetration.",
+        "They're feeling each other out at the moment.",
+        "A bit of a lull, this.",
+        "The crowd waiting for something to happen.",
+        "Patient stuff from both teams.",
+        "Nobody wants to give anything away right now.",
+        "It's become a battle in the middle of the park.",
+        "Still plenty of football to be played.",
+        "Steady, measured stuff at the moment."
+      ]
+    },
+    {
+      "event": "Lull", "voice": "pbp", "priority": 15, "interruptible": true, "cooldown": 30, "maxCrowd": 0.8, "tone": "neutral", "id": "lull.goalless", "context": "goalless",
+      "lines": [
+        "Still goalless here.",
+        "No goals yet, but it hasn't been short of effort.",
+        "Nil-nil, and you sense the first goal will be huge.",
+        "Both keepers have been kept fairly quiet so far.",
+        "We're still waiting for the breakthrough.",
+        "It's level, and it's tight.",
+        "A first goal would really open this game up.",
+        "Neither side has managed to find the key yet.",
+        "Goalless, and the tension is building.",
+        "Lots of endeavour, no end product as yet."
+      ]
+    },
+    {
+      "event": "Lull", "voice": "pbp", "priority": 15, "interruptible": true, "cooldown": 30, "maxCrowd": 0.8, "tone": "neutral", "id": "lull.tight", "context": "tight",
+      "lines": [
+        "Just the one goal in it.",
+        "A single goal separates them.",
+        "It's finely poised.",
+        "One goal in it, and that is never comfortable.",
+        "The side behind will feel they're still very much in this.",
+        "Plenty of tension with just one goal the difference.",
+        "Any mistake now could change everything.",
+        "The lead is slender.",
+        "Still a one-goal game.",
+        "Nothing between them but a single goal."
+      ]
+    },
+    {
+      "event": "Lull", "voice": "pbp", "priority": 15, "interruptible": true, "cooldown": 30, "maxCrowd": 0.8, "tone": "neutral", "id": "lull.comfortable", "context": "comfortable",
+      "lines": [
+        "A healthy lead, and they look comfortable.",
+        "They're managing this game well now.",
+        "Two goals to the good, and they're in control.",
+        "It's a big gap to close from here.",
+        "The trailing side need something special.",
+        "They can afford to be patient with this lead.",
+        "This is turning into a long afternoon for one of these teams.",
+        "Control. That's the word for it now.",
+        "A commanding lead.",
+        "They'll want to see this one out without fuss."
+      ]
+    },
+    {
+      "event": "Lull", "voice": "pbp", "priority": 15, "interruptible": true, "cooldown": 30, "maxCrowd": 0.8, "tone": "neutral", "id": "lull.late_on", "context": "late_on",
+      "lines": [
+        "The clock is ticking down.",
+        "Time is running out.",
+        "We're into the closing stages.",
+        "Not long left now.",
+        "Into the final few minutes.",
+        "The fourth official will be getting ready soon.",
+        "Every second counts at this stage.",
+        "Legs are getting heavy out there.",
+        "We're getting towards the end now.",
+        "Into the last stretch."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 40, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.save", "event": "ShotSaved",
+      "lines": [
+        "Great hands. He made that look easy.",
+        "That's what you want from your goalkeeper.",
+        "He's stood up well there and made himself big.",
+        "The striker will feel he should have done better.",
+        "Good positioning. He was set before the shot came in.",
+        "The keeper read that all the way.",
+        {"text": "That's a match-defining save, that.", "minQuality": 0.35},
+        {"text": "I don't know how he's got a hand to that.", "minQuality": 0.35},
+        {"text": "Honestly, that's a world-class stop.", "minQuality": 0.45},
+        {"text": "From that range, it's a comfortable one for him.", "minDistance": 24},
+        "Needed to be more precise there. Too close to the keeper."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 40, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.post", "event": "ShotPost",
+      "lines": [
+        "Fine margins. A couple of inches and we're talking about a goal.",
+        "He's done everything right except beat the woodwork.",
+        "That's the kind of luck that can turn a game.",
+        "You can't do much more than that. Just unfortunate.",
+        "The keeper was beaten. The post bailed him out.",
+        "He'll be thinking about that one tonight.",
+        "Sometimes it's just not your day.",
+        "Great technique. The frame of the goal had other ideas.",
+        "Lovely strike. The post won't let it in.",
+        "Inches. That's football."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 20, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.lull", "event": "Lull", "cooldown": 40,
+      "lines": [
+        "What I like is how compact they are without the ball.",
+        "The full-backs are getting forward at every opportunity.",
+        "You can see the midfield is where this game is being won.",
+        "It's a real chess match, this one.",
+        "Nobody wants to give the ball away cheaply.",
+        "The movement up front has been really clever.",
+        "I'd like to see them play a little quicker through the thirds.",
+        "The pressing has been excellent. They're winning it back high.",
+        "They're inviting pressure and looking to hit on the break.",
+        "The spaces will open up as the legs get tired.",
+        "Communication at the back has been first class.",
+        "You can see the shape has changed slightly from earlier.",
+        "Little details win games like this. Second balls, set plays.",
+        "They have to be brave in possession now."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 20, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.lull.goalless", "event": "Lull", "context": "goalless", "cooldown": 40,
+      "lines": [
+        "Someone has to take a risk if we're going to see a goal.",
+        "It's been cagey. Both managers will be fairly happy with the structure.",
+        "The first goal is going to be so important today.",
+        "Chances have been at a premium.",
+        "I'd like to see more bodies in the box when the crosses come in.",
+        "It needs a moment of quality to unlock this.",
+        "Both defences have been excellent, to be fair.",
+        "I'm not sure either keeper has had a real save to make.",
+        "You can feel a goal coming, but from where?",
+        "Final ball has let both sides down today."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 20, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.lull.tight", "event": "Lull", "context": "tight", "cooldown": 40,
+      "lines": [
+        "One goal is never enough. They'll want a second.",
+        "The team behind can't afford to leave it too late.",
+        "Game management is so important when it's this close.",
+        "It only takes one moment, and this game changes again.",
+        "They need to stay switched on. Concentration is everything now.",
+        "I still think there's another goal in this.",
+        "The lead side need to be careful not to sit too deep.",
+        "It's set up for a big finish, this.",
+        "A set piece could decide it.",
+        "They've got to keep their discipline now."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 20, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.lull.comfortable", "event": "Lull", "context": "comfortable", "cooldown": 40,
+      "lines": [
+        "They're cruising now. Hard to see a way back.",
+        "The trailing side have lost a bit of belief, you can see it.",
+        "Credit to them. They've been ruthless today.",
+        "It's all about pride now for the team behind.",
+        "They can start thinking about conserving energy.",
+        "The game has gone away from one of these sides.",
+        "Professional. That's the only word for this performance.",
+        "They've done the hard work. Now it's about control.",
+        "Hard to see a way back from here.",
+        "Tactically, they've got this spot on today."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 20, "interruptible": true, "live": true, "tone": "neutral", "id": "analyst.lull.late_on", "event": "Lull", "context": "late_on", "cooldown": 40,
+      "lines": [
+        "This is where fitness really tells.",
+        "Fresh legs could make the difference now.",
+        "Every throw-in, every free kick is precious at this stage.",
+        "You need cool heads in these final minutes.",
+        "The bench will be getting nervous now.",
+        "It's about who wants it more in these last few minutes.",
+        "Concentration levels have to stay high.",
+        "Tired legs make mistakes. Both sides need to be careful.",
+        "This is where your experienced players come in.",
+        "Game management now. Take your time, keep the ball."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.brace", "event": "Goal", "context": "brace",
+      "lines": [
+        "He's in the mood today. Everything he touches is turning to gold.",
+        "Two goals, and he could easily have more.",
+        "That's a striker full of confidence.",
+        "His movement has been a problem all afternoon.",
+        "The defenders just can't get near him today.",
+        "Instinct. He knew exactly where that ball was going to land.",
+        "Two goals and both finished with real composure.",
+        "When a striker is on form like this, you just give him the ball.",
+        "Defenders will be having nightmares about him.",
+        "He's had a hand in everything good today."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.hat_trick", "event": "Goal", "context": "hat_trick",
+      "lines": [
+        "A hat-trick! You don't see that very often. Remarkable.",
+        "That's a performance people will talk about for a long time.",
+        "Three goals, three different finishes. Complete striker.",
+        "Unplayable. There's no other word for it.",
+        "He's taken this game and made it his own.",
+        "Every forward dreams of a day like this.",
+        "Clinical, from start to finish.",
+        "That's a hat-trick of real quality.",
+        "I don't think anyone could have stopped him today.",
+        "He'll want that on his highlights reel forever."
+      ]
+    },
+    {
+      "voice": "analyst", "priority": 40, "interruptible": true, "live": false, "tone": "neutral", "id": "analyst.goal.late_winner", "event": "Goal", "context": "late_winner",
+      "lines": [
+        "That's character. They kept going right to the end.",
+        "Heartbreak for the other side. They looked like they'd held on.",
+        "You can never switch off in this game. Not for a second.",
+        "That's what belief looks like.",
+        "The timing of that could not be more painful for the defending side.",
+        "They never stopped believing. That's the lesson.",
+        "What a time to score. Absolute drama.",
+        "The other dressing room will be devastated.",
+        "Late goals like that define a season.",
+        "Look at the bench. Pure joy."
       ]
     }
   ]

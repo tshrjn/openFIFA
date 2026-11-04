@@ -319,7 +319,10 @@ namespace OpenFifa.Tests.Editor.Integration
             {
                 new MatchEvent { Type = MatchEventType.Shot, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0.1f, 30f), Value = 0.2f },
             };
-            Assert.AreEqual(0, c.Convert(ev, 1.0).Count);
+            var struck = c.Convert(ev, 1.0);
+            Assert.AreEqual(1, struck.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, struck[0].Type, "the strike is called before the outcome");
+            Assert.AreEqual("P9", struck[0].PlayerName);
             ev[0] = new MatchEvent { Type = MatchEventType.Save, PlayerId = 11, OtherPlayerId = 9, Team = SimTeam.Away };
             var outp = c.Convert(ev, 1.5);
             Assert.AreEqual(1, outp.Count);
@@ -342,9 +345,10 @@ namespace OpenFifa.Tests.Editor.Integration
                 new MatchEvent { Type = MatchEventType.Goal, PlayerId = 9, OtherPlayerId = -1, Team = SimTeam.Home },
             };
             var outp = c.Convert(ev, 2.0);
-            Assert.AreEqual(1, outp.Count);
-            Assert.AreEqual(CommentaryEventType.Goal, outp[0].Type);
-            Assert.AreEqual(GoalSituation.LongRange, outp[0].Situation);
+            Assert.AreEqual(2, outp.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, outp[0].Type);
+            Assert.AreEqual(CommentaryEventType.Goal, outp[1].Type);
+            Assert.AreEqual(GoalSituation.LongRange, outp[1].Situation);
             ev.Clear();
             ev.Add(new MatchEvent { Type = MatchEventType.Goal, PlayerId = 3, Team = SimTeam.Away, Detail = 1 });
             outp = c.Convert(ev, 3.0);

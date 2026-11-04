@@ -56,6 +56,8 @@ namespace OpenFifa.Core
         /// <summary>Spoken/HUD names and roster ids per sim id (0-21); optional.</summary>
         public string[] PlayerNames;
         public string[] PlayerIds;
+        /// <summary>Spoken club names { home, away } for commentary "{team}" lines (optional).</summary>
+        public string[] TeamNames;
         /// <summary>Camera yaw (radians) used to map the stick to the pitch.</summary>
         public float CameraYaw;
         /// <summary>Longest frame time the accumulator accepts (s); longer hitches are dropped to avoid a spiral.</summary>
@@ -126,7 +128,7 @@ namespace OpenFifa.Core
             Director.Brains[1].BallModel = ballModel;
             AddHumanSlot(Options.HumanTeam);
             Animation = new SimAnimActionTracker();
-            Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds);
+            Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds, Options.TeamNames);
             CameraYaw = Options.CameraYaw;
             SavePreviousSnapshot();
         }

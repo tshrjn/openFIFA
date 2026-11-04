@@ -107,3 +107,6 @@ docs/references/*.webm
 # iPad pipeline downloads (ci/ipad/ship.sh)
 OpenFifa/.build/
 !OpenFifa/Assets/Editor/Build/
+
+# Python tool caches
+__pycache__/

@@ -65,6 +65,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         private CommentaryLineBank _commentaryBank;
         private CommentaryEngine _commentary;
+        private CommentaryAudioPlayer _commentaryAudio;
+        private bool _wasPaused;
+        /// <summary>Voiced commentary (clips in StreamingAssets/Commentary/audio); subtitles show either way.</summary>
+        public CommentaryAudioPlayer CommentaryAudio => _commentaryAudio;
         private Transform _playersRoot;
         private float _ballRadius = 0.11f;
         private TeamAIDifficultyLevel _defaultLevel;
@@ -84,12 +88,19 @@ namespace OpenFifa.Gameplay.SinglePlayer
             BuildEnvironment();
             LoadRosters();
             LoadCommentary();
+            _commentaryAudio = gameObject.AddComponent<CommentaryAudioPlayer>();
+            if (_commentaryAudio.LoadIndex("en"))
+                Debug.Log("[" + ProductName + "] commentary audio: " + _commentaryAudio.Index.Count + " clips");
+            _commentaryAudio.Muted = _muteCommentary;
+            _commentaryAudio.Finished += voice => _commentary?.NotifyFinished(voice, _realClock);
         }
 
         private void Start()
         {
             if (AutoStart) StartMatch(Level);
         }
+
+        private bool _muteCommentary;
 
         private void ParseCommandLine()
         {
@@ -104,6 +115,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spAutoStart") AutoStart = true;
                 else if (a == "-spAiVsAi") AiVsAi = true;
                 else if (a == "-spBot") ScriptedHuman = true;
+                else if (a == "-spNoCommentary") _muteCommentary = true;
             }
         }
 
@@ -487,6 +499,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 options.HomeTactics = hs.Tactics;
                 options.AwayTactics = aws.Tactics;
                 options.PlayerNames = names;
+                options.TeamNames = new[] { HomeClub.Name, AwayClub.Name };
                 options.PlayerIds = ids;
                 Names = names;
                 // Per sim id from each side's own sheet (two clubs can both field a No. 11: that is roster data, not a bug).
@@ -519,7 +532,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Input = new SinglePlayerInput(Session.Profile.PassAssist);
             Session.HumanSlots[0].Input = CreateHumanInput();
             _commentary = _commentaryBank != null ? new CommentaryEngine(_commentaryBank, null, (uint)(Seed & 0xffffffff) | 1u) : null;
-            if (_commentary != null) Session.AttachCommentaryEngine(_commentary);
+            if (_commentary != null)
+            {
+                _commentary.Catalog = _commentaryAudio != null ? _commentaryAudio.Index : null;
+                Session.AttachCommentaryEngine(_commentary);
+                _commentaryAudio?.Preload(Names, options.TeamNames);
+            }
             SetBallRadius(Session.Sim.Config.Ball.Radius);
             _ball.rotation = Quaternion.identity;
 
@@ -541,6 +559,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Session = null;
             Input = null;
             _commentary = null;
+            _commentaryAudio?.StopAll();
             Frozen = false;
             PinCameraYaw = false;
             Subtitle = string.Empty;
@@ -661,15 +680,26 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 if (!PinCameraYaw) Session.CameraYaw = BroadcastCamera.YawRadians;
                 BroadcastCamera.AttackDirection = BroadcastFraming.AttackDirection(Session.Sim);
+                _commentary?.SetCrowdIntensity(_excitement);
                 Session.Advance(Time.deltaTime, null, _realClock);
 
                 var cues = Session.FrameCues;
+                if (_commentaryAudio != null)
+                {
+                    if (Session.Paused != _wasPaused)
+                    {
+                        _wasPaused = Session.Paused;
+                        if (_wasPaused) _commentaryAudio.StopAll();
+                    }
+                    if (!Session.Paused) _commentaryAudio.Handle(cues);
+                }
                 for (int i = 0; i < cues.Count; i++)
                 {
                     var cue = cues[i];
                     if (cue.Kind != CommentaryCueKind.Start || cue.Utterance == null) continue;
-                    Subtitle = cue.Utterance.Transcript.Replace(" | ", " ");
-                    SubtitleUntil = Time.unscaledTime + 4.5f;
+                    var u = cue.Utterance;
+                    Subtitle = u.Transcript.Replace(" | ", " ");
+                    SubtitleUntil = Time.unscaledTime + Mathf.Max(2.5f, (float)(u.EndTime - u.StartTime) + 1.2f);
                 }
             }
             // After Advance, so a whistle this frame already stops the legs; drivers run later (order 100).
