@@ -1,58 +1,49 @@
 using System;
+using System.Collections.Generic;
 
 namespace OpenFifa.Core
 {
     /// <summary>
-    /// Pure policy for external display output: render resolution, aspect handling and frame pacing.
+    /// Pure policy for external display output: render resolution tiers, aspect handling and frame pacing.
     /// </summary>
     public static class ExternalDisplayPolicy
     {
         /// <summary>
-        /// Lowest render scale the governor may use for a monitor of this native height
-        /// (keeps the render at or above <see cref="ExternalDisplayConfig.MinRenderHeight"/>).
+        /// Render heights available for a display of this native height, ascending. The configured tiers
+        /// below native, plus native itself when it sits under the top tier (e.g. 1600 on a 2560x1600 panel),
+        /// with the emergency height first when it is lower than everything else. A display smaller than the
+        /// first tier gets just its native height.
         /// </summary>
-        public static float MinScale(ExternalDisplayConfig config, int nativeHeight)
+        public static int[] RenderTiers(ExternalDisplayConfig config, int nativeHeight)
         {
-            if (nativeHeight <= 0) return 1f;
-            return Clamp01((float)config.MinRenderHeight / nativeHeight);
+            if (nativeHeight <= 0) return new[] { 0 };
+            var tiers = new List<int>();
+            int top = 0;
+            foreach (int h in config.TierHeights)
+            {
+                if (h <= nativeHeight && !tiers.Contains(h)) tiers.Add(h);
+                if (h > top) top = h;
+            }
+            if (nativeHeight < top && !tiers.Contains(nativeHeight)) tiers.Add(nativeHeight);
+            if (tiers.Count == 0) tiers.Add(nativeHeight);
+            tiers.Sort();
+            int emergency = Math.Min(config.EmergencyHeight, nativeHeight);
+            if (emergency > 0 && emergency < tiers[0]) tiers.Insert(0, emergency);
+            return tiers.ToArray();
         }
 
-        /// <summary>Highest render scale for a monitor of this native height.</summary>
-        public static float MaxScale(ExternalDisplayConfig config, int nativeHeight)
-        {
-            if (nativeHeight <= 0) return 1f;
-            return Clamp01((float)config.MaxRenderHeight / nativeHeight);
-        }
-
-        /// <summary>Render scale used right after a monitor connects.</summary>
-        public static float StartScale(ExternalDisplayConfig config, int nativeHeight)
-        {
-            if (nativeHeight <= 0) return 1f;
-            float start = Clamp01((float)config.StartRenderHeight / nativeHeight);
-            float min = MinScale(config, nativeHeight);
-            float max = MaxScale(config, nativeHeight);
-            if (start < min) start = min;
-            if (start > max) start = max;
-            return start;
-        }
+        /// <summary>Lowest render height allowed at this thermal level, before the tier floor.</summary>
+        public static bool AllowsEmergency(DeviceThermalLevel thermal) => thermal >= DeviceThermalLevel.Serious;
 
         /// <summary>
-        /// Render resolution for a monitor at the given native size and scale. Keeps the monitor's aspect
-        /// ratio, rounds to even pixel counts and never exceeds native or drops below the minimum height
-        /// (unless the monitor is smaller than that).
+        /// Render resolution for a display of the given native size at the given render height. Keeps the
+        /// display's aspect ratio, rounds to even pixel counts and never exceeds native.
         /// </summary>
-        public static PixelSize RenderResolution(ExternalDisplayConfig config, int nativeWidth, int nativeHeight, float scale)
+        public static PixelSize RenderResolution(int nativeWidth, int nativeHeight, int renderHeight)
         {
             if (nativeWidth <= 0 || nativeHeight <= 0) return new PixelSize(0, 0);
-
-            float min = MinScale(config, nativeHeight);
-            float max = MaxScale(config, nativeHeight);
-            if (scale < min) scale = min;
-            if (scale > max) scale = max;
-
-            int h = Even((int)Math.Round(nativeHeight * scale));
+            int h = Even(Math.Min(renderHeight > 0 ? renderHeight : nativeHeight, nativeHeight));
             int w = Even((int)Math.Round((double)nativeWidth * h / nativeHeight));
-            if (h > nativeHeight) h = nativeHeight;
             if (w > nativeWidth) w = nativeWidth;
             return new PixelSize(w, h);
         }
@@ -110,7 +101,5 @@ namespace OpenFifa.Core
         }
 
         private static int Even(int v) => v - (v & 1);
-
-        private static float Clamp01(float v) => v < 0f ? 0f : (v > 1f ? 1f : v);
     }
 }

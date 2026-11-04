@@ -2,29 +2,33 @@ using System;
 using System.Collections.Generic;
 using OpenFifa.Core;
 using UnityEngine;
+using UnityEngine.InputSystem.OnScreen;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Drives an external monitor connected to the iPad (USB-C / Thunderbolt / AirPlay-less HDMI adapters).
+    /// Drives an external monitor connected to the iPad.
     ///
-    /// When a monitor connects, the game takes it over instead of being mirrored: the broadcast camera and
-    /// HUD move to the monitor, which renders at 1440p or higher (up to 4K, adapted to frame time) at 60 fps,
-    /// pillarboxed on super-ultrawides and letterboxed on 4:3 screens. The iPad becomes a second screen
-    /// (<see cref="ExternalDisplayMode"/>). Unplugging puts everything back on the iPad without a restart.
+    /// When a monitor connects, the game takes it over instead of being mirrored: the full-screen game
+    /// cameras and display-only canvases (HUD, scoreboard) move to the monitor, which renders at 1440p or
+    /// higher (quantized tiers up to 4K, chosen from GPU/CPU frame time and thermal state) at 60 fps through
+    /// <see cref="FramePacer"/>, pillarboxed on super-ultrawides and letterboxed on 4:3 screens. Canvases
+    /// people touch (anything with a Selectable or on-screen control, or tagged <see cref="DeviceScreenCanvas"/>)
+    /// stay on the iPad, which shows <see cref="ExternalDisplayMode"/>. Unplugging puts everything back.
     ///
-    /// Bootstraps itself on startup; there is nothing to add to a scene. Canvases that should stay on the
-    /// iPad carry <see cref="DeviceScreenCanvas"/>.
+    /// Bootstraps itself on iPad; there is nothing to add to a scene.
     /// </summary>
     [DefaultExecutionOrder(-500)]
     public sealed class ExternalDisplayManager : MonoBehaviour
     {
         private const string ModePrefKey = "OpenFootball.ExternalDisplayMode";
-        private const int ExternalIndex = 1;
         private const string SimulateArg = "-ofSimulateExternalDisplay";
-        private const float RescanInterval = 0.5f;
+        private const int ExternalIndex = 1;
+        private const float PollInterval = 2f;
+        private const int MaxAttachAttempts = 180;
         private static readonly Color BarColor = Color.black;
         private static readonly Color DeviceBackground = new Color(0.04f, 0.05f, 0.08f);
 
@@ -33,17 +37,31 @@ namespace OpenFifa.Gameplay
         /// <summary>Raised with true when the game moves onto a monitor and false when it comes back to the iPad.</summary>
         public static event Action<bool> ExternalDisplayChanged;
 
+        /// <summary>Test seam: overrides Display.displays.Length and skips native display calls.</summary>
+        internal static Func<int> DisplayCountOverride;
+
+        /// <summary>Test seam: native size reported for the fake monitor.</summary>
+        internal static PixelSize FakeNativeSize = new PixelSize(2560, 1440);
+
         private readonly ExternalDisplayConfig _config = new ExternalDisplayConfig();
         private readonly Dictionary<Camera, CameraState> _routedCameras = new Dictionary<Camera, CameraState>();
         private readonly Dictionary<Canvas, int> _routedCanvases = new Dictionary<Canvas, int>();
+        private readonly HashSet<Canvas> _deviceCanvases = new HashSet<Canvas>();
+        private readonly List<Camera> _cameraKeys = new List<Camera>();
+        private readonly List<Canvas> _canvasKeys = new List<Canvas>();
         private readonly FrameTiming[] _timings = new FrameTiming[1];
+        private Camera[] _cameraBuffer = new Camera[16];
 
         private ExternalDisplayMode _mode;
         private bool _active;
+        private bool _simulated;
+        private int _gameDisplay = ExternalIndex;
         private int _knownDisplayCount;
-        private float _nextRescan;
-        private int _previousTargetFrameRate;
+        private float _nextPoll;
+        private float _delayedRouteAt = -1f;
+        private int _attachAttemptsLeft;
         private int _frameRate;
+        private DeviceThermalLevel _thermal;
         private PixelSize _nativeSize;
         private PixelSize _renderSize;
         private ViewportRect _viewport = ViewportRect.Full;
@@ -53,12 +71,6 @@ namespace OpenFifa.Gameplay
         private Camera _primaryGameCamera;
         private float _pitchLength = 50f;
         private float _pitchWidth = 30f;
-
-        // Desktop review mode (-ofSimulateExternalDisplay 2560x1440): the window plays the monitor and the
-        // iPad view is drawn as a picture-in-picture inset, so routing, HUD layout, aspect handling and the
-        // companion view can be captured on a machine with one screen.
-        private bool _simulated;
-        private int _gameDisplay = ExternalIndex;
 
         private struct CameraState
         {
@@ -75,7 +87,7 @@ namespace OpenFifa.Gameplay
         /// <summary>Current render size on the monitor.</summary>
         public PixelSize RenderSize => _renderSize;
 
-        /// <summary>Tunables (resolution floor/ceiling, frame rate, aspect limits).</summary>
+        /// <summary>Tunables (resolution tiers, frame rate, aspect limits).</summary>
         public ExternalDisplayConfig Config => _config;
 
         /// <summary>What the iPad shows while a monitor is connected. Persisted across launches.</summary>
@@ -91,14 +103,15 @@ namespace OpenFifa.Gameplay
             }
         }
 
+        private bool UsesNativeDisplays => !_simulated && DisplayCountOverride == null;
+
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Bootstrap()
         {
             if (Instance != null) return;
             // iPad only: on a Mac/PC an extra monitor is a normal desktop (DesktopDisplayManager handles it).
             if (Application.platform != RuntimePlatform.IPhonePlayer && !TryParseSimulation(out _, out _)) return;
-            var go = new GameObject("[ExternalDisplayManager]");
-            go.AddComponent<ExternalDisplayManager>();
+            new GameObject("[ExternalDisplayManager]").AddComponent<ExternalDisplayManager>();
         }
 
         /// <summary>Pitch size used to frame the iPad's tactical view (length along world X, width along Z).</summary>
@@ -120,11 +133,12 @@ namespace OpenFifa.Gameplay
             Instance = this;
             DontDestroyOnLoad(gameObject);
 
-            _mode = (ExternalDisplayMode)Mathf.Clamp(PlayerPrefs.GetInt(ModePrefKey, 0), 0, 2);
+            // Default: the iPad shows only its own UI, so all GPU time goes to the monitor.
+            _mode = (ExternalDisplayMode)Mathf.Clamp(PlayerPrefs.GetInt(ModePrefKey, (int)ExternalDisplayMode.ControllerOnly), 0, 2);
             Display.onDisplaysUpdated += OnDisplaysUpdated;
             SceneManager.sceneLoaded += OnSceneLoaded;
-            _knownDisplayCount = Display.displays.Length;
-            if (TryParseSimulation(out int simW, out int simH))
+
+            if (DisplayCountOverride == null && TryParseSimulation(out int simW, out int simH))
             {
                 _simulated = true;
                 _gameDisplay = 0;
@@ -134,6 +148,15 @@ namespace OpenFifa.Gameplay
                 return;
             }
             Evaluate();
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance != this) return;
+            Display.onDisplaysUpdated -= OnDisplaysUpdated;
+            SceneManager.sceneLoaded -= OnSceneLoaded;
+            if (_active) Deactivate();
+            Instance = null;
         }
 
         private static bool TryParseSimulation(out int width, out int height)
@@ -151,36 +174,55 @@ namespace OpenFifa.Gameplay
             return false;
         }
 
-        private void OnDestroy()
-        {
-            if (Instance != this) return;
-            Display.onDisplaysUpdated -= OnDisplaysUpdated;
-            SceneManager.sceneLoaded -= OnSceneLoaded;
-            if (_active) Deactivate();
-            Instance = null;
-        }
+        private int DisplayCount => DisplayCountOverride != null ? DisplayCountOverride() : Display.displays.Length;
 
         private void OnDisplaysUpdated() => Evaluate();
 
         private void OnSceneLoaded(Scene scene, LoadSceneMode mode)
         {
-            if (_active) RouteScene();
+            if (!_active) return;
+            RouteScene();
+            // Match setup builds cameras and the HUD in Start(); catch them shortly after.
+            _delayedRouteAt = Time.unscaledTime + 1f;
         }
 
         private void Update()
         {
-            // onDisplaysUpdated is not raised on every platform/version for hot-plug; poll as a backstop.
-            if (!_simulated && Display.displays.Length != _knownDisplayCount) Evaluate();
+            if (!_simulated && DisplayCount != _knownDisplayCount) Evaluate();
             if (!_active) return;
 
-            if (Time.unscaledTime >= _nextRescan)
+            if (_attachAttemptsLeft > 0 && UsesNativeDisplays)
             {
-                _nextRescan = Time.unscaledTime + RescanInterval;
+                if (ExternalDisplayNative.IsAttached || ExternalDisplayNative.AttachWindow())
+                {
+                    _attachAttemptsLeft = 0;
+                }
+                else if (--_attachAttemptsLeft == 0)
+                {
+                    Debug.LogWarning("[ExternalDisplay] Unity's external window never reached the external-display scene; " +
+                                     $"monitor may stay black (scene present: {ExternalDisplayNative.HasExternalScene})");
+                }
+            }
+
+            if (_delayedRouteAt > 0f && Time.unscaledTime >= _delayedRouteAt)
+            {
+                _delayedRouteAt = -1f;
                 RouteScene();
             }
 
-            if (_governor != null && _governor.AddFrame(FrameWorkSeconds()))
-                ApplyRenderResolution(_governor.Scale);
+            if (Time.unscaledTime >= _nextPoll)
+            {
+                _nextPoll = Time.unscaledTime + PollInterval;
+                RouteScene();
+                var thermal = (DeviceThermalLevel)Mathf.Clamp(ExternalDisplayNative.ThermalState, 0, 3);
+                if (thermal != _thermal)
+                {
+                    _thermal = thermal;
+                    if (_governor.SetThermal(thermal)) ApplyRenderResolution();
+                }
+            }
+
+            if (_governor.AddFrame(FrameWorkSeconds())) ApplyRenderResolution();
         }
 
         private void LateUpdate()
@@ -197,7 +239,7 @@ namespace OpenFifa.Gameplay
         private void Evaluate()
         {
             if (_simulated) return;
-            _knownDisplayCount = Display.displays.Length;
+            _knownDisplayCount = DisplayCount;
             bool connected = _knownDisplayCount > ExternalIndex;
             if (connected && !_active) Activate();
             else if (!connected && _active) Deactivate();
@@ -205,19 +247,13 @@ namespace OpenFifa.Gameplay
 
         private void Activate()
         {
-            int w, h;
-            if (_simulated)
-            {
-                w = _nativeSize.Width;
-                h = _nativeSize.Height;
-            }
-            else
+            if (UsesNativeDisplays)
             {
                 var external = Display.displays[ExternalIndex];
                 external.Activate();
-                ExternalDisplayNative.AttachWindow();
+                _attachAttemptsLeft = ExternalDisplayNative.AttachWindow() ? 0 : MaxAttachAttempts;
 
-                ExternalDisplayNative.NativeSize(out w, out h);
+                ExternalDisplayNative.NativeSize(out int w, out int h);
                 if (w <= 0 || h <= 0)
                 {
                     w = external.systemWidth;
@@ -225,23 +261,24 @@ namespace OpenFifa.Gameplay
                 }
                 _nativeSize = new PixelSize(w, h);
             }
-            _viewport = ExternalDisplayPolicy.Viewport(_config, w, h);
+            else if (!_simulated)
+            {
+                _nativeSize = FakeNativeSize;
+            }
 
-            _previousTargetFrameRate = Application.targetFrameRate;
+            _viewport = ExternalDisplayPolicy.Viewport(_config, _nativeSize.Width, _nativeSize.Height);
             _frameRate = ExternalDisplayPolicy.FrameRate(_config, ExternalDisplayNative.MaxFramesPerSecond);
-            Application.targetFrameRate = _frameRate;
+            FramePacer.SetOverride(_frameRate);
             FrameTimingManager.CaptureFrameTimings();
 
-            _governor = new DynamicResolutionGovernor(
-                _config,
-                ExternalDisplayPolicy.StartScale(_config, h),
-                ExternalDisplayPolicy.MinScale(_config, h),
-                ExternalDisplayPolicy.MaxScale(_config, h),
-                _frameRate);
+            _thermal = (DeviceThermalLevel)Mathf.Clamp(ExternalDisplayNative.ThermalState, 0, 3);
+            _governor = new DynamicResolutionGovernor(_config, _nativeSize.Height, _frameRate);
+            _governor.SetThermal(_thermal);
+            _renderSize = new PixelSize(0, 0);
             _active = true;
-            ApplyRenderResolution(_governor.Scale);
+            ApplyRenderResolution();
 
-            if (!_simulated)
+            if (UsesNativeDisplays)
             {
                 var deviceSize = ExternalDisplayPolicy.DeviceScreenResolution(_config, Display.main.systemWidth, Display.main.systemHeight);
                 Display.main.SetRenderingResolution(deviceSize.Width, deviceSize.Height);
@@ -251,8 +288,9 @@ namespace OpenFifa.Gameplay
             RouteScene();
             BuildDeviceScreen();
 
-            Debug.Log($"[ExternalDisplay] monitor connected{(_simulated ? " (simulated)" : "")}: native {_nativeSize}, rendering {_renderSize} @ {_frameRate} fps, " +
-                      $"mode {_mode}, scene attached {ExternalDisplayNative.HasExternalScene}");
+            Debug.Log($"[ExternalDisplay] monitor connected{(_simulated ? " (simulated)" : "")}: native {_nativeSize}, " +
+                      $"rendering {_renderSize} (tiers {string.Join("/", _governor.Tiers)}) @ {_frameRate} fps, mode {_mode}, " +
+                      $"scene attached {ExternalDisplayNative.HasExternalScene}");
             ExternalDisplayChanged?.Invoke(true);
         }
 
@@ -260,6 +298,8 @@ namespace OpenFifa.Gameplay
         {
             _active = false;
             _governor = null;
+            _attachAttemptsLeft = 0;
+            _delayedRouteAt = -1f;
 
             foreach (var pair in _routedCameras)
             {
@@ -274,13 +314,14 @@ namespace OpenFifa.Gameplay
                 if (pair.Key != null) pair.Key.targetDisplay = pair.Value;
             }
             _routedCanvases.Clear();
+            _deviceCanvases.Clear();
 
             DestroyCamera(ref _deviceCamera);
             DestroyCamera(ref _barsCamera);
             _primaryGameCamera = null;
 
-            if (!_simulated) Display.main.SetRenderingResolution(Display.main.systemWidth, Display.main.systemHeight);
-            Application.targetFrameRate = _previousTargetFrameRate;
+            if (UsesNativeDisplays) Display.main.SetRenderingResolution(Display.main.systemWidth, Display.main.systemHeight);
+            FramePacer.ClearOverride();
             _nativeSize = new PixelSize(0, 0);
             _renderSize = new PixelSize(0, 0);
 
@@ -288,23 +329,21 @@ namespace OpenFifa.Gameplay
             ExternalDisplayChanged?.Invoke(false);
         }
 
-        private void ApplyRenderResolution(float scale)
+        /// <summary>Applies the governor's current tier. Only reallocates when the size actually changed.</summary>
+        private void ApplyRenderResolution()
         {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, _nativeSize.Width, _nativeSize.Height, scale);
+            var size = ExternalDisplayPolicy.RenderResolution(_nativeSize.Width, _nativeSize.Height, _governor.RenderHeight);
             if (size.Width <= 0 || size.Equals(_renderSize)) return;
-            if (_simulated)
-            {
-                _renderSize = size;
-                return;
-            }
-            if (Display.displays.Length <= ExternalIndex) return;
             _renderSize = size;
-            Display.displays[ExternalIndex].SetRenderingResolution(size.Width, size.Height);
+            if (UsesNativeDisplays && Display.displays.Length > ExternalIndex)
+                Display.displays[ExternalIndex].SetRenderingResolution(size.Width, size.Height);
+            Debug.Log($"[ExternalDisplay] render {size} (thermal {_thermal})");
         }
 
         /// <summary>
-        /// Seconds of real work in the last frame (max of GPU and main-thread CPU) when frame timing stats
-        /// are available, otherwise the frame delta. Work time shows headroom under the vsync cap.
+        /// Seconds of real work in the last frame (max of GPU and main-thread CPU, covering both displays)
+        /// when frame timing stats are available, otherwise the frame delta. Work time shows headroom under
+        /// the vsync cap.
         /// </summary>
         private float FrameWorkSeconds()
         {
@@ -317,33 +356,38 @@ namespace OpenFifa.Gameplay
             return Time.unscaledDeltaTime;
         }
 
-        /// <summary>Moves game cameras and overlay canvases created since the last pass onto the monitor.</summary>
+        /// <summary>
+        /// Moves full-screen game cameras and display-only overlay canvases onto the monitor. Cameras with
+        /// a partial viewport (minimap, split screen) and touchable canvases stay where they are.
+        /// </summary>
         private void RouteScene()
         {
-            var cameras = FindObjectsByType<Camera>(FindObjectsInactive.Include, FindObjectsSortMode.None);
-            foreach (var cam in cameras)
+            int count = Camera.allCamerasCount;
+            if (_cameraBuffer.Length < count) _cameraBuffer = new Camera[count * 2];
+            count = Camera.GetAllCameras(_cameraBuffer);
+            for (int i = 0; i < count; i++)
             {
+                var cam = _cameraBuffer[i];
+                _cameraBuffer[i] = null;
                 if (cam == _deviceCamera || cam == _barsCamera || cam.targetTexture != null) continue;
-                if (IsOverlayCamera(cam)) continue;
-                if (!_routedCameras.ContainsKey(cam))
-                {
-                    if (cam.targetDisplay != 0) continue;
-                    _routedCameras[cam] = new CameraState { TargetDisplay = cam.targetDisplay, Rect = cam.rect };
-                }
+                if (_routedCameras.ContainsKey(cam) || cam.targetDisplay != 0 || IsOverlayCamera(cam) || !IsFullRect(cam.rect)) continue;
+                _routedCameras[cam] = new CameraState { TargetDisplay = cam.targetDisplay, Rect = cam.rect };
                 cam.targetDisplay = _gameDisplay;
                 cam.rect = new Rect(_viewport.X, _viewport.Y, _viewport.Width, _viewport.Height);
             }
 
-            var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            var canvases = FindObjectsByType<Canvas>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
             foreach (var canvas in canvases)
             {
                 if (!canvas.isRootCanvas || canvas.renderMode != RenderMode.ScreenSpaceOverlay) continue;
-                if (canvas.GetComponent<DeviceScreenCanvas>() != null) continue;
-                if (!_routedCanvases.ContainsKey(canvas))
+                if (_routedCanvases.ContainsKey(canvas) || _deviceCanvases.Contains(canvas)) continue;
+                if (canvas.targetDisplay != 0) continue;
+                if (StaysOnDevice(canvas))
                 {
-                    if (canvas.targetDisplay != 0) continue;
-                    _routedCanvases[canvas] = canvas.targetDisplay;
+                    _deviceCanvases.Add(canvas);
+                    continue;
                 }
+                _routedCanvases[canvas] = canvas.targetDisplay;
                 canvas.targetDisplay = _gameDisplay;
             }
 
@@ -351,17 +395,30 @@ namespace OpenFifa.Gameplay
             if (_primaryGameCamera == null) _primaryGameCamera = FindPrimaryGameCamera();
         }
 
+        /// <summary>
+        /// Canvases people touch stay on the iPad: GraphicRaycaster only takes touches from display 0, so
+        /// moving them would make buttons, menus and on-screen sticks untappable.
+        /// </summary>
+        internal static bool StaysOnDevice(Canvas canvas) =>
+            canvas.GetComponent<DeviceScreenCanvas>() != null ||
+            canvas.GetComponentInChildren<Selectable>(true) != null ||
+            canvas.GetComponentInChildren<OnScreenControl>(true) != null;
+
+        private static bool IsFullRect(Rect r) =>
+            r.x <= 0.001f && r.y <= 0.001f && r.width >= 0.999f && r.height >= 0.999f;
+
         private void PruneDestroyed()
         {
-            List<Camera> deadCams = null;
+            _cameraKeys.Clear();
             foreach (var cam in _routedCameras.Keys)
-                if (cam == null) (deadCams ??= new List<Camera>()).Add(cam);
-            if (deadCams != null) foreach (var c in deadCams) _routedCameras.Remove(c);
+                if (cam == null) _cameraKeys.Add(cam);
+            foreach (var c in _cameraKeys) _routedCameras.Remove(c);
 
-            List<Canvas> deadCanvases = null;
+            _canvasKeys.Clear();
             foreach (var canvas in _routedCanvases.Keys)
-                if (canvas == null) (deadCanvases ??= new List<Canvas>()).Add(canvas);
-            if (deadCanvases != null) foreach (var c in deadCanvases) _routedCanvases.Remove(c);
+                if (canvas == null) _canvasKeys.Add(canvas);
+            foreach (var c in _canvasKeys) _routedCanvases.Remove(c);
+            _deviceCanvases.RemoveWhere(c => c == null);
         }
 
         private Camera FindPrimaryGameCamera()
@@ -388,6 +445,7 @@ namespace OpenFifa.Gameplay
             _barsCamera.clearFlags = CameraClearFlags.SolidColor;
             _barsCamera.backgroundColor = BarColor;
             _barsCamera.cullingMask = 0;
+            DisablePostProcessing(_barsCamera);
         }
 
         /// <summary>Builds what the iPad shows for the current <see cref="Mode"/>.</summary>
@@ -417,6 +475,7 @@ namespace OpenFifa.Gameplay
                         _deviceCamera.CopyFrom(_primaryGameCamera);
                         _deviceCamera.targetDisplay = 0;
                         _deviceCamera.depth = deviceDepth;
+                        CopyUrpCameraData(_primaryGameCamera, _deviceCamera);
                     }
                     break;
 
@@ -431,6 +490,27 @@ namespace OpenFifa.Gameplay
             _deviceCamera.rect = _simulated ? SimulatedDeviceInset() : new Rect(0f, 0f, 1f, 1f);
         }
 
+        /// <summary>
+        /// Camera.CopyFrom skips URP's per-camera data. Copy what a second base camera can share; the overlay
+        /// camera stack is not copied (an overlay camera can belong to one stack only).
+        /// </summary>
+        private static void CopyUrpCameraData(Camera from, Camera to)
+        {
+            var src = from.GetComponent<UniversalAdditionalCameraData>();
+            if (src == null) return;
+            var dst = to.GetUniversalAdditionalCameraData();
+            dst.renderPostProcessing = src.renderPostProcessing;
+            dst.antialiasing = src.antialiasing;
+            dst.antialiasingQuality = src.antialiasingQuality;
+            dst.renderShadows = src.renderShadows;
+            dst.volumeLayerMask = src.volumeLayerMask;
+            dst.volumeTrigger = src.volumeTrigger;
+            dst.stopNaN = src.stopNaN;
+            dst.dithering = src.dithering;
+            dst.requiresColorOption = src.requiresColorOption;
+            dst.requiresDepthOption = src.requiresDepthOption;
+        }
+
         /// <summary>Bottom-right inset with the iPad's 4:3 landscape shape, a quarter of the window wide.</summary>
         private Rect SimulatedDeviceInset()
         {
@@ -441,7 +521,7 @@ namespace OpenFifa.Gameplay
 
         private void FrameCompanionCamera()
         {
-            float aspect = !_simulated && Display.main.systemHeight > 0
+            float aspect = UsesNativeDisplays && Display.main.systemHeight > 0
                 ? (float)Display.main.systemWidth / Display.main.systemHeight
                 : 4f / 3f;
             _deviceCamera.orthographicSize = ExternalDisplayPolicy.CompanionOrthoSize(_pitchLength, _pitchWidth, aspect);

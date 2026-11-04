@@ -14,7 +14,8 @@ namespace OpenFifa.Gameplay
     /// default "Auto" preference the game moves to the largest connected display, so plugging a 1440p/4K
     /// monitor into a MacBook moves the game onto it and unplugging brings it back to the built-in screen.
     /// A specific monitor can be pinned with <see cref="SelectDisplay"/>. Render cost is held at 60 fps by
-    /// scaling URP's render scale (never below 1440p, FSR upscaled), so a 4K/5K panel stays sharp and smooth.
+    /// stepping URP's render scale between quantized 1440p/1800p/2160p tiers (FSR upscaled), so a 4K/5K panel
+    /// stays sharp and smooth. Frame pacing stays with <see cref="FramePacer"/> (vSync on desktop).
     ///
     /// Bootstraps itself in macOS/Windows players. The iPad uses <see cref="ExternalDisplayManager"/> instead.
     /// </summary>
@@ -22,6 +23,7 @@ namespace OpenFifa.Gameplay
     public sealed class DesktopDisplayManager : MonoBehaviour
     {
         private const string PreferencePrefKey = "OpenFootball.PreferredDisplay";
+        private const string PreferenceOccurrencePrefKey = "OpenFootball.PreferredDisplayOccurrence";
         private const string FullScreenPrefKey = "OpenFootball.FullScreen";
         private const float PollInterval = 1f;
 
@@ -35,7 +37,11 @@ namespace OpenFifa.Gameplay
         private readonly List<DisplayCandidate> _candidates = new List<DisplayCandidate>();
         private readonly FrameTiming[] _timings = new FrameTiming[1];
 
+        private readonly Dictionary<UniversalRenderPipelineAsset, (float scale, UpscalingFilterSelection filter)> _originals =
+            new Dictionary<UniversalRenderPipelineAsset, (float, UpscalingFilterSelection)>();
+
         private string _preferredName;
+        private int _preferredOccurrence;
         private bool _fullScreen;
         private string _currentName;
         private int _currentWidth;
@@ -44,9 +50,6 @@ namespace OpenFifa.Gameplay
         private float _nextPoll;
         private bool _moving;
         private DynamicResolutionGovernor _governor;
-        private UniversalRenderPipelineAsset _urp;
-        private float _originalRenderScale = 1f;
-        private UpscalingFilterSelection _originalUpscaling;
 
         /// <summary>Connected displays, in OS order (index 0 is the main / built-in display).</summary>
         public IReadOnlyList<DisplayCandidate> Displays => _candidates;
@@ -69,8 +72,11 @@ namespace OpenFifa.Gameplay
         /// <summary>Pins the game to a display (index into <see cref="Displays"/>), or -1 for Auto.</summary>
         public void SelectDisplay(int index)
         {
-            _preferredName = index >= 0 && index < _candidates.Count ? _candidates[index].Name : DesktopDisplayPolicy.AutoPreference;
+            bool pinned = index >= 0 && index < _candidates.Count;
+            _preferredName = pinned ? _candidates[index].Name : DesktopDisplayPolicy.AutoPreference;
+            _preferredOccurrence = pinned ? DesktopDisplayPolicy.Occurrence(_candidates, index) : 0;
             PlayerPrefs.SetString(PreferencePrefKey, _preferredName);
+            PlayerPrefs.SetInt(PreferenceOccurrencePrefKey, _preferredOccurrence);
             PlaceWindow(force: true);
         }
 
@@ -93,15 +99,8 @@ namespace OpenFifa.Gameplay
             DontDestroyOnLoad(gameObject);
 
             _preferredName = PlayerPrefs.GetString(PreferencePrefKey, DesktopDisplayPolicy.AutoPreference);
+            _preferredOccurrence = PlayerPrefs.GetInt(PreferenceOccurrencePrefKey, 0);
             _fullScreen = PlayerPrefs.GetInt(FullScreenPrefKey, 1) == 1;
-            Application.targetFrameRate = _config.TargetFrameRate;
-
-            _urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
-            if (_urp != null)
-            {
-                _originalRenderScale = _urp.renderScale;
-                _originalUpscaling = _urp.upscalingFilter;
-            }
 
             RefreshLayout();
             PlaceWindow(force: true);
@@ -125,7 +124,7 @@ namespace OpenFifa.Gameplay
             }
 
             if (_governor != null && !_moving && _governor.AddFrame(FrameWorkSeconds()))
-                ApplyRenderScale(_governor.Scale);
+                ApplyRenderScale();
         }
 
         /// <summary>Re-reads the display layout. Returns true when monitors were added, removed or changed.</summary>
@@ -148,7 +147,7 @@ namespace OpenFifa.Gameplay
 
         private void PlaceWindow(bool force)
         {
-            int index = DesktopDisplayPolicy.ChooseDisplay(_candidates, _preferredName);
+            int index = DesktopDisplayPolicy.ChooseDisplay(_candidates, _preferredName, _preferredOccurrence, MinExternalHeight);
             if (index < 0) return;
             var target = _layout[index];
             var current = Screen.mainWindowDisplayInfo;
@@ -179,33 +178,50 @@ namespace OpenFifa.Gameplay
             else
                 Screen.fullScreenMode = FullScreenMode.Windowed;
 
+            // Budget only: FramePacer keeps vSync pacing on desktop, so frames come at the display's refresh.
             int frameRate = ExternalDisplayPolicy.FrameRate(_config, (int)Math.Round(display.refreshRate.value));
-            Application.targetFrameRate = frameRate;
-            _governor = new DynamicResolutionGovernor(
-                _config,
-                DesktopDisplayPolicy.StartRenderScale(_config, display.height),
-                ExternalDisplayPolicy.MinScale(_config, display.height),
-                ExternalDisplayPolicy.MaxScale(_config, display.height),
-                frameRate);
-            ApplyRenderScale(_governor.Scale);
+            _governor = new DynamicResolutionGovernor(_config, display.height, frameRate);
+            float scale = ApplyRenderScale();
 
-            Debug.Log($"[DesktopDisplay] on '{display.name}' {display.width}x{display.height} @ {frameRate} fps, " +
-                      $"render scale {_governor.Scale:0.00}, full screen {_fullScreen}");
+            Debug.Log($"[DesktopDisplay] on '{display.name}' {display.width}x{display.height}, budget {frameRate} fps, " +
+                      $"render {_governor.RenderHeight}p (scale {scale:0.00}), full screen {_fullScreen}");
             DisplayChanged?.Invoke(display.name);
         }
 
-        private void ApplyRenderScale(float scale)
+        private int MinExternalHeight
         {
-            if (_urp == null) return;
-            _urp.renderScale = scale;
-            _urp.upscalingFilter = scale < 0.999f ? UpscalingFilterSelection.FSR : _originalUpscaling;
+            get
+            {
+                int min = int.MaxValue;
+                foreach (int h in _config.TierHeights) if (h < min) min = h;
+                return min;
+            }
+        }
+
+        /// <summary>
+        /// Applies the governor's render height as URP render scale to the active pipeline asset (looked up each
+        /// time, so a quality-level change is picked up). Returns the scale.
+        /// </summary>
+        private float ApplyRenderScale()
+        {
+            float scale = _currentHeight > 0 ? Mathf.Clamp01((float)_governor.RenderHeight / _currentHeight) : 1f;
+            var urp = GraphicsSettings.currentRenderPipeline as UniversalRenderPipelineAsset;
+            if (urp == null) return scale;
+            if (!_originals.ContainsKey(urp)) _originals[urp] = (urp.renderScale, urp.upscalingFilter);
+            urp.renderScale = scale;
+            urp.upscalingFilter = scale < 0.999f ? UpscalingFilterSelection.FSR : _originals[urp].filter;
+            return scale;
         }
 
         private void RestoreRenderScale()
         {
-            if (_urp == null) return;
-            _urp.renderScale = _originalRenderScale;
-            _urp.upscalingFilter = _originalUpscaling;
+            foreach (var pair in _originals)
+            {
+                if (pair.Key == null) continue;
+                pair.Key.renderScale = pair.Value.scale;
+                pair.Key.upscalingFilter = pair.Value.filter;
+            }
+            _originals.Clear();
         }
 
         private float FrameWorkSeconds()

@@ -6,13 +6,21 @@
 // display window has no UIWindowScene to live in.
 //
 // ExternalDisplayPostprocess (Editor) adds that role to Info.plist with OFExternalDisplayScene as the
-// delegate. This delegate makes sure Unity's DisplayManager knows about the screen and re-homes Unity's
-// external window into the scene once both exist (whichever comes first: Display.Activate() from C#,
-// or the scene connecting).
+// delegate. This delegate makes sure Unity's DisplayManager knows the screen and re-homes Unity's
+// external window into the scene once both exist. C# (ExternalDisplayManager) calls
+// OFExternalDisplay_AttachWindow after Display.Activate and keeps retrying, a frame at a time and with a
+// cap, until OFExternalDisplay_IsAttached reports success, because Unity may create the window a frame
+// later. Real connects/disconnects still reach Unity through UIKit's own UIScreen notifications, which
+// Unity's DisplayManager observes; nothing here re-posts them.
 
 #import <UIKit/UIKit.h>
 #include "UnityAppController.h"
 #include "Unity/DisplayManager.h"
+
+// Implemented by the trampoline's DisplayManager but not declared in its header.
+@interface DisplayManager (OFExternalDisplay)
+- (void)registerScreen:(UIScreen*)screen;
+@end
 
 static BOOL OFUnityReady(void)
 {
@@ -32,25 +40,28 @@ static UIWindowScene* OFExternalScene(void)
     return nil;
 }
 
-// Register the scene's screen with Unity (if the legacy UIScreen notification did not) and move a
-// shown Unity window for that screen into the scene.
-static void OFAttachScene(UIWindowScene* scene)
+// Make sure Unity knows the scene's screen, then move a shown Unity window for it into the scene.
+// Returns YES when Unity's window for this screen is shown inside the scene.
+static BOOL OFAttachScene(UIWindowScene* scene)
 {
     if (scene == nil || !OFUnityReady())
-        return;
+        return NO;
 
     UIScreen* screen = scene.screen;
     DisplayManager* dm = [DisplayManager Instance];
-    if (![dm displayAvailable: screen])
+    if (![dm displayAvailable: screen] && [dm respondsToSelector: @selector(registerScreen:)])
     {
-        // DisplayManager listens for this notification; registering is idempotent.
-        [[NSNotificationCenter defaultCenter] postNotificationName: UIScreenDidConnectNotification object: screen];
+        [dm registerScreen: screen];
+        [dm updateDisplayListCacheInUnity];
     }
 
     DisplayConnection* conn = dm[screen];
     UIWindow* window = conn.window;
-    if (window != nil && !window.hidden && window.windowScene != scene)
+    if (window == nil || window.hidden)
+        return NO;
+    if (window.windowScene != scene)
         window.windowScene = scene;
+    return window.windowScene == scene;
 }
 
 @interface OFExternalDisplayScene : UIResponder<UIWindowSceneDelegate>
@@ -71,24 +82,24 @@ static void OFAttachScene(UIWindowScene* scene)
         OFAttachScene((UIWindowScene*)scene);
 }
 
-- (void)sceneDidDisconnect:(UIScene*)scene
-{
-    if (![scene isKindOfClass: [UIWindowScene class]] || !OFUnityReady())
-        return;
-    UIScreen* screen = ((UIWindowScene*)scene).screen;
-    if ([[DisplayManager Instance] displayAvailable: screen])
-        [[NSNotificationCenter defaultCenter] postNotificationName: UIScreenDidDisconnectNotification object: screen];
-}
-
 @end
 
 extern "C" {
 
-// Called from C# right after Display.Activate(): covers the case where the scene connected before
-// Unity created its external window.
-void OFExternalDisplay_AttachWindow(void)
+// Called from C# after Display.Activate() and retried until attached.
+int OFExternalDisplay_AttachWindow(void)
 {
-    OFAttachScene(OFExternalScene());
+    return OFAttachScene(OFExternalScene()) ? 1 : 0;
+}
+
+// 1 when Unity's external window lives in the external-display scene (i.e. the monitor shows the game).
+int OFExternalDisplay_IsAttached(void)
+{
+    UIWindowScene* scene = OFExternalScene();
+    if (scene == nil || !OFUnityReady())
+        return 0;
+    DisplayConnection* conn = [DisplayManager Instance][scene.screen];
+    return conn.window != nil && !conn.window.hidden && conn.window.windowScene == scene ? 1 : 0;
 }
 
 // 1 when iPadOS has handed the app an external-display scene (i.e. we are not being mirrored).
@@ -101,12 +112,7 @@ int OFExternalDisplay_HasScene(void)
 int OFExternalDisplay_MaxFramesPerSecond(void)
 {
     UIWindowScene* scene = OFExternalScene();
-    if (scene != nil)
-        return (int)scene.screen.maximumFramesPerSecond;
-    for (UIScreen* screen in [UIScreen screens])
-        if (screen != [UIScreen mainScreen])
-            return (int)screen.maximumFramesPerSecond;
-    return 0;
+    return scene != nil ? (int)scene.screen.maximumFramesPerSecond : 0;
 }
 
 // Native pixel size of the external screen's preferred mode (0x0 when none).
@@ -115,15 +121,17 @@ void OFExternalDisplay_NativeSize(int* width, int* height)
     *width = 0;
     *height = 0;
     UIWindowScene* scene = OFExternalScene();
-    UIScreen* screen = scene != nil ? scene.screen : nil;
-    if (screen == nil)
-        for (UIScreen* s in [UIScreen screens])
-            if (s != [UIScreen mainScreen]) { screen = s; break; }
-    if (screen == nil)
+    if (scene == nil)
         return;
-    UIScreenMode* mode = screen.preferredMode ? screen.preferredMode : screen.currentMode;
+    UIScreenMode* mode = scene.screen.preferredMode ? scene.screen.preferredMode : scene.screen.currentMode;
     *width = (int)mode.size.width;
     *height = (int)mode.size.height;
+}
+
+// NSProcessInfoThermalState: 0 nominal .. 3 critical (same signal FramePacer uses).
+int OFExternalDisplay_ThermalState(void)
+{
+    return (int)[[NSProcessInfo processInfo] thermalState];
 }
 
 }

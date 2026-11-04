@@ -1,5 +1,7 @@
+using System.IO;
 using NUnit.Framework;
 using OpenFifa.Editor;
+using UnityEditor;
 
 namespace OpenFifa.Tests.Editor
 {
@@ -7,46 +9,56 @@ namespace OpenFifa.Tests.Editor
     [Category("ExternalDisplay")]
     public class ExternalDisplayPostprocessTests
     {
-        private const string UnityPlist =
-            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" +
-            "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n" +
-            "<plist version=\"1.0\"><dict>" +
-            "<key>CFBundleName</key><string>OpenFootball</string>" +
-            "<key>UIApplicationSceneManifest</key><dict>" +
-            "<key>UIApplicationSupportsMultipleScenes</key><false/>" +
-            "<key>UISceneConfigurations</key><dict>" +
-            "<key>UIWindowSceneSessionRoleApplication</key><array><dict>" +
-            "<key>UISceneConfigurationName</key><string>Default Configuration</string>" +
-            "<key>UISceneDelegateClassName</key><string>UnityScene</string>" +
-            "</dict></array></dict></dict></dict></plist>";
+        /// <summary>The Info.plist template the installed editor's iOS export starts from.</summary>
+        private static string TrampolinePlist()
+        {
+            var path = Path.Combine(EditorApplication.applicationContentsPath, "PlaybackEngines", "iOSSupport", "Trampoline", "Info.plist");
+            if (!File.Exists(path)) Assert.Ignore($"iOS build support not installed ({path})");
+            return File.ReadAllText(path);
+        }
 
         [Test]
-        public void AddExternalDisplayScene_UnityPlist_AddsExternalRoleWithDelegate()
+        public void AddExternalDisplayScene_RealUnityExportPlist_AddsExternalRoleWithDelegate()
         {
-            var result = ExternalDisplayPostprocess.AddExternalDisplayScene(UnityPlist);
+            var plist = TrampolinePlist();
+            var result = ExternalDisplayPostprocess.AddExternalDisplayScene(plist, out var error);
+
+            Assert.IsNull(error, error);
             StringAssert.Contains("<key>UIWindowSceneSessionRoleExternalDisplayNonInteractive</key>", result);
             StringAssert.Contains("<string>OFExternalDisplayScene</string>", result);
             StringAssert.Contains("<string>UnityScene</string>", result, "application scene must be kept");
-            StringAssert.Contains("<string>OpenFootball</string>", result, "other keys must be kept");
+            StringAssert.Contains("<!DOCTYPE plist", result, "DOCTYPE must survive");
+            StringAssert.Contains("<key>UIRequiredDeviceCapabilities</key>", result, "other keys must be kept");
         }
 
         [Test]
         public void AddExternalDisplayScene_RunTwice_IsIdempotent()
         {
-            var once = ExternalDisplayPostprocess.AddExternalDisplayScene(UnityPlist);
-            var twice = ExternalDisplayPostprocess.AddExternalDisplayScene(once);
+            var once = ExternalDisplayPostprocess.AddExternalDisplayScene(TrampolinePlist(), out _);
+            var twice = ExternalDisplayPostprocess.AddExternalDisplayScene(once, out var error);
+            Assert.IsNull(error, error);
             Assert.AreEqual(once, twice);
         }
 
         [Test]
-        public void AddExternalDisplayScene_NoSceneManifest_CreatesIt()
+        public void AddExternalDisplayScene_NoSceneManifest_RefusesAndLeavesPlistUnchanged()
         {
-            const string bare = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict>" +
-                                "<key>CFBundleName</key><string>X</string></dict></plist>";
-            var result = ExternalDisplayPostprocess.AddExternalDisplayScene(bare);
-            StringAssert.Contains("<key>UIApplicationSceneManifest</key>", result);
-            StringAssert.Contains("<key>UISceneConfigurations</key>", result);
-            StringAssert.Contains("OFExternalDisplayScene", result);
+            const string appDelegatePlist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict>" +
+                                            "<key>CFBundleName</key><string>X</string></dict></plist>";
+            var result = ExternalDisplayPostprocess.AddExternalDisplayScene(appDelegatePlist, out var error);
+            Assert.IsNotNull(error, "must refuse: a manifest without an application role gives a black main window");
+            Assert.AreEqual(appDelegatePlist, result);
+        }
+
+        [Test]
+        public void AddExternalDisplayScene_ManifestWithoutApplicationRole_Refuses()
+        {
+            const string plist = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><plist version=\"1.0\"><dict>" +
+                                 "<key>UIApplicationSceneManifest</key><dict>" +
+                                 "<key>UISceneConfigurations</key><dict></dict></dict></dict></plist>";
+            var result = ExternalDisplayPostprocess.AddExternalDisplayScene(plist, out var error);
+            Assert.IsNotNull(error);
+            Assert.AreEqual(plist, result);
         }
     }
 }

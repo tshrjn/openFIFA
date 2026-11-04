@@ -16,49 +16,59 @@ namespace OpenFifa.Tests.Editor
         public void ChooseDisplay_Auto_MacBookOnly_PicksBuiltIn()
         {
             var displays = new List<DisplayCandidate> { MacBookPanel };
-            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference));
+            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference, 0, 1440));
         }
 
         [Test]
         public void ChooseDisplay_Auto_4KPluggedIn_MovesToMonitor()
         {
             var displays = new List<DisplayCandidate> { MacBookPanel, Monitor4K };
-            Assert.AreEqual(1, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference));
+            Assert.AreEqual(1, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference, 0, 1440));
         }
 
         [Test]
         public void ChooseDisplay_Auto_SmallerMonitor_StaysOnRetinaPanel()
         {
             var displays = new List<DisplayCandidate> { MacBookPanel, Monitor1080 };
-            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference));
+            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference, 0, 1440));
         }
 
         [Test]
         public void ChooseDisplay_PinnedMonitor_WinsWhileConnected()
         {
             var displays = new List<DisplayCandidate> { MacBookPanel, Monitor4K, Monitor1080 };
-            Assert.AreEqual(2, DesktopDisplayPolicy.ChooseDisplay(displays, "Dell P2419H"));
+            Assert.AreEqual(2, DesktopDisplayPolicy.ChooseDisplay(displays, "Dell P2419H", 0, 1440));
         }
 
         [Test]
         public void ChooseDisplay_PinnedMonitorUnplugged_FallsBackToLargest()
         {
             var displays = new List<DisplayCandidate> { MacBookPanel };
-            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, "LG UltraFine"));
+            Assert.AreEqual(0, DesktopDisplayPolicy.ChooseDisplay(displays, "LG UltraFine", 0, 1440));
         }
 
         [Test]
         public void ChooseDisplay_Empty_ReturnsMinusOne()
         {
-            Assert.AreEqual(-1, DesktopDisplayPolicy.ChooseDisplay(new List<DisplayCandidate>(), null));
+            Assert.AreEqual(-1, DesktopDisplayPolicy.ChooseDisplay(new List<DisplayCandidate>(), null, 0, 1440));
         }
 
         [Test]
-        public void StartRenderScale_5KDisplay_StartsAt1440p()
+        public void ChooseDisplay_Auto_MacBookPlus1440pMonitor_MovesToMonitor()
         {
-            var config = new ExternalDisplayConfig();
-            float scale = DesktopDisplayPolicy.StartRenderScale(config, 2880);
-            Assert.AreEqual(1440f, scale * 2880f, 1f);
+            var air = new DisplayCandidate("Built-in Liquid Retina Display", 2560, 1664);
+            var qhd = new DisplayCandidate("DELL U2723QE", 2560, 1440);
+            var displays = new List<DisplayCandidate> { air, qhd };
+            Assert.AreEqual(1, DesktopDisplayPolicy.ChooseDisplay(displays, DesktopDisplayPolicy.AutoPreference, 0, 1440),
+                "a 1440p monitor beats the laptop panel even though the panel has more pixels");
+        }
+
+        [Test]
+        public void ChooseDisplay_PinnedSecondOfTwoIdenticalMonitors_PicksIt()
+        {
+            var displays = new List<DisplayCandidate> { MacBookPanel, Monitor4K, Monitor4K };
+            Assert.AreEqual(2, DesktopDisplayPolicy.ChooseDisplay(displays, "LG UltraFine", 1, 1440));
+            Assert.AreEqual(1, DesktopDisplayPolicy.Occurrence(displays, 2));
         }
     }
 }

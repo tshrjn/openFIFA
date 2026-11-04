@@ -16,65 +16,55 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void RenderResolution_1440pMonitor_RendersNative()
+        public void RenderTiers_4KMonitor_Are1080Emergency_1440_1800_2160()
         {
-            float start = ExternalDisplayPolicy.StartScale(_config, 1440);
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 2560, 1440, start);
-            Assert.AreEqual(new PixelSize(2560, 1440), size);
+            CollectionAssert.AreEqual(new[] { 1080, 1440, 1800, 2160 }, ExternalDisplayPolicy.RenderTiers(_config, 2160));
         }
 
         [Test]
-        public void RenderResolution_4KMonitor_StartsAt1440pKeepingAspect()
+        public void RenderTiers_5KMonitor_CappedAt2160()
         {
-            float start = ExternalDisplayPolicy.StartScale(_config, 2160);
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 3840, 2160, start);
-            Assert.AreEqual(new PixelSize(2560, 1440), size);
+            CollectionAssert.AreEqual(new[] { 1080, 1440, 1800, 2160 }, ExternalDisplayPolicy.RenderTiers(_config, 2880));
         }
 
         [Test]
-        public void RenderResolution_4KMonitor_FullScaleIsNative4K()
+        public void RenderTiers_1600pMonitor_IncludesNative()
         {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 3840, 2160, 1f);
-            Assert.AreEqual(new PixelSize(3840, 2160), size);
+            CollectionAssert.AreEqual(new[] { 1080, 1440, 1600 }, ExternalDisplayPolicy.RenderTiers(_config, 1600));
         }
 
         [Test]
-        public void RenderResolution_5KMonitor_CappedAt2160()
+        public void RenderTiers_1080pMonitor_IsJustNative()
         {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 5120, 2880, 1f);
-            Assert.AreEqual(2160, size.Height);
-            Assert.AreEqual(3840, size.Width);
+            CollectionAssert.AreEqual(new[] { 1080 }, ExternalDisplayPolicy.RenderTiers(_config, 1080));
         }
 
         [Test]
-        public void RenderResolution_ScaleBelowFloor_NeverDropsUnder1440()
+        public void RenderResolution_4KMonitorAt1440_KeepsAspect()
         {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 3840, 2160, 0.1f);
-            Assert.AreEqual(1440, size.Height, $"got {size}");
-        }
-
-        [Test]
-        public void RenderResolution_1080pMonitor_RendersNativeNotUpscaled()
-        {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 1920, 1080, 1f);
-            Assert.AreEqual(new PixelSize(1920, 1080), size);
+            Assert.AreEqual(new PixelSize(2560, 1440), ExternalDisplayPolicy.RenderResolution(3840, 2160, 1440));
         }
 
         [Test]
         public void RenderResolution_Ultrawide_KeepsMonitorAspect()
         {
-            var size = ExternalDisplayPolicy.RenderResolution(_config, 3440, 1440, 1f);
-            Assert.AreEqual(new PixelSize(3440, 1440), size);
+            Assert.AreEqual(new PixelSize(3440, 1440), ExternalDisplayPolicy.RenderResolution(3440, 1440, 1440));
+        }
+
+        [Test]
+        public void RenderResolution_NeverExceedsNative()
+        {
+            Assert.AreEqual(new PixelSize(1920, 1080), ExternalDisplayPolicy.RenderResolution(1920, 1080, 2160));
         }
 
         [Test]
         public void RenderResolution_AlwaysEvenDimensions()
         {
-            for (float s = 0.5f; s <= 1f; s += 0.0625f)
+            foreach (int h in new[] { 1080, 1440, 1599, 1800, 2160 })
             {
-                var size = ExternalDisplayPolicy.RenderResolution(_config, 3840, 2160, s);
-                Assert.AreEqual(0, size.Width % 2, $"odd width {size} at scale {s}");
-                Assert.AreEqual(0, size.Height % 2, $"odd height {size} at scale {s}");
+                var size = ExternalDisplayPolicy.RenderResolution(3440, 1600, h);
+                Assert.AreEqual(0, size.Width % 2, $"odd width {size} at {h}");
+                Assert.AreEqual(0, size.Height % 2, $"odd height {size} at {h}");
             }
         }
 
@@ -132,43 +122,94 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void Governor_OverBudget_StepsDownToFloor()
+        public void Governor_4K_StartsAt1440p()
         {
-            var gov = new DynamicResolutionGovernor(_config, 1f, 0.6667f, 1f, 60);
-            for (int i = 0; i < 20 * _config.SampleFrames; i++) gov.AddFrame(1f / 30f);
-            Assert.AreEqual(0.6667f, gov.Scale, 0.0001f);
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Assert.AreEqual(1440, gov.RenderHeight);
+            Assert.AreEqual(1440, gov.FloorHeight);
         }
 
         [Test]
-        public void Governor_Headroom_StepsUpToCeiling()
+        public void Governor_OverBudget_NeverDropsBelow1440WhenCool()
         {
-            var gov = new DynamicResolutionGovernor(_config, 0.6667f, 0.6667f, 1f, 60);
-            for (int i = 0; i < 20 * _config.SampleFrames; i++) gov.AddFrame(0.008f);
-            Assert.AreEqual(1f, gov.Scale, 0.0001f);
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Feed(gov, 1f / 30f, 20);
+            Assert.AreEqual(1440, gov.RenderHeight);
         }
 
         [Test]
-        public void Governor_OnBudget_HoldsScale()
+        public void Governor_Headroom_ClimbsTierByTierTo4K()
         {
-            var gov = new DynamicResolutionGovernor(_config, 0.8f, 0.6667f, 1f, 60);
-            for (int i = 0; i < 10 * _config.SampleFrames; i++) gov.AddFrame(1f / 60f);
-            Assert.AreEqual(0.8f, gov.Scale, 0.0001f);
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Feed(gov, 0.008f, _config.UpscaleWindows);
+            Assert.AreEqual(1800, gov.RenderHeight, "one tier after the dwell");
+            Feed(gov, 0.008f, _config.UpscaleWindows);
+            Assert.AreEqual(2160, gov.RenderHeight);
+            Feed(gov, 0.008f, _config.UpscaleWindows * 3);
+            Assert.AreEqual(2160, gov.RenderHeight, "capped at 4K");
+        }
+
+        [Test]
+        public void Governor_SingleHeadroomWindow_DoesNotStepUp()
+        {
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Feed(gov, 0.008f, _config.UpscaleWindows - 1);
+            Feed(gov, 1f / 60f, 1);
+            Feed(gov, 0.008f, _config.UpscaleWindows - 1);
+            Assert.AreEqual(1440, gov.RenderHeight, "headroom windows must be consecutive");
+        }
+
+        [Test]
+        public void Governor_OverBudgetAt4K_StepsDownOneTierPerWindow()
+        {
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Feed(gov, 0.008f, _config.UpscaleWindows * 2);
+            Assert.AreEqual(2160, gov.RenderHeight);
+            Feed(gov, 1f / 40f, 1);
+            Assert.AreEqual(1800, gov.RenderHeight);
+        }
+
+        [Test]
+        public void Governor_SeriousThermal_CapsAt1440AndAllows1080()
+        {
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            Feed(gov, 0.008f, _config.UpscaleWindows * 2);
+            Assert.IsTrue(gov.SetThermal(DeviceThermalLevel.Serious));
+            Assert.AreEqual(1440, gov.RenderHeight);
+            Feed(gov, 1f / 40f, 1);
+            Assert.AreEqual(1080, gov.RenderHeight, "emergency tier when hot");
+        }
+
+        [Test]
+        public void Governor_CriticalThermal_HoldsEmergencyTier()
+        {
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            gov.SetThermal(DeviceThermalLevel.Critical);
+            Assert.AreEqual(1080, gov.RenderHeight);
+            Feed(gov, 0.008f, _config.UpscaleWindows * 3);
+            Assert.AreEqual(1080, gov.RenderHeight);
+        }
+
+        [Test]
+        public void Governor_CoolsDown_ReturnsToFloor()
+        {
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
+            gov.SetThermal(DeviceThermalLevel.Critical);
+            gov.SetThermal(DeviceThermalLevel.Nominal);
+            Assert.AreEqual(1440, gov.RenderHeight);
         }
 
         [Test]
         public void Governor_IgnoresHitches()
         {
-            var gov = new DynamicResolutionGovernor(_config, 1f, 0.6667f, 1f, 60);
+            var gov = new DynamicResolutionGovernor(_config, 2160, 60);
             for (int i = 0; i < 10 * _config.SampleFrames; i++) Assert.IsFalse(gov.AddFrame(0.5f));
-            Assert.AreEqual(1f, gov.Scale, 0.0001f);
+            Assert.AreEqual(1440, gov.RenderHeight);
         }
 
-        [Test]
-        public void Governor_ChangesOnlyAfterFullSampleWindow()
+        private void Feed(DynamicResolutionGovernor gov, float seconds, int windows)
         {
-            var gov = new DynamicResolutionGovernor(_config, 1f, 0.6667f, 1f, 60);
-            for (int i = 0; i < _config.SampleFrames - 1; i++) Assert.IsFalse(gov.AddFrame(1f / 20f));
-            Assert.IsTrue(gov.AddFrame(1f / 20f));
+            for (int i = 0; i < windows * _config.SampleFrames; i++) gov.AddFrame(seconds);
         }
     }
 }

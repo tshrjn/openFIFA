@@ -50,6 +50,19 @@ namespace OpenFifa.UI
             ConfigureSafeArea();
         }
 
+        private void OnEnable()
+        {
+            OpenFifa.Gameplay.ExternalDisplayManager.ExternalDisplayChanged += OnExternalDisplayChanged;
+        }
+
+        private void OnDisable()
+        {
+            OpenFifa.Gameplay.ExternalDisplayManager.ExternalDisplayChanged -= OnExternalDisplayChanged;
+        }
+
+        // The HUD canvas moves between the iPad (notch/home-indicator insets) and a monitor (none).
+        private void OnExternalDisplayChanged(bool external) => ConfigureSafeArea();
+
         private void Start()
         {
             if (_minimapRect != null)
