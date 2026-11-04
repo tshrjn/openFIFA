@@ -49,14 +49,21 @@ namespace OpenFifa.Core
             float autoSwitchDefenceDistance, long otherHumans = 0)
         {
             _blocked = otherHumans;
+            long teamBits = ((1L << MatchSetup.PlayersPerTeam) - 1) << MatchSim.FirstId(Team);
+            _coopTeam = (_blocked & teamBits) != 0;
             var s = sim.State;
             float now = s.Tick * sim.Dt;
             RefreshLists(sim);
 
+            // 0) Our player was sent off: hand the user the best remaining outfielder (no level auto-switches otherwise).
+            if (ControlledId >= 0 && s.Players[ControlledId].SentOff)
+                Set(SmartSwitchSelector.SelectNearestToBallPath(_candidates, s.Ball.Position, s.Ball.Velocity, -1));
+
             // 1) Our player has the ball (dribble, reception, keeper catch, restart taker): control him.
             if (s.Owner >= 0 && MatchSim.TeamOf(s.Owner) == Team)
             {
-                if (autoSwitchOnReception || s.Phase != SimMatchPhase.InPlay || ControlledIsKeeper(sim))
+                if ((autoSwitchOnReception || s.Phase != SimMatchPhase.InPlay || ControlledIsKeeper(sim))
+                    && NearestSeatTo(sim, s.Owner))
                     Set(s.Owner);
                 return;
             }
@@ -73,7 +80,8 @@ namespace OpenFifa.Core
                 {
                     var e = events[i];
                     if (e.Type == MatchEventType.Pass && e.Team == Team && e.OtherPlayerId >= 0
-                        && MatchSim.TeamOf(e.OtherPlayerId) == Team)
+                        && MatchSim.TeamOf(e.OtherPlayerId) == Team
+                        && (!_coopTeam || e.PlayerId == ControlledId)) // co-op: only the passer follows his pass
                     {
                         Set(e.OtherPlayerId);
                         return;
@@ -116,6 +124,30 @@ namespace OpenFifa.Core
 
         /// <summary>Pitch-space direction of the latest right-stick flick / swipe (set by the session before Update).</summary>
         public void SetFlickDirection(SimVec3 pitchDir) => _lastFlickPitch = pitchDir;
+
+        /// <summary>Another user seat plays on this team (set at the start of <see cref="Update"/>).</summary>
+        private bool _coopTeam;
+
+        /// <summary>
+        /// Co-op: of the user seats on this team, is this one the closest to <paramref name="id"/>? Always true with a
+        /// single seat. Keeps every seat from grabbing an AI teammate who wins the ball (the lowest seat would always win).
+        /// Ties go to the seat on the lower player id (deterministic).
+        /// </summary>
+        private bool NearestSeatTo(MatchSim sim, int id)
+        {
+            if (!_coopTeam || ControlledId < 0) return true;
+            var s = sim.State;
+            var target = s.Players[id].Position;
+            float mine = SimMath.FlatDistance(s.Players[ControlledId].Position, target);
+            int first = MatchSim.FirstId(Team);
+            for (int other = first; other < first + MatchSetup.PlayersPerTeam; other++)
+            {
+                if (other == ControlledId || (_blocked & (1L << other)) == 0) continue;
+                float d = SimMath.FlatDistance(s.Players[other].Position, target);
+                if (d < mine - 1e-4f || (System.Math.Abs(d - mine) <= 1e-4f && other < ControlledId)) return false;
+            }
+            return true;
+        }
 
         private bool ControlledIsKeeper(MatchSim sim) =>
             ControlledId == MatchSim.KeeperId(Team) && !(sim.State.Owner == ControlledId);
