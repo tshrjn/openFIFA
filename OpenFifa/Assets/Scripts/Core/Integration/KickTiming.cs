@@ -83,9 +83,15 @@ namespace OpenFifa.Core
             if (speed < 0.5f) speed = 0.5f;
             SimVec3 fallback = s.Ball.Position.Flat;
             time = 0f;
+            // Step one copy of the ball forward incrementally (same step counts as sim.PredictBall(t), so the result
+            // is bit-identical) instead of re-integrating from now for every sample: O(horizon) rather than O(horizon^2).
+            var cfg = sim.Config;
+            SimBall b = s.Ball;
+            int stepped = 0;
             for (float t = step; t <= horizon + 1e-4f; t += step)
             {
-                var b = sim.PredictBall(t);
+                int target = (int)(t / cfg.BallDt + 0.5f);
+                for (; stepped < target; stepped++) BallIntegrator.Step(ref b, cfg.Ball, cfg.Pitch, cfg.BallDt);
                 if (b.Position.Y > 1.8f) continue;
                 SimVec3 at = b.Position.Flat;
                 fallback = at;
