@@ -12,17 +12,22 @@ namespace OpenFifa.Gameplay
     /// Speaks <see cref="CommentaryEngine"/> cues with the pre-rendered clips in
     /// StreamingAssets/Commentary/audio/&lt;lang&gt;/ (see tools/commentary/render_tts.py). Two voices, each with two
     /// AudioSources so a name clip and its line clip are scheduled back to back on the DSP clock (no gap or click).
-    /// Stop cues fade out quickly. When a voice's last clip ends, <see cref="Finished"/> fires so the caller can tell the
-    /// engine (<see cref="CommentaryEngine.NotifyFinished"/>). Missing or not-yet-loaded clips are skipped silently: the
-    /// subtitles still show, and the engine skips lines whose clips are absent from the index.
+    /// Stop cues fade out quickly. Missing or not-yet-loaded clips are skipped silently: the subtitles still show.
     ///
-    /// Memory: clips load compressed (decoded while playing). Every line clip is preloaded; player names only for the
-    /// 22 players in the match, club names only for the two clubs.
+    /// Timing never feeds back into the engine (it times lines from the index), so the commentary a seed produces is
+    /// the same with or without an audio device. <see cref="Finished"/> is informational.
+    ///
+    /// Memory: clips load compressed (decoded while playing), several at a time, the most needed first: this match's
+    /// names and clubs, then kick-off, goal, shot and name-call lines, then the rest. Name and club clips are unloaded
+    /// per match. When <see cref="Enabled"/> is false (muted, batch mode, capture, no audio output) nothing is loaded
+    /// or played.
     /// </summary>
     public sealed class CommentaryAudioPlayer : MonoBehaviour
     {
         private const double ScheduleLead = 0.03;
+        private const double ClipGap = 0.06;
         private const float FadeSeconds = 0.12f;
+        private const int ParallelLoads = 8;
 
         [SerializeField] private float _volume = 1f;
 
@@ -30,7 +35,8 @@ namespace OpenFifa.Gameplay
         {
             public readonly AudioSource[] Sources = new AudioSource[2];
             public int Next;
-            public double EndDsp = -1;
+            /// <summary>End on the real-time clock (works even when the DSP clock is not running).</summary>
+            public double EndReal = -1;
             public float Fade = -1f;
             public bool Active;
         }
@@ -46,18 +52,23 @@ namespace OpenFifa.Gameplay
             new HashSet<string>(StringComparer.Ordinal),
             new HashSet<string>(StringComparer.Ordinal)
         };
+        private readonly List<KeyValuePair<CommentaryVoice, string>> _urgent = new List<KeyValuePair<CommentaryVoice, string>>();
         private readonly Queue<KeyValuePair<CommentaryVoice, string>> _loadQueue = new Queue<KeyValuePair<CommentaryVoice, string>>();
+        private int _inFlight;
         private string _folder;
-        private bool _loading;
+        private bool _enabled = true;
 
-        /// <summary>The rendered-clip index, or null when no audio is bundled (subtitles only).</summary>
+        /// <summary>The rendered-clip index (the engine's catalog), or null when no audio is bundled.</summary>
         public CommentaryAudioIndex Index { get; private set; }
 
-        /// <summary>A voice finished speaking (its last scheduled clip ended).</summary>
+        /// <summary>A voice's last scheduled clip ended (informational; not fed back to the engine).</summary>
         public event Action<CommentaryVoice> Finished;
 
         /// <summary>0..1, high while someone is speaking: other audio (crowd beds) can duck under it.</summary>
         public float DuckAmount { get; private set; }
+
+        /// <summary>Clips loaded so far (both voices).</summary>
+        public int LoadedCount => _clips[0].Count + _clips[1].Count;
 
         public float Volume
         {
@@ -65,7 +76,27 @@ namespace OpenFifa.Gameplay
             set => _volume = Mathf.Clamp01(value);
         }
 
-        public bool Muted { get; set; }
+        /// <summary>
+        /// False: load and play nothing (the index still serves as the engine's catalog). Turning it off stops speech.
+        /// </summary>
+        public bool Enabled
+        {
+            get => _enabled;
+            set
+            {
+                if (_enabled == value) return;
+                _enabled = value;
+                if (!value) StopAll();
+            }
+        }
+
+        /// <summary>True when Unity has an audio output to play to (false in batch mode or without a device).</summary>
+        public static bool AudioOutputAvailable()
+        {
+            if (Application.isBatchMode) return false;
+            try { return AudioSettings.outputSampleRate > 0; }
+            catch (Exception) { return false; }
+        }
 
         private void Awake()
         {
@@ -82,7 +113,10 @@ namespace OpenFifa.Gameplay
             _volume = PlayerPrefs.GetFloat("commentary.volume", _volume);
         }
 
-        /// <summary>Reads the index for a language. Returns false (subtitles only) when no audio is bundled.</summary>
+        /// <summary>
+        /// Reads the index for a language (a plain file read, done even when disabled so the engine's choices do not
+        /// depend on audio). Returns false (subtitles only) when no audio is bundled.
+        /// </summary>
         public bool LoadIndex(string language = "en")
         {
             _folder = Path.Combine(Application.streamingAssetsPath, "Commentary", "audio", language);
@@ -102,16 +136,19 @@ namespace OpenFifa.Gameplay
             return Index != null;
         }
 
-        /// <summary>Queues every line clip plus this match's player and club names for loading.</summary>
+        /// <summary>
+        /// Queues this match's player and club names first, then the line clips (kick-off, goals, shots and name calls
+        /// ahead of the rest). Line clips stay loaded across matches. No-op when disabled or without an index.
+        /// </summary>
         public void Preload(IEnumerable<string> playerNames, IEnumerable<string> teamNames)
         {
-            if (Index == null) return;
+            if (Index == null || !_enabled) return;
             if (playerNames != null)
                 foreach (var n in playerNames)
                 {
                     if (string.IsNullOrEmpty(n)) continue;
                     foreach (CommentaryIntonation t in Enum.GetValues(typeof(CommentaryIntonation)))
-                        Request(CommentaryVoice.PlayByPlay, CommentaryClip.NameClipId(n, t));
+                        Request(CommentaryVoice.PlayByPlay, CommentaryClip.NameClipId(n, t), true);
                 }
             if (teamNames != null)
                 foreach (var n in teamNames)
@@ -119,47 +156,114 @@ namespace OpenFifa.Gameplay
                     if (string.IsNullOrEmpty(n)) continue;
                     foreach (CommentaryIntonation t in Enum.GetValues(typeof(CommentaryIntonation)))
                     {
-                        Request(CommentaryVoice.PlayByPlay, CommentaryClip.TeamClipId(n, t));
-                        Request(CommentaryVoice.Analyst, CommentaryClip.TeamClipId(n, t));
+                        Request(CommentaryVoice.PlayByPlay, CommentaryClip.TeamClipId(n, t), true);
+                        Request(CommentaryVoice.Analyst, CommentaryClip.TeamClipId(n, t), true);
                     }
                 }
             foreach (var voice in new[] { CommentaryVoice.PlayByPlay, CommentaryVoice.Analyst })
                 foreach (var id in Index.ClipIds(voice))
-                    if (id.StartsWith("line.", StringComparison.Ordinal)) Request(voice, id);
-            if (!_loading) StartCoroutine(LoadLoop());
+                    if (id.StartsWith("line.", StringComparison.Ordinal)) Request(voice, id, IsEarlyLine(id));
+            Pump();
         }
 
-        private void Request(CommentaryVoice voice, string clipId)
+        /// <summary>Lines needed in the first seconds of a match or at its biggest moments.</summary>
+        private static bool IsEarlyLine(string id) =>
+            id.StartsWith("line.kickoff", StringComparison.Ordinal) || id.StartsWith("line.goal.", StringComparison.Ordinal) ||
+            id.StartsWith("line.shot.", StringComparison.Ordinal) || id.StartsWith("line.on_the_ball", StringComparison.Ordinal);
+
+        private void Request(CommentaryVoice voice, string clipId, bool urgent)
         {
             if (!Index.Has(voice, clipId) || !_requested[(int)voice].Add(clipId)) return;
-            _loadQueue.Enqueue(new KeyValuePair<CommentaryVoice, string>(voice, clipId));
+            var item = new KeyValuePair<CommentaryVoice, string>(voice, clipId);
+            if (urgent) _urgent.Add(item);
+            else _loadQueue.Enqueue(item);
         }
 
-        private IEnumerator LoadLoop()
+        private void Pump()
         {
-            _loading = true;
-            while (_loadQueue.Count > 0)
+            while (_inFlight < ParallelLoads && (_urgent.Count > 0 || _loadQueue.Count > 0))
             {
-                var item = _loadQueue.Dequeue();
-                string file = Path.Combine(_folder, CommentaryAudioIndex.RelativePath(item.Key, item.Value));
-                using (var req = UnityWebRequestMultimedia.GetAudioClip(new Uri(file).AbsoluteUri, AudioType.OGGVORBIS))
+                KeyValuePair<CommentaryVoice, string> item;
+                if (_urgent.Count > 0)
                 {
-                    if (req.downloadHandler is DownloadHandlerAudioClip dh) dh.compressed = true;
-                    yield return req.SendWebRequest();
+                    item = _urgent[0];
+                    _urgent.RemoveAt(0);
+                }
+                else item = _loadQueue.Dequeue();
+                _inFlight++;
+                StartCoroutine(LoadOne(item.Key, item.Value));
+            }
+        }
+
+        private IEnumerator LoadOne(CommentaryVoice voice, string clipId)
+        {
+            string file = Path.Combine(_folder, CommentaryAudioIndex.RelativePath(voice, clipId));
+            UnityWebRequest req = null;
+            try
+            {
+                req = UnityWebRequestMultimedia.GetAudioClip(new Uri(file).AbsoluteUri, AudioType.OGGVORBIS);
+                if (req.downloadHandler is DownloadHandlerAudioClip dh) dh.compressed = true;
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[Commentary] cannot load " + clipId + ": " + e.Message);
+                req?.Dispose();
+                req = null;
+            }
+            if (req != null)
+            {
+                yield return req.SendWebRequest();
+                try
+                {
                     if (req.result == UnityWebRequest.Result.Success)
                     {
-                        var clip = DownloadHandlerAudioClip.GetContent(req);
-                        clip.name = item.Value;
-                        _clips[(int)item.Key][item.Value] = clip;
+                        var clip = DownloadHandlerAudioClip.GetContent(req); // null without a working audio device
+                        if (clip != null)
+                        {
+                            clip.name = clipId;
+                            if (_requested[(int)voice].Contains(clipId)) _clips[(int)voice][clipId] = clip;
+                            else Destroy(clip); // unloaded while in flight
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[Commentary] cannot decode " + clipId + ": " + e.Message);
+                }
+                finally
+                {
+                    req.Dispose();
+                }
+            }
+            _inFlight--;
+            Pump();
+        }
+
+        /// <summary>Drops this match's player and club name clips (call when a match ends). Line clips stay loaded.</summary>
+        public void UnloadMatchClips()
+        {
+            for (int v = 0; v < 2; v++)
+            {
+                var drop = new List<string>();
+                foreach (var id in _requested[v])
+                    if (!id.StartsWith("line.", StringComparison.Ordinal)) drop.Add(id);
+                foreach (var id in drop)
+                {
+                    _requested[v].Remove(id);
+                    if (_clips[v].TryGetValue(id, out var clip))
+                    {
+                        _clips[v].Remove(id);
+                        if (clip != null) Destroy(clip);
                     }
                 }
             }
-            _loading = false;
+            _urgent.RemoveAll(i => !i.Value.StartsWith("line.", StringComparison.Ordinal));
         }
 
         /// <summary>Acts on engine cues: Start schedules the utterance's clips, Stop fades the voice out.</summary>
         public void Handle(IReadOnlyList<CommentaryCue> cues)
         {
+            if (!_enabled) return;
             for (int i = 0; i < cues.Count; i++)
             {
                 var cue = cues[i];
@@ -174,8 +278,9 @@ namespace OpenFifa.Gameplay
             int v = (int)u.Voice;
             var voice = _voices[v];
             StopVoice(u.Voice, false);
-            if (Muted || Index == null) return;
-            double t = AudioSettings.dspTime + ScheduleLead;
+            if (Index == null) return;
+            double dsp0 = AudioSettings.dspTime + ScheduleLead;
+            double t = dsp0;
             bool any = false;
             foreach (var c in u.Clips)
             {
@@ -185,11 +290,11 @@ namespace OpenFifa.Gameplay
                 src.clip = clip;
                 src.volume = _volume;
                 src.PlayScheduled(t);
-                t += clip.length + 0.06;
+                t += clip.length + ClipGap;
                 any = true;
             }
             voice.Active = any;
-            voice.EndDsp = any ? t - 0.06 : -1;
+            voice.EndReal = any ? Time.unscaledTimeAsDouble + (t - ClipGap - dsp0) + ScheduleLead : -1;
             voice.Fade = -1f;
         }
 
@@ -216,6 +321,7 @@ namespace OpenFifa.Gameplay
         private void Update()
         {
             bool speaking = false;
+            double now = Time.unscaledTimeAsDouble;
             for (int v = 0; v < _voices.Length; v++)
             {
                 var voice = _voices[v];
@@ -232,7 +338,7 @@ namespace OpenFifa.Gameplay
                     }
                     continue;
                 }
-                if (AudioSettings.dspTime >= voice.EndDsp)
+                if (now >= voice.EndReal)
                 {
                     voice.Active = false;
                     Finished?.Invoke((CommentaryVoice)v);

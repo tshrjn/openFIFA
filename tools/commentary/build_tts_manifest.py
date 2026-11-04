@@ -20,10 +20,19 @@ import csv
 import json
 import os
 import sys
+import unicodedata
 
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DEFAULT_LINES = os.path.join(REPO_ROOT, "OpenFifa", "Assets", "StreamingAssets", "Commentary", "lines.en.json")
-DEFAULT_ROSTER = os.path.join(REPO_ROOT, "OpenFifa", "Assets", "StreamingAssets", "Rosters", "default_league.json")
+ROSTER_DIR = os.path.join(REPO_ROOT, "OpenFifa", "Assets", "StreamingAssets", "Rosters")
+DEFAULT_ROSTER = os.path.join(ROSTER_DIR, "default_league.json")
+
+
+def bundled_rosters():
+    """Every league the game ships: Rosters/default_league.json plus Rosters/Packs/*.roster.json."""
+    packs = os.path.join(ROSTER_DIR, "Packs")
+    found = sorted(os.path.join(packs, f) for f in os.listdir(packs) if f.endswith(".roster.json")) if os.path.isdir(packs) else []
+    return [DEFAULT_ROSTER] + found
 INTONATIONS = ["neutral", "excited", "question"]
 NAME_TOKEN = "{name}"
 TEAM_TOKEN = "{team}"
@@ -31,17 +40,28 @@ TTS_PUNCT = {"neutral": ".", "excited": "!", "question": "?"}
 VOICE_IDS = {"pbp": "lead", "analyst": "analyst"}
 
 
+SPELLED = {"ø": "o", "Ø": "o", "ı": "i", "ł": "l", "Ł": "l", "đ": "d", "Đ": "d", "ß": "ss", "æ": "ae", "Æ": "ae",
+           "œ": "oe", "Œ": "oe", "þ": "th", "Þ": "th", "ð": "d", "Ð": "d"}
+
+
 def slug(text):
+    """Mirrors RosterSchema.Slug: drop accents (NFD), spell out a few letters, other characters separate words."""
     out, pending = [], False
-    for ch in text:
+    for ch in unicodedata.normalize("NFD", text):
+        if unicodedata.category(ch) == "Mn":
+            continue
         c = ch.lower() if "A" <= ch <= "Z" else ch
         if ("a" <= c <= "z") or ("0" <= c <= "9"):
-            if pending and out:
-                out.append("_")
-            pending = False
-            out.append(c)
+            mapped = c
         else:
+            mapped = SPELLED.get(ch)
+        if mapped is None:
             pending = True
+            continue
+        if pending and out:
+            out.append("_")
+        pending = False
+        out.append(mapped)
     return "".join(out)
 
 
@@ -140,7 +160,7 @@ def team_clips(roster_paths):
         with open(path, encoding="utf-8") as f:
             doc = json.load(f)
         for club in doc["clubs"]:
-            names.add(club.get("spokenName") or club["name"])
+            names.add(club["name"])  # the game speaks RosterClub.Name
     clips = []
     for n in sorted(names, key=slug):
         for voice in ("lead", "analyst"):
@@ -191,11 +211,11 @@ def build(lines_path, roster_paths):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build the commentary TTS pre-render manifest (no API calls).")
     ap.add_argument("--lines", default=DEFAULT_LINES)
-    ap.add_argument("--roster", action="append", help="roster JSON (repeatable); default: bundled league")
+    ap.add_argument("--roster", action="append", help="roster JSON (repeatable); default: every bundled league and pack")
     ap.add_argument("--out", default=os.path.join(REPO_ROOT, "build", "commentary", "tts_manifest.en.json"))
     ap.add_argument("--csv", help="also write a CSV (clipId, voice, intonation, ttsText)")
     a = ap.parse_args(argv)
-    manifest = build(a.lines, a.roster or [DEFAULT_ROSTER])
+    manifest = build(a.lines, a.roster or bundled_rosters())
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, indent=1, ensure_ascii=False)

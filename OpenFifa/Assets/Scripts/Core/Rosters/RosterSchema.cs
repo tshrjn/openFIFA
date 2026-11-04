@@ -126,27 +126,53 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Lower-case ASCII slug ("Dele Okonkwo-Hart" -> "dele_okonkwo_hart"); used for clip ids and file names.
+        /// Lower-case ASCII slug ("Dele Okonkwo-Hart" -> "dele_okonkwo_hart", "Ødegaard" -> "odegaard",
+        /// "Kadıoğlu" -> "kadioglu"); used for commentary clip ids and file names. Accents are dropped (Unicode
+        /// decomposition), a few letters without a decomposition are spelled out, anything else separates words.
         /// tools/commentary/build_tts_manifest.py implements the same rule.
         /// </summary>
         public static string Slug(string text)
         {
             if (string.IsNullOrEmpty(text)) return string.Empty;
+            string decomposed = text.Normalize(System.Text.NormalizationForm.FormD);
             var sb = new System.Text.StringBuilder(text.Length);
             bool pendingSep = false;
-            foreach (char raw in text)
+            foreach (char raw in decomposed)
             {
-                char c = raw >= 'A' && raw <= 'Z' ? (char)(raw + 32) : raw;
-                bool keep = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-                if (keep)
+                if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(raw) ==
+                    System.Globalization.UnicodeCategory.NonSpacingMark)
+                    continue;
+                string mapped = Transliterate(raw);
+                if (mapped == null)
                 {
-                    if (pendingSep && sb.Length > 0) sb.Append('_');
-                    pendingSep = false;
-                    sb.Append(c);
+                    pendingSep = true;
+                    continue;
                 }
-                else pendingSep = true;
+                if (pendingSep && sb.Length > 0) sb.Append('_');
+                pendingSep = false;
+                sb.Append(mapped);
             }
             return sb.ToString();
+        }
+
+        /// <summary>ASCII spelling of one character, or null for a separator.</summary>
+        private static string Transliterate(char raw)
+        {
+            char c = raw >= 'A' && raw <= 'Z' ? (char)(raw + 32) : raw;
+            if ((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) return c.ToString();
+            switch (raw)
+            {
+                case 'ø': case 'Ø': return "o";
+                case 'ı': return "i";
+                case 'ł': case 'Ł': return "l";
+                case 'đ': case 'Đ': return "d";
+                case 'ß': return "ss";
+                case 'æ': case 'Æ': return "ae";
+                case 'œ': case 'Œ': return "oe";
+                case 'þ': case 'Þ': return "th";
+                case 'ð': case 'Ð': return "d";
+                default: return null;
+            }
         }
     }
 }

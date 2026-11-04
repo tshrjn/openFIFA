@@ -335,6 +335,22 @@ namespace OpenFifa.Tests.Editor.Integration
         }
 
         [Test]
+        public void Commentary_ShotOutForCorner_IsNotCalledWide()
+        {
+            var sim = NewSim();
+            var c = new SimCommentaryAdapter(sim);
+            var ev = new List<MatchEvent>
+            {
+                new MatchEvent { Type = MatchEventType.Shot, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0.1f, 30f) },
+                new MatchEvent { Type = MatchEventType.Corner, Team = SimTeam.Home },
+            };
+            var outp = c.Convert(ev, 1.0);
+            Assert.AreEqual(2, outp.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, outp[0].Type);
+            Assert.AreEqual(CommentaryEventType.Corner, outp[1].Type, "a deflected shot is a corner, not a miss");
+        }
+
+        [Test]
         public void Commentary_LongShotGoal_IsLongRange_OwnGoalIsOwnGoal()
         {
             var sim = NewSim();

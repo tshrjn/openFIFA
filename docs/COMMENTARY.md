@@ -15,11 +15,16 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
    with each clip's audio file named by `ClipId`. On `Stop`, fade that voice out quickly. The audio layer can call
    `NotifyFinished(voice, now)` when the real audio ends.
 4. In the game, `SinglePlayerMatchController` does all of this with `CommentaryAudioPlayer`
-   (`Gameplay/SinglePlayer/`): it reads `StreamingAssets/Commentary/audio/en/index.json`, hands the index to the
-   engine as its `Catalog`, preloads every line clip plus this match's 22 player names and two club names
-   (compressed in memory), schedules name and line clips back to back on the DSP clock, fades on `Stop`, and reports
-   `NotifyFinished`. The controller feeds the crowd level to `SetCrowdIntensity` each frame. With no audio bundled,
-   commentary falls back to subtitles only. `-spNoCommentary` mutes it.
+   (`Gameplay/SinglePlayer/`). It always reads `StreamingAssets/Commentary/audio/en/index.json` and hands it to the
+   engine as its `Catalog`. With a real audio output (not batch mode, not `-spCapture`, not `-spNoCommentary`) it also
+   loads clips, compressed and 8 at a time: this match's 22 player names and two clubs first, then kick-off, goal,
+   shot and name-call lines, then the rest. It schedules name and line clips back to back on the DSP clock and fades
+   on `Stop`. Name clips are unloaded when the match ends. Playback never calls `NotifyFinished`: line timing comes
+   from the index, so a seed gives the same commentary (and the same capture `commentary.txt`) with or without
+   sound. The controller feeds the crowd level to `SetCrowdIntensity` each frame, and a Stop cue clears the
+   subtitle of the line it cut. With no audio bundled, commentary falls back to subtitles only.
+5. Capture `commentary.txt` tags name calls `[call]` and logs a line cut off by a bigger moment a second time as
+   `[cut]`.
 
 ## Rules (CommentaryEngine)
 
@@ -34,6 +39,7 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
 | Strike, then outcome | `ShotTaken` ("Okafor shoots!") is interruptible. The save, miss or goal cuts it, unless the strike call ends within `InterruptGrace` (0.45 s), in which case the outcome waits for it to finish. |
 | Name calls | Every completed pass that is not a sequence milestone sends `OnTheBall` with the receiver. The `on_the_ball` category (cooldown 3.5 s) answers with bare name calls ("Okafor...") and short ones ("Into Okafor"), which carry the build-up the way TV commentary does. |
 | Lulls | After `LullSeconds` (11 s) without speech in live play, the engine makes a `Lull` event with the current minute and score and gives it to the analyst `AnalystLullShare` of the time, otherwise to the lead voice. Never during stoppages. |
+| Own goals | The `own_goal` situation category beats every context (equaliser, late winner, comeback...), and no line outside it may name the player, so a defender is never hailed as the scorer. A shot that goes out for a corner is called as a corner, not a miss. |
 | Clip catalog | With `engine.Catalog` set (the rendered index), lines whose line or name clip is not rendered are skipped, so a player added after the last render gets nameless lines. Utterance end times come from the real clip lengths. |
 | Name call-outs | `{name}` (player) or `{team}` (club) at the start or end of a line becomes a separate name clip in the line's `nameTone` (`neutral`/`excited`/`question`), followed or preceded by the line clip. A line that is only `{name}` is a bare name call (no line clip). A line that needs a name is skipped when the event has none. Analyst lines cannot use `{name}` (player names are rendered for the lead voice only), but can use `{team}`. |
 
@@ -65,11 +71,11 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
 clip the engine can request: one `line.<id>` per bank line, and `name.<slug>.<intonation>` × 3 for every roster
 `knownAs`. Each entry has the voice, the intonation and `ttsText`. Name clips end in `.`, `!` or `?` to steer the
 intonation. The script calls no TTS API, and its output (under `build/`, which is gitignored) is deterministic.
-For the bundled league that is 2,298 clips and about 39K characters. Render the clips later with ElevenLabs
+For the bundled league plus the Premier League pack that is 3,834 clips and about 52K characters. Render the clips later with ElevenLabs
 or Kokoro using stock or licensed synthetic voices only. Never clone a real commentator, and disclose AI voices in
 store metadata.
 
-`build_tts_manifest.py` also lists `team.<slug>.<intonation>` for every club `name` (or optional `spokenName`), in
+`build_tts_manifest.py` also lists `team.<slug>.<intonation>` for every club `name` (what the game speaks) in every bundled league and pack, in
 both voices, and skips bare name calls (they play only the name clip).
 
 ## Voices and rendering
@@ -87,6 +93,11 @@ python3 -m venv ~/GameDev/.tts/venv && ~/GameDev/.tts/venv/bin/pip install kokor
 # kokoro-v1.0.onnx + voices-v1.0.bin from github.com/thewh1teagle/kokoro-onnx releases, into ~/GameDev/.tts
 ~/GameDev/.tts/venv/bin/python tools/commentary/render_tts.py --jobs 6
 ```
+
+Licence and disclosure: see `THIRD_PARTY_NOTICES.md` (Kokoro is Apache-2.0; the voices are AI-generated and must be
+disclosed as such in store listings). Clip ids transliterate accents (`Ødegaard` -> `name.odegaard.*`) the same way
+in `RosterSchema.Slug` and the manifest tool. The clips are about 30 MB of Ogg; if the repo grows uncomfortable,
+move `StreamingAssets/Commentary/audio/**/*.ogg` to Git LFS (not set up on CodeBox2 yet).
 
 Change a voice by editing `VOICES` in the script and re-rendering. A licensed studio voice or a better TTS can
 replace Kokoro without code changes, as long as it writes the same files and index. Never use a cloned voice of a

@@ -20,7 +20,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
     ///    chest-up close-ups of the controlled player (still_closeup_face.png, still_closeup_back.png);
     /// 4. copies 11 frames at ~10 fps around up to three probe moments in the window (a long pass, a shot, a bounce or
     ///    roll) to sequences/seqA-01.png... and describes them in sequences.txt;
-    /// 5. logs every commentary line spoken in the window to commentary.txt ("mm:ss.s | event | speaker | text");
+    /// 5. logs every commentary line spoken in the window to commentary.txt ("mm:ss.s | event | speaker | text"; name
+    ///    calls are tagged "[call]", and a line cut off by a bigger moment gets a second "[cut]" entry);
     /// 6. writes capture.txt (run parameters, the clubs and every league's club ids for -spHome/-spAway) and quits.
     /// Stitch the frames with ffmpeg (capture.sh does).
     ///
@@ -208,12 +209,22 @@ namespace OpenFifa.Gameplay.SinglePlayer
             for (int i = 0; i < cues.Count; i++)
             {
                 var cue = cues[i];
-                if (cue.Kind != CommentaryCueKind.Start || cue.Utterance == null || Seen(cue.Utterance)) continue;
+                if (cue.Utterance == null) continue;
+                var st = session.Sim.State;
+                string clock = CaptureText.Clock(st.Clock, st.Half, session.Sim.Config.HalfDurationSeconds);
+                if (cue.Kind == CommentaryCueKind.Stop)
+                {
+                    // The line was cut off by a bigger moment: log it so the transcript does not read as fully spoken.
+                    _commentary.Append(CaptureText.CommentaryLine(clock, cue.Utterance.Category.Event, cue.Utterance.Voice,
+                        "[cut] " + cue.Utterance.Transcript)).Append('\n');
+                    continue;
+                }
+                if (Seen(cue.Utterance)) continue;
                 _recent[_recentNext] = cue.Utterance;
                 _recentNext = (_recentNext + 1) % _recent.Length;
-                var st = session.Sim.State;
-                _commentary.Append(CaptureText.CommentaryLine(CaptureText.Clock(st.Clock, st.Half, session.Sim.Config.HalfDurationSeconds),
-                    cue.Utterance.Category.Event, cue.Utterance.Voice, cue.Utterance.Transcript)).Append('\n');
+                string tag = cue.Utterance.Category.Event == CommentaryEventType.OnTheBall ? "[call] " : "";
+                _commentary.Append(CaptureText.CommentaryLine(clock, cue.Utterance.Category.Event, cue.Utterance.Voice,
+                    tag + cue.Utterance.Transcript)).Append('\n');
                 _commentaryLines++;
             }
         }

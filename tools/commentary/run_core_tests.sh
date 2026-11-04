@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Compiles the pure-C# Core (files without `using UnityEngine`) plus the chosen EditMode test folders with Unity's
 # bundled .NET runtime and Roslyn, then runs the NUnit tests with a tiny reflection runner. No editor needed.
-#   tools/commentary/run_core_tests.sh [TestDir ...]   (default: Commentary Integration)
+#   tools/commentary/run_core_tests.sh [TestDir ...]   (default: Commentary Integration TeamAI)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 U="${UNITY_EDITOR_DATA:-$HOME/Unity/6000.3.10f1/Editor/Data}"
@@ -11,7 +11,7 @@ FW="$(ls -d "$U"/NetCoreRuntime/shared/Microsoft.NETCore.App/*/ | head -1)"
 NUNIT="${NUNIT_DLL:-$(find "$HOME/GameDev" -path '*com.unity.ext.nunit*/net40/unity-custom/nunit.framework.dll' 2>/dev/null | head -1)}"
 OUT="$ROOT/build/cstest"
 rm -rf "$OUT"; mkdir -p "$OUT"
-dirs=("$@"); [ ${#dirs[@]} -eq 0 ] && dirs=(Commentary Integration)
+dirs=("$@"); [ ${#dirs[@]} -eq 0 ] && dirs=(Commentary Integration TeamAI)
 refs=(); for f in "$FW"*.dll; do case "$(basename "$f")" in Microsoft.VisualBasic*|*Native*) ;; *) refs+=("-r:$f");; esac; done
 core=$(grep -rL 'using UnityEngine' "$ROOT/OpenFifa/Assets/Scripts/Core" --include=*.cs || true)
 "$DOTNET" "$CSC" -nologo -nowarn:1591,0618,0414,0169,0649 -langversion:9 -target:library -out:"$OUT/Core.dll" -noconfig -nostdlib "${refs[@]}" $core >"$OUT/core.log" || { cat "$OUT/core.log"; exit 1; }

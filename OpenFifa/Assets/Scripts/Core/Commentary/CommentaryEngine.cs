@@ -420,9 +420,18 @@ namespace OpenFifa.Core
                 : CommentaryClip.NameClipId(name, line.NameTone);
 
         /// <summary>Line conditions plus, with a catalog, that its clips are rendered.</summary>
-        private bool LineUsable(CommentaryLine l, CommentaryVoice voice, CommentaryEvent e, float crowd)
+        private static readonly string OwnGoalSituation = CommentaryLineBank.SnakeCase(nameof(GoalSituation.OwnGoal));
+
+        private bool LineUsable(CommentaryLine l, CommentaryCategory cat, CommentaryEvent e, float crowd)
         {
+            var voice = cat.Voice;
             if (!l.Fits(e, crowd)) return false;
+            // Never name the player behind an own goal in a line written for a scorer (context categories, analyst
+            // fallbacks): only the own-goal category's lines may name him.
+            if (e.Type == CommentaryEventType.Goal && e.Situation == GoalSituation.OwnGoal &&
+                l.Name != CommentaryNamePlacement.None && l.NameKind == CommentaryNameKind.Player &&
+                cat.Situation != OwnGoalSituation)
+                return false;
             if (_catalog == null) return true;
             if (!l.NameOnly && !_catalog.Has(voice, l.ClipId)) return false;
             return l.Name == CommentaryNamePlacement.None || _catalog.Has(voice, NameClipId(l, l.SpokenName(e)));
@@ -434,7 +443,7 @@ namespace OpenFifa.Core
             fits.Clear();
             var lines = cat.Lines;
             for (int i = 0; i < lines.Count; i++)
-                if (LineUsable(lines[i], cat.Voice, e, crowd)) fits.Add(lines[i]);
+                if (LineUsable(lines[i], cat, e, crowd)) fits.Add(lines[i]);
             if (fits.Count == 0) return null;
 
             var fresh = _fresh;
@@ -461,6 +470,12 @@ namespace OpenFifa.Core
             if (all.Count == 0) return null;
             string situation = e.Type == CommentaryEventType.Goal ? SituationName(e.Situation) : null;
 
+            // An own goal is about the mistake first: its own category beats every context (equaliser, late winner...),
+            // so the defender is never praised for "scoring".
+            if (e.Type == CommentaryEventType.Goal && e.Situation == GoalSituation.OwnGoal)
+                foreach (var c in all)
+                    if (c.Situation == situation && Usable(c, e, now, crowd, liveOnly)) return c;
+
             foreach (var ctx in contexts)
                 foreach (var c in all)
                     if (c.Context == ctx && (c.Situation == null || c.Situation == situation) && Usable(c, e, now, crowd, liveOnly)) return c;
@@ -479,7 +494,7 @@ namespace OpenFifa.Core
             if (c.Cooldown > 0 && _categoryLastUsed.TryGetValue(c.Id, out double t) && now - t < c.Cooldown) return false;
             var lines = c.Lines;
             for (int i = 0; i < lines.Count; i++)
-                if (LineUsable(lines[i], c.Voice, e, crowd)) return true;
+                if (LineUsable(lines[i], c, e, crowd)) return true;
             return false;
         }
 

@@ -146,7 +146,7 @@ def main(argv=None):
 
     sys.path.insert(0, HERE)
     import build_tts_manifest as m
-    manifest = m.build(a.lines or m.DEFAULT_LINES, a.roster or [m.DEFAULT_ROSTER])
+    manifest = m.build(a.lines or m.DEFAULT_LINES, a.roster or m.bundled_rosters())
     clips = [c for c in manifest["clips"] if not a.only or a.only in c["clipId"]]
 
     index_path = os.path.join(a.out, "index.json")

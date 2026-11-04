@@ -95,11 +95,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
             LoadRosters();
             ApplyClubSelection();
             LoadCommentary();
+            // The index is read in every mode: it is the engine's catalog, so a seed's commentary is the same with or
+            // without sound. Loading and playback only happen with a real audio output outside captures. Clip timing
+            // comes from the index, never from playback (no NotifyFinished), for the same reason.
             _commentaryAudio = gameObject.AddComponent<CommentaryAudioPlayer>();
-            if (_commentaryAudio.LoadIndex("en"))
-                Debug.Log("[" + ProductName + "] commentary audio: " + _commentaryAudio.Index.Count + " clips");
-            _commentaryAudio.Muted = _muteCommentary;
-            _commentaryAudio.Finished += voice => _commentary?.NotifyFinished(voice, _realClock);
+            bool indexed = _commentaryAudio.LoadIndex("en");
+            _commentaryAudio.Enabled = !_muteCommentary && !_captureRun && CommentaryAudioPlayer.AudioOutputAvailable();
+            if (indexed)
+                Debug.Log("[" + ProductName + "] commentary audio: " + _commentaryAudio.Index.Count + " clips" +
+                          (_commentaryAudio.Enabled ? "" : " (catalog only, not played)"));
         }
 
         private void Start()
@@ -108,6 +112,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
         }
 
         private bool _muteCommentary;
+        private bool _captureRun;
+        private CommentaryUtterance _subtitleUtterance;
+
+        private void ClearSubtitle()
+        {
+            Subtitle = string.Empty;
+            SubtitleUntil = 0f;
+            _subtitleUtterance = null;
+        }
 
         private void ParseCommandLine()
         {
@@ -126,6 +139,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spAway" && next != null) ArgAway = next;
                 else if (a == "-spLeague" && next != null) ArgLeague = next;
                 else if (a == "-spNoCommentary") _muteCommentary = true;
+                else if (a == "-spCapture") _captureRun = true;
             }
         }
 
@@ -590,7 +604,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Session = null;
             Input = null;
             _commentary = null;
-            _commentaryAudio?.StopAll();
+            if (_commentaryAudio != null)
+            {
+                _commentaryAudio.StopAll();
+                _commentaryAudio.UnloadMatchClips();
+            }
+            _subtitleUtterance = null;
             Frozen = false;
             PinCameraYaw = false;
             Subtitle = string.Empty;
@@ -723,15 +742,26 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     if (Session.Paused != _wasPaused)
                     {
                         _wasPaused = Session.Paused;
-                        if (_wasPaused) _commentaryAudio.StopAll();
+                        if (_wasPaused)
+                        {
+                            _commentaryAudio.StopAll();
+                            ClearSubtitle();
+                        }
                     }
                     if (!Session.Paused) _commentaryAudio.Handle(cues);
                 }
                 for (int i = 0; i < cues.Count; i++)
                 {
                     var cue = cues[i];
-                    if (cue.Kind != CommentaryCueKind.Start || cue.Utterance == null) continue;
                     var u = cue.Utterance;
+                    if (u == null) continue;
+                    if (cue.Kind == CommentaryCueKind.Stop)
+                    {
+                        if (ReferenceEquals(u, _subtitleUtterance)) ClearSubtitle();
+                        continue;
+                    }
+                    if (Session.Paused) continue;
+                    _subtitleUtterance = u;
                     Subtitle = u.Transcript.Replace(" | ", " ");
                     SubtitleUntil = Time.unscaledTime + Mathf.Max(2.5f, (float)(u.EndTime - u.StartTime) + 1.2f);
                 }

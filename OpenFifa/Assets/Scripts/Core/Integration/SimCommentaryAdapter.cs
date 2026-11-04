@@ -128,7 +128,8 @@ namespace OpenFifa.Core
                         if (_shotPending) AddShot(CommentaryEventType.ShotWide, e, now, -1);
                         break;
                     case MatchEventType.Corner:
-                        if (_shotPending) AddShot(CommentaryEventType.ShotWide, e, now, -1);
+                        // A shot that goes out for a corner was deflected or tipped: not "wide". The corner call covers it.
+                        _shotPending = false;
                         Add(CommentaryEventType.Corner, e, now, -1);
                         break;
                     case MatchEventType.Goal:

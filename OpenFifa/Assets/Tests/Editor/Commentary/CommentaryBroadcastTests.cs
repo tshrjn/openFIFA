@@ -270,5 +270,95 @@ namespace OpenFifa.Tests.Editor
             Assert.AreEqual("analyst/line.analyst.save.01.ogg", CommentaryAudioIndex.RelativePath(CommentaryVoice.Analyst, "line.analyst.save.01"));
             Assert.IsNull(CommentaryAudioIndex.Parse("{\"format\": \"other\"}", out _));
         }
+
+        [Test]
+        public void OwnGoal_BeatsContextCategories_AndNeverNamesTheDefenderAsScorer()
+        {
+            var bank = Shipped();
+            for (uint seed = 1; seed < 40; seed++)
+            {
+                var e = new CommentaryEngine(bank, Quiet(), seed);
+                e.Push(Goal(0, "Vance", 0, 1));
+                // Equalising own goal in the 88th minute: equaliser and late contexts must not claim it.
+                var og = Goal(100, "Hollis", 1, 1, 88);
+                og.Situation = GoalSituation.OwnGoal;
+                var u = Started(e.Push(og), CommentaryVoice.PlayByPlay);
+                Assert.IsNotNull(u);
+                Assert.AreEqual("goal.own_goal", u.Category.Id, "seed " + seed);
+            }
+            // Without an own-goal category, scorer lines that would name him are skipped.
+            var json = "{\"format\":\"openfootball-commentary-lines\",\"schemaVersion\":1,\"categories\":[" +
+                "{\"id\":\"goal.equaliser\",\"event\":\"Goal\",\"context\":\"equaliser\",\"priority\":95,\"resolution\":true,\"lines\":[\"{name} levels it!\",\"All square!\"]}]}";
+            var small = CommentaryLineBank.Load(json, out var errors);
+            Assert.IsNotNull(small, string.Join("\n", errors.ToArray()));
+            for (uint seed = 1; seed < 20; seed++)
+            {
+                var e = new CommentaryEngine(small, Quiet(), seed);
+                var og = Goal(0, "Hollis", 1, 1);
+                og.Situation = GoalSituation.OwnGoal;
+                Assert.AreEqual("All square!", Started(e.Push(og), CommentaryVoice.PlayByPlay).Transcript);
+            }
+        }
+
+        [Test]
+        public void Slug_NonAsciiNames_MatchTheManifestTool()
+        {
+            // Expected values are what tools/commentary/build_tts_manifest.py slug() returns for the same names.
+            var cases = new Dictionary<string, string>
+            {
+                { "Ødegaard", "odegaard" }, { "Kadıoğlu", "kadioglu" }, { "Gyökeres", "gyokeres" },
+                { "Martínez", "martinez" }, { "Milosavljević", "milosavljevic" }, { "Guimarães", "guimaraes" },
+                { "Dele Okonkwo-Hart", "dele_okonkwo_hart" }, { "Brighton & Hove Albion", "brighton_hove_albion" },
+                { "Łukasz Fabiański", "lukasz_fabianski" }, { "Müller", "muller" }
+            };
+            foreach (var kv in cases) Assert.AreEqual(kv.Value, RosterSchema.Slug(kv.Key), kv.Key);
+            Assert.AreEqual("name.odegaard.excited", CommentaryClip.NameClipId("Ødegaard", CommentaryIntonation.Excited));
+            Assert.AreEqual("team.brighton_hove_albion.neutral", CommentaryClip.TeamClipId("Brighton & Hove Albion", CommentaryIntonation.Neutral));
+        }
+
+        [Test]
+        public void ShippedAudioIndex_WhenPresent_CoversEveryBundledClubAndPlayer()
+        {
+            string path = Path.Combine(RosterTestData.StreamingAssets, "Commentary", "audio", "en", "index.json");
+            if (!File.Exists(path)) Assert.Ignore("no rendered audio in this checkout");
+            var idx = CommentaryAudioIndex.Parse(File.ReadAllText(path), out var error);
+            Assert.IsNotNull(idx, error);
+            var problems = new List<string>();
+            var missing = new List<string>();
+            foreach (var league in RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems))
+                foreach (var club in league.Clubs)
+                {
+                    foreach (var voice in new[] { CommentaryVoice.PlayByPlay, CommentaryVoice.Analyst })
+                        if (!idx.Has(voice, CommentaryClip.TeamClipId(club.Name, CommentaryIntonation.Neutral))) missing.Add(club.Name);
+                    foreach (var p in club.Players)
+                        if (!idx.Has(CommentaryVoice.PlayByPlay, CommentaryClip.NameClipId(p.KnownAs, CommentaryIntonation.Neutral)))
+                            missing.Add(p.KnownAs);
+                }
+            Assert.IsEmpty(missing, "names without clips (re-run render_tts.py): " + string.Join(", ", missing.ToArray()));
+        }
+
+        [Test]
+        public void Session_SameSeed_SameCommentary_WithCatalog()
+        {
+            var bank = Shipped();
+            var catalog = new FakeCatalog();
+            string Run()
+            {
+                var session = new SinglePlayerMatchSession(new SinglePlayerMatchOptions { Seed = 11, Config = new MatchSimConfig { HalfDurationSeconds = 40f } });
+                session.AttachCommentaryEngine(new CommentaryEngine(bank, null, 5) { Catalog = catalog });
+                var sb = new System.Text.StringBuilder();
+                double t = 0;
+                while (!session.IsFinished && t < 400)
+                {
+                    session.Advance(1.0 / 30.0, null, t);
+                    foreach (var cue in session.FrameCues) sb.Append(cue.Kind).Append(' ').Append(cue.Utterance.Transcript).Append('\n');
+                    t += 1.0 / 30.0;
+                }
+                return sb.ToString();
+            }
+            string a = Run(), b = Run();
+            Assert.Greater(a.Length, 100);
+            Assert.AreEqual(a, b);
+        }
     }
 }
