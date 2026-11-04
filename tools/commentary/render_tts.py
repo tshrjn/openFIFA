@@ -11,7 +11,9 @@ Voices are blends of Kokoro's stock British voices, so neither commentator is a 
 neither is modelled on a real broadcaster. Do not swap in a cloned voice of a real commentator.
 
 Output: OpenFifa/Assets/StreamingAssets/Commentary/audio/<lang>/<voice>/<clipId>.ogg plus index.json
-({voice: {clipId: [seconds, hash]}}), which the game reads to know which clips exist and how long they are.
+({voice: {clipId: [seconds, renderHash, sha256]}}), which the game reads to know which clips exist and how long they
+are. Only index.json is committed; the .ogg files ship as a GitHub Release asset (tools/commentary/clips.py pack, then
+fetch_clips.sh on build machines). A re-render keeps the index's "clipsRelease" tag only if no clip changed.
 """
 
 import argparse
@@ -115,7 +117,9 @@ def render_one(args):
     y = process(audio, pitch, gain)
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
     sf.write(out_path, y, SR, format="OGG", subtype="VORBIS")
-    return clip["voice"], clip["clipId"], round(len(y) / SR, 3)
+    with open(out_path, "rb") as f:
+        digest = hashlib.sha256(f.read()).hexdigest()
+    return clip["voice"], clip["clipId"], round(len(y) / SR, 3), digest
 
 
 def index_text(doc):
@@ -127,7 +131,7 @@ def index_text(doc):
         out.append('  "%s": {' % voice)
         items = list(clips.items())
         for i, (cid, v) in enumerate(items):
-            out.append('    "%s": [%s, "%s"]%s' % (cid, v[0], v[1], "," if i < len(items) - 1 else ""))
+            out.append('    "%s": [%s]%s' % (cid, ", ".join(json.dumps(x) for x in v), "," if i < len(items) - 1 else ""))
         out.append("  }" + ("," if vi < len(voices) - 1 else ""))
     out.append("}}")
     return "\n".join(out) + "\n"
@@ -150,10 +154,11 @@ def main(argv=None):
     clips = [c for c in manifest["clips"] if not a.only or a.only in c["clipId"]]
 
     index_path = os.path.join(a.out, "index.json")
-    old = {}
+    old, old_release = {}, None
     if os.path.exists(index_path):
         with open(index_path, encoding="utf-8") as f:
-            old = json.load(f).get("voices", {})
+            old_doc = json.load(f)
+        old, old_release = old_doc.get("voices", {}), old_doc.get("clipsRelease")
     index = {"lead": {}, "analyst": {}}
     todo = []
     for c in clips:
@@ -161,6 +166,9 @@ def main(argv=None):
         path = os.path.join(a.out, c["voice"], c["clipId"] + ".ogg")
         prev = old.get(c["voice"], {}).get(c["clipId"])
         if prev and prev[1] == h and os.path.exists(path):
+            if len(prev) < 3:  # older index without the file hash
+                with open(path, "rb") as f:
+                    prev = [prev[0], prev[1], hashlib.sha256(f.read()).hexdigest()]
             index[c["voice"]][c["clipId"]] = prev
         else:
             todo.append((c, path, h))
@@ -169,8 +177,8 @@ def main(argv=None):
     hashes = {(c["voice"], c["clipId"]): h for c, _, h in todo}
     done = 0
     with ProcessPoolExecutor(a.jobs, initializer=_init, initargs=(a.model_dir, a.threads)) as ex:
-        for voice, cid, dur in ex.map(render_one, [(c, p) for c, p, _ in todo], chunksize=4):
-            index[voice][cid] = [dur, hashes[(voice, cid)]]
+        for voice, cid, dur, digest in ex.map(render_one, [(c, p) for c, p, _ in todo], chunksize=4):
+            index[voice][cid] = [dur, hashes[(voice, cid)], digest]
             done += 1
             if done % 100 == 0:
                 print("  %d/%d" % (done, len(todo)), flush=True)
@@ -190,6 +198,8 @@ def main(argv=None):
 
     doc = {"format": "openfootball-commentary-audio", "schemaVersion": 1, "language": manifest["language"],
            "sampleRate": SR, "engine": "kokoro-82m v1.0 (Apache-2.0), stock voice blends",
+           # The release that holds these exact files; cleared when anything was re-rendered (pack a new one).
+           "clipsRelease": old_release if not todo else None,
            "voices": {v: dict(sorted(index[v].items())) for v in ("lead", "analyst")}}
     os.makedirs(a.out, exist_ok=True)
     with open(index_path, "w", encoding="utf-8", newline="\n") as f:

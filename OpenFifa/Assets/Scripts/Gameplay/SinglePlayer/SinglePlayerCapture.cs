@@ -51,6 +51,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private int _commentaryLines;
         private readonly CommentaryUtterance[] _recent = new CommentaryUtterance[8];
         private int _recentNext;
+        private readonly CommentaryUtterance[] _recentCuts = new CommentaryUtterance[8];
+        private int _recentCutNext;
         private readonly List<CaptureHighlight> _sequences = new List<CaptureHighlight>(MaxSequences);
         private readonly int[] _sequenceWritten = new int[MaxSequences];
         private int _seqIndex, _seqFrame, _seqStepTicks, _seqBefore;
@@ -215,11 +217,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 if (cue.Kind == CommentaryCueKind.Stop)
                 {
                     // The line was cut off by a bigger moment: log it so the transcript does not read as fully spoken.
+                    // Deduped like starts (a frozen sim re-reads the same frame's cues).
+                    if (Seen(_recentCuts, cue.Utterance)) continue;
+                    _recentCuts[_recentCutNext] = cue.Utterance;
+                    _recentCutNext = (_recentCutNext + 1) % _recentCuts.Length;
                     _commentary.Append(CaptureText.CommentaryLine(clock, cue.Utterance.Category.Event, cue.Utterance.Voice,
                         "[cut] " + cue.Utterance.Transcript)).Append('\n');
                     continue;
                 }
-                if (Seen(cue.Utterance)) continue;
+                if (Seen(_recent, cue.Utterance)) continue;
                 _recent[_recentNext] = cue.Utterance;
                 _recentNext = (_recentNext + 1) % _recent.Length;
                 string tag = cue.Utterance.Category.Event == CommentaryEventType.OnTheBall ? "[call] " : "";
@@ -229,10 +235,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
         }
 
-        private bool Seen(CommentaryUtterance u)
+        private static bool Seen(CommentaryUtterance[] recent, CommentaryUtterance u)
         {
-            for (int i = 0; i < _recent.Length; i++)
-                if (ReferenceEquals(_recent[i], u)) return true;
+            for (int i = 0; i < recent.Length; i++)
+                if (ReferenceEquals(recent[i], u)) return true;
             return false;
         }
 

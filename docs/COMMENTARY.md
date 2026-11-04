@@ -35,7 +35,7 @@ The code is pure C# in `OpenFifa/Assets/Scripts/Core/Commentary/` and does not u
 | Crowd gating | Lines that are not resolution lines are skipped when crowd intensity is above the category's `maxCrowd`. |
 | Cooldown | A category is not reused within `cooldown` seconds. |
 | No-repeat memory | A line is not reused within 15 minutes while an alternative fits. After that, the least recently used line is picked. The seeded xorshift RNG chooses among fresh lines, so the same seed and the same events give the same commentary. |
-| Two voices | The play-by-play (`pbp`) voice reacts to everything. The analyst speaks during stoppages (goal, wide, foul, card, corner, offside, half time, full time) after the lead voice has been silent for 0.6 s. In live play it may use only categories marked `"live": true` (reactions to saves and the woodwork, lull chatter), after 1 s of lead silence. It speaks at most once every 15 s, and only with probability `AnalystChance`. A live event such as kick-off, restart, pass, through ball, tackle or shot cuts the analyst and clears its queue. A new lead line also stops the analyst, except name calls (priority below `AnalystYieldPriority`), which are dropped instead. |
+| Two voices | The play-by-play (`pbp`) voice reacts to everything. The analyst speaks during stoppages (goal, wide, foul, card, corner, offside, half time, full time) after the lead voice has been silent for 0.6 s. In live play it may use only categories marked `"live": true` (reactions to saves and the woodwork, lull chatter), after 1 s of lead silence. It speaks at most once every 12 s, and only with probability `AnalystChance` (0.8). A live event such as kick-off, restart, pass, through ball, tackle or shot cuts the analyst and clears its queue. A new lead line also stops the analyst, except name calls (priority below `AnalystYieldPriority`), which are dropped instead. Analyst categories marked `"interruptible": false` (goals, red cards, half and full time) hold the floor: the restart does not cut or clear them, and lead lines wait until he finishes, except resolution lines and priority 70+. |
 | Strike, then outcome | `ShotTaken` ("Okafor shoots!") is interruptible. The save, miss or goal cuts it, unless the strike call ends within `InterruptGrace` (0.45 s), in which case the outcome waits for it to finish. |
 | Name calls | Every completed pass that is not a sequence milestone sends `OnTheBall` with the receiver. The `on_the_ball` category (cooldown 3.5 s) answers with bare name calls ("Okafor...") and short ones ("Into Okafor"), which carry the build-up the way TV commentary does. |
 | Lulls | After `LullSeconds` (11 s) without speech in live play, the engine makes a `Lull` event with the current minute and score and gives it to the analyst `AnalystLullShare` of the time, otherwise to the lead voice. Never during stoppages. |
@@ -94,11 +94,23 @@ python3 -m venv ~/GameDev/.tts/venv && ~/GameDev/.tts/venv/bin/pip install kokor
 ~/GameDev/.tts/venv/bin/python tools/commentary/render_tts.py --jobs 6
 ```
 
+### Where the clips live
+
+Only `audio/en/index.json` is committed: for each clip its length, render hash and sha256, plus `clipsRelease`, the
+GitHub Release tag that holds exactly those files. The `.ogg` files are git-ignored and ship as a release asset
+(`commentary-clips-en-<tag>.tar.zst`, about 28 MB), so re-renders never grow the git history.
+
+- After a render: `python3 tools/commentary/clips.py pack --tag commentary-audio-vN --publish` (tarball, sets
+  `clipsRelease`, creates the release with `gh`), then commit `index.json`. A render that changed any clip clears
+  `clipsRelease` until you pack again.
+- On a build machine: `tools/commentary/fetch_clips.sh` downloads the asset, checks every sha256 against the index
+  and installs it into StreamingAssets. The iPad workflow runs it before the Unity export. Tests and captures do not
+  need the clips: line choice reads only `index.json`, so `commentary.txt` is the same with or without them.
+- `python3 tools/commentary/clips.py verify` checks local clips against the index.
+
 Licence and disclosure: see `THIRD_PARTY_NOTICES.md` (Kokoro is Apache-2.0; the voices are AI-generated and must be
 disclosed as such in store listings). Clip ids transliterate accents (`Ødegaard` -> `name.odegaard.*`) the same way
-in `RosterSchema.Slug` and the manifest tool. The clips are about 30 MB of Ogg; if the repo grows uncomfortable,
-move `StreamingAssets/Commentary/audio/**/*.ogg` to Git LFS (not set up on CodeBox2 yet).
-
+in `RosterSchema.Slug` and the manifest tool. 
 Change a voice by editing `VOICES` in the script and re-rendering. A licensed studio voice or a better TTS can
 replace Kokoro without code changes, as long as it writes the same files and index. Never use a cloned voice of a
 real commentator.

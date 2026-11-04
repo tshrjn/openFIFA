@@ -195,12 +195,13 @@ namespace OpenFifa.Core
 
             var contexts = DeriveContexts(e);
 
-            // Stoppage state.
+            // Stoppage state. Play restarting cuts the analyst, unless he holds the floor (a non-interruptible line about
+            // a goal, a red card, half or full time): then he finishes and the restart call waits or is dropped.
             if (IsLivePlayEvent(e.Type))
             {
                 IsStoppage = false;
-                _pendingAnalyst = default;
-                if (_analyst != null) StopAnalyst(now, cues);
+                if (_pendingAnalyst.IsSet && _pendingAnalyst.Category.Interruptible) _pendingAnalyst = default;
+                if (_analyst != null && _analyst.Interruptible) StopAnalyst(now, cues);
             }
             else if (IsStoppageEvent(e.Type)) IsStoppage = true;
 
@@ -214,7 +215,7 @@ namespace OpenFifa.Core
                 if (_pbp == null)
                 {
                     _pendingPbp = default;
-                    StartPbp(p, now, cues);
+                    if (!StartPbp(p, now, cues)) _pendingPbp = p;
                 }
                 else if (_pbp.Interruptible && cat.Priority > _pbp.Priority && _pbp.EndTime - now > _config.InterruptGrace)
                 {
@@ -234,8 +235,11 @@ namespace OpenFifa.Core
             if (stoppage || !IsLivePlayEvent(e.Type))
             {
                 var acat = ChooseCategory(e, CommentaryVoice.Analyst, contexts, now, CrowdIntensity, !stoppage);
-                if (acat != null && now - _lastAnalystEnd >= _config.AnalystMinGap &&
-                    _rng.NextDouble() < _config.AnalystChance &&
+                // Big moments (non-interruptible analyst categories: goals, red cards, half/full time) always get his
+                // view; everything else is rationed by AnalystMinGap and AnalystChance.
+                bool bigMoment = acat != null && !acat.Interruptible && _config.AnalystChance > 0;
+                if (acat != null && (bigMoment || (now - _lastAnalystEnd >= _config.AnalystMinGap &&
+                    _rng.NextDouble() < _config.AnalystChance)) &&
                     (!_pendingAnalyst.IsSet || acat.Priority >= _pendingAnalyst.Category.Priority))
                 {
                     _pendingAnalyst = new Pending { Category = acat, Event = e, QueuedAt = now, Crowd = CrowdIntensity };
@@ -269,7 +273,7 @@ namespace OpenFifa.Core
                 bool deadBall = _pendingPbp.Category.Resolution || IsStoppageEvent(_pendingPbp.Event.Type);
                 double maxDelay = deadBall ? _config.MaxResolutionQueueDelay : _config.MaxQueueDelay;
                 if (now - _pendingPbp.QueuedAt > maxDelay) _pendingPbp = default;
-                else if (_pbp == null)
+                else if (_pbp == null && !AnalystHolds(_pendingPbp.Category))
                 {
                     var p = _pendingPbp;
                     _pendingPbp = default;
@@ -279,9 +283,11 @@ namespace OpenFifa.Core
 
             if (_pendingAnalyst.IsSet)
             {
-                bool live = _pendingAnalyst.Category.Live;
+                var pc = _pendingAnalyst.Category;
+                bool live = pc.Live;
                 double leadIn = live ? _config.AnalystLiveQuiet : _config.AnalystLeadIn;
-                if ((!IsStoppage && !live) || now - _pendingAnalyst.QueuedAt > _config.MaxAnalystDelay) _pendingAnalyst = default;
+                if ((!IsStoppage && !live && pc.Interruptible) || now - _pendingAnalyst.QueuedAt > _config.MaxAnalystDelay)
+                    _pendingAnalyst = default;
                 else if (_pbp == null && !_pendingPbp.IsSet && _analyst == null && now >= _pbpIdleSince + leadIn)
                 {
                     var p = _pendingAnalyst;
@@ -371,13 +377,23 @@ namespace OpenFifa.Core
             _lastAnalystEnd = now;
         }
 
-        private void StartPbp(Pending p, double now, List<CommentaryCue> cues)
+        /// <summary>
+        /// True while the analyst is mid-way through a non-interruptible line that <paramref name="cat"/> may not cut:
+        /// only resolution lines (shots, goals) and priority 70+ break in.
+        /// </summary>
+        private bool AnalystHolds(CommentaryCategory cat) =>
+            _analyst != null && !_analyst.Interruptible && !cat.Resolution && cat.Priority < 70;
+
+        /// <summary>Starts a lead line; false when the analyst holds the floor (the caller queues it).</summary>
+        private bool StartPbp(Pending p, double now, List<CommentaryCue> cues)
         {
+            if (AnalystHolds(p.Category)) return false;
             var u = Build(p, now);
-            if (u == null) return;
+            if (u == null) return true;
             if (_analyst != null) StopAnalyst(now, cues);
             _pbp = u;
             cues.Add(new CommentaryCue(CommentaryCueKind.Start, u));
+            return true;
         }
 
         private CommentaryUtterance Build(Pending p, double now)

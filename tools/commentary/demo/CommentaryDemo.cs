@@ -50,11 +50,19 @@ public static class CommentaryDemo
         const double dt = 1.0 / 30.0;
         double t = 0;
         float crowd = 0.25f;
-        while (!session.IsFinished && t < half * 2 + 600)
+        double finishedAt = -1;
+        while (t < half * 2 + 600 && (finishedAt < 0 || t < finishedAt + 15))
         {
+            if (finishedAt < 0 && session.IsFinished) finishedAt = t;
             engine.SetCrowdIntensity(crowd);
-            session.Advance(dt, null, t);
-            foreach (var ev in session.FrameEvents)
+            IReadOnlyList<CommentaryCue> frameCues;
+            if (finishedAt < 0)
+            {
+                session.Advance(dt, null, t);
+                frameCues = session.FrameCues;
+            }
+            else frameCues = engine.Tick(t); // the session stops at full time; let the post-match words play out
+            foreach (var ev in finishedAt < 0 ? session.FrameEvents : (IReadOnlyList<MatchEvent>)System.Array.Empty<MatchEvent>())
             {
                 switch (ev.Type)
                 {
@@ -72,7 +80,7 @@ public static class CommentaryDemo
                       .Append(session.Sim.State.AwayScore).Append("\"}\n");
             }
             crowd = Math.Max(0.25f, crowd - 0.12f * (float)dt);
-            foreach (var cue in session.FrameCues)
+            foreach (var cue in frameCues)
             {
                 var u = cue.Utterance;
                 sb.Append("{\"t\":").Append(t.ToString("F3", CultureInfo.InvariantCulture))
