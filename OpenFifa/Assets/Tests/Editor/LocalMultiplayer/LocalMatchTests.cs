@@ -225,5 +225,21 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             a.Update(s.Sim, null, default, true, 0f, 1L << 7);
             Assert.AreEqual(6, a.ControlledId);
         }
+
+        [TestCase(0L)]
+        [TestCase(1L << 7)]
+        public void Selector_ControlledPlayerSentOff_SwitchesToAPlayerStillOnThePitch(long otherSeats)
+        {
+            var s = LooseBallSession();
+            var sel = new HumanPlayerSelector(SimTeam.Home, 6);
+            s.Sim.State.Players[6].SentOff = true;
+            sel.Update(s.Sim, null, default, true, 0f, otherSeats);
+            int id = sel.ControlledId;
+            Assert.AreNotEqual(6, id);
+            Assert.AreEqual(SimTeam.Home, MatchSim.TeamOf(id));
+            Assert.AreNotEqual(MatchSim.KeeperId(SimTeam.Home), id);
+            Assert.IsFalse(s.Sim.State.Players[id].SentOff);
+            Assert.AreEqual(0L, otherSeats & (1L << id), "never onto the partner's player");
+        }
     }
 }

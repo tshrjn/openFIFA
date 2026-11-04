@@ -55,6 +55,10 @@ namespace OpenFifa.Core
             float now = s.Tick * sim.Dt;
             RefreshLists(sim);
 
+            // 0) Our player was sent off: hand the user the best remaining outfielder (no level auto-switches otherwise).
+            if (ControlledId >= 0 && s.Players[ControlledId].SentOff)
+                Set(SmartSwitchSelector.SelectNearestToBallPath(_candidates, s.Ball.Position, s.Ball.Velocity, -1));
+
             // 1) Our player has the ball (dribble, reception, keeper catch, restart taker): control him.
             if (s.Owner >= 0 && MatchSim.TeamOf(s.Owner) == Team)
             {
