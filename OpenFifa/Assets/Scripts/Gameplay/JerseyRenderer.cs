@@ -5,10 +5,18 @@ using OpenFifa.Core;
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Applies jersey customization to a player mesh via MaterialPropertyBlock.
-    /// Handles pattern rendering, dynamic name/number texture generation,
-    /// crest decal application, and kit clash auto-resolution.
-    /// Designed to work alongside HumanoidSetup without replacing it.
+    /// Renders a football kit on a player with OpenFifaKit.shader ("OpenFifa/Kit").
+    ///
+    /// - Creates one material instance per player (keeps the SRP Batcher path; per-renderer
+    ///   MaterialPropertyBlocks would opt every player out of it).
+    /// - Generates the name/number print atlas on the CPU from the built-in stroke font
+    ///   (no TMP/font assets), caching it: it is regenerated only when name, number,
+    ///   layout, font style or outline width change. Colour changes never re-rasterize.
+    /// - Applies licensed textures from a <see cref="KitDefinition"/> when present.
+    /// - On capsule/proxy bodies (object-space mapping) it turns the kit to face the movement
+    ///   direction, so back numbers read correctly even though the capsule never rotates.
+    ///
+    /// Works with the legacy <see cref="FullJerseyConfig"/> API used by JerseyCustomizationUI.
     /// </summary>
     public class JerseyRenderer : MonoBehaviour
     {
@@ -16,91 +24,172 @@ namespace OpenFifa.Gameplay
         [SerializeField] private Renderer jerseyBackRenderer;
         [SerializeField] private Renderer jerseyFrontRenderer;
 
+        [Header("Kit Material")]
+        [Tooltip("Optional material using OpenFifa/Kit. If empty, the shader is found by name.")]
+        [SerializeField] private Material kitMaterialTemplate;
+        [SerializeField] private KitMappingMode mappingMode = KitMappingMode.ObjectSpace;
+        [Tooltip("MeshUV mode only: back print panel as UV rect (min x, min y, width, height).")]
+        [SerializeField] private Vector4 meshBackPrintRect = new Vector4(0.55f, 0.35f, 0.4f, 0.4f);
+        [Tooltip("MeshUV mode only: front print panel as UV rect (min x, min y, width, height).")]
+        [SerializeField] private Vector4 meshFrontPrintRect = new Vector4(0.05f, 0.35f, 0.4f, 0.4f);
+
         [Header("Texture Settings")]
-        [SerializeField] private int nameNumberTextureWidth = 512;
-        [SerializeField] private int nameNumberTextureHeight = 256;
+        [SerializeField] private int nameNumberTextureWidth = 1024;
+        [SerializeField] private int nameNumberTextureHeight = 512;
         [SerializeField] private int crestTextureSize = 128;
 
         [Header("Runtime State")]
         [SerializeField] private bool autoResolveClash = true;
+        [Tooltip("Object-space mapping only: rotate the kit towards the Rigidbody's horizontal velocity.")]
+        [SerializeField] private bool faceMovementDirection = true;
+        [SerializeField] private float facingTurnSpeed = 540f;
+        [SerializeField] private float facingMinSpeed = 0.4f;
 
-        // Shader property IDs — cached for performance
-        private static readonly int PrimaryColorId = Shader.PropertyToID("_PrimaryColor");
-        private static readonly int SecondaryColorId = Shader.PropertyToID("_SecondaryColor");
-        private static readonly int TertiaryColorId = Shader.PropertyToID("_TertiaryColor");
-        private static readonly int PatternTypeId = Shader.PropertyToID("_PatternType");
-        private static readonly int PatternScaleId = Shader.PropertyToID("_PatternScale");
-        private static readonly int CollarStyleId = Shader.PropertyToID("_CollarStyle");
-        private static readonly int NameNumberTexId = Shader.PropertyToID("_NameNumberTex");
-        private static readonly int CrestTexId = Shader.PropertyToID("_CrestTex");
+        [Header("Match Wear")]
+        [SerializeField, Range(0f, 1f)] private float sweat;
+        [SerializeField, Range(0f, 1f)] private float dirt;
 
-        private MaterialPropertyBlock _backMpb;
-        private MaterialPropertyBlock _frontMpb;
-        private RenderTexture _nameNumberRT;
-        private RenderTexture _crestRT;
+        private static bool _loggedMissingShader;
+
+        private Material _material;
+        private Texture2D _printTexture;
+        private byte[] _printScratch;
+        private string _printKey;
         private FullJerseyConfig _currentConfig;
+        private KitDefinition _currentKit;
+        private Rigidbody _rigidbody;
+        private float _facingDegrees;
         private bool _isApplied;
 
-        /// <summary>
-        /// Whether the jersey has been successfully applied to the mesh.
-        /// </summary>
+        /// <summary>Whether a jersey has been applied.</summary>
         public bool IsApplied => _isApplied;
 
-        /// <summary>
-        /// The currently applied jersey configuration, or null if none.
-        /// </summary>
+        /// <summary>The applied legacy configuration (also filled when a kit is applied).</summary>
         public FullJerseyConfig CurrentConfig => _currentConfig;
 
-        /// <summary>
-        /// Fired when jersey rendering completes. Passes this renderer instance.
-        /// </summary>
+        /// <summary>The applied kit definition, or null when applied from a FullJerseyConfig.</summary>
+        public KitDefinition CurrentKit => _currentKit;
+
+        /// <summary>Whether this renderer auto-resolves kit clashes (read by match setup code).</summary>
+        public bool AutoResolveClash => autoResolveClash;
+
+        /// <summary>Per-player kit material instance (null until a jersey is applied).</summary>
+        public Material KitMaterial => _material;
+
+        /// <summary>Fired when jersey rendering completes.</summary>
         public event Action<JerseyRenderer> OnJerseyApplied;
 
         private void Awake()
         {
             AutoDiscoverRenderers();
-            _backMpb = new MaterialPropertyBlock();
-            _frontMpb = new MaterialPropertyBlock();
+            _rigidbody = GetComponent<Rigidbody>();
         }
 
         private void OnDestroy()
         {
-            ReleaseTextures();
+            ReleaseResources();
+        }
+
+        private void LateUpdate()
+        {
+            if (!_isApplied || _material == null || !faceMovementDirection
+                || mappingMode != KitMappingMode.ObjectSpace || _rigidbody == null)
+                return;
+
+            Vector3 velocity = _rigidbody.linearVelocity;
+            velocity.y = 0f;
+            if (velocity.sqrMagnitude < facingMinSpeed * facingMinSpeed) return;
+
+            Vector3 local = transform.InverseTransformDirection(velocity);
+            float target = Mathf.Atan2(local.x, local.z) * Mathf.Rad2Deg;
+            float next = Mathf.MoveTowardsAngle(_facingDegrees, target, facingTurnSpeed * Time.deltaTime);
+            if (!Mathf.Approximately(next, _facingDegrees))
+            {
+                _facingDegrees = next;
+                _material.SetFloat(KitShaderIds.FacingAngle, _facingDegrees * Mathf.Deg2Rad);
+            }
         }
 
         /// <summary>
-        /// Applies a full jersey configuration to the player mesh.
-        /// Sets pattern colors via MaterialPropertyBlock and generates
-        /// name/number textures at runtime.
+        /// Applies a kit with a player's name and number. <paramref name="teamInitials"/> is used
+        /// for the placeholder crest when the kit has no crest texture.
+        /// </summary>
+        public void ApplyKit(KitDefinition kit, string playerName, int number, string teamInitials)
+        {
+            if (kit == null || !EnsureMaterial()) return;
+
+            var data = kit.Data;
+            var design = kit.ToJerseyDesign();
+            _currentKit = kit;
+            _currentConfig = new JerseyBuilder()
+                .WithDesign(design)
+                .WithName(playerName ?? "")
+                .WithNumber(number)
+                .WithCrest(teamInitials ?? "")
+                .Build();
+
+            ApplyDesignProperties(design);
+            _material.SetColor(KitShaderIds.ShortsColor, ToColor(KitColorUtility.ParseOrDefault(data.ShortsColor, SimpleColor.White)));
+            _material.SetColor(KitShaderIds.SocksColor, ToColor(KitColorUtility.ParseOrDefault(data.SocksColor, SimpleColor.White)));
+            _material.SetFloat(KitShaderIds.SheenStrength, data.FabricSheen);
+
+            var numberColor = KitColorUtility.ParseOrDefault(data.NumberColor, JerseyComparer.SuggestTextColor(design.PrimaryColor));
+            var outlineColor = KitColorUtility.ParseOrDefault(data.NumberOutlineColor, SimpleColor.Black);
+            ApplyPrint(playerName, number, KitDefinitionConverter.GetNameLayout(data),
+                KitDefinitionConverter.GetFontStyle(data), data.NumberOutlineWidth, data.ShowFrontNumber,
+                numberColor, outlineColor);
+
+            var textures = kit.ResolveTextures();
+            ApplyLicensedTextures(textures);
+            ApplyCrest(textures.Crest, teamInitials, design, KitDefinitionConverter.GetFontStyle(data));
+            ApplySponsor(textures.Sponsor);
+            ApplyWear();
+
+            FinishApply();
+        }
+
+        /// <summary>
+        /// Applies a legacy customization config (used by JerseyCustomizationUI).
         /// </summary>
         public void ApplyJersey(FullJerseyConfig config)
         {
-            if (config == null) return;
+            if (config == null || !EnsureMaterial()) return;
 
             _currentConfig = config;
+            _currentKit = null;
             ApplyDesignProperties(config.Design);
-            GenerateNameNumberTexture(config.NameConfig, config.NumberConfig, config.Design);
-            ApplyCrest(config.Crest);
-            _isApplied = true;
-            OnJerseyApplied?.Invoke(this);
+
+            var design = config.Design ?? new JerseyDesign();
+            var numberConfig = config.NumberConfig ?? new PlayerNumberConfig();
+            var numberColor = JerseyComparer.SuggestTextColor(design.PrimaryColor);
+            ApplyPrint(config.NameConfig != null ? config.NameConfig.Name : "", numberConfig.Number,
+                KitNameLayout.Straight, KitFontStyle.Block, numberConfig.OutlineEnabled ? 0.3f : 0f,
+                numberConfig.ShowOnFront, numberColor, numberConfig.OutlineColor);
+            if (!numberConfig.ShowOnBack && !numberConfig.ShowOnFront)
+                _material.SetFloat(KitShaderIds.UseNameNumber, 0f);
+
+            ApplyLicensedTextures(default(KitTextureSet));
+            ApplyCrest(null, config.Crest != null ? Initials(config.Crest.TeamName) : "", design, KitFontStyle.Block);
+            ApplySponsor(null);
+            ApplyWear();
+
+            FinishApply();
         }
 
         /// <summary>
-        /// Applies only the jersey design (colors, pattern) without regenerating name/number textures.
-        /// Useful for kit clash resolution where only colors need to change.
+        /// Applies only colours/pattern/collar without touching prints (used for clash resolution).
         /// </summary>
         public void ApplyDesignOnly(JerseyDesign design)
         {
-            if (design == null) return;
+            if (design == null || !EnsureMaterial()) return;
             ApplyDesignProperties(design);
-
             if (_currentConfig != null)
                 _currentConfig.Design = design;
         }
 
         /// <summary>
-        /// Resolves kit clash by switching to the away or third kit variant.
-        /// Returns the variant that was selected, or null if no manager was provided.
+        /// Resolves a kit clash by switching to the first non-clashing variant (Home, Away, Third).
+        /// Returns the variant selected, or null if no manager was provided.
         /// </summary>
         public KitVariant? ResolveClash(KitVariantManager kitManager, SimpleColor opponentPrimary)
         {
@@ -116,140 +205,200 @@ namespace OpenFifa.Gameplay
             return null;
         }
 
-        /// <summary>
-        /// Clears the applied jersey and releases generated textures.
-        /// </summary>
+        /// <summary>Sets match wear (0-1). Cheap: two material floats.</summary>
+        public void SetMatchWear(float sweatAmount, float dirtAmount)
+        {
+            sweat = Mathf.Clamp01(sweatAmount);
+            dirt = Mathf.Clamp01(dirtAmount);
+            ApplyWear();
+        }
+
+        /// <summary>Clears the jersey and releases generated resources.</summary>
         public void ClearJersey()
         {
             _currentConfig = null;
+            _currentKit = null;
             _isApplied = false;
-            ReleaseTextures();
+            ReleaseResources();
+        }
 
-            // Reset material property blocks
-            if (jerseyBackRenderer != null)
-            {
-                _backMpb.Clear();
-                jerseyBackRenderer.SetPropertyBlock(_backMpb);
-            }
-            if (jerseyFrontRenderer != null)
-            {
-                _frontMpb.Clear();
-                jerseyFrontRenderer.SetPropertyBlock(_frontMpb);
-            }
+        private void FinishApply()
+        {
+            _isApplied = true;
+            OnJerseyApplied?.Invoke(this);
         }
 
         private void AutoDiscoverRenderers()
         {
-            if (jerseyBackRenderer == null || jerseyFrontRenderer == null)
+            if (jerseyBackRenderer != null && jerseyFrontRenderer != null) return;
+
+            var renderers = GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0) return;
+            if (jerseyBackRenderer == null) jerseyBackRenderer = renderers[0];
+            if (jerseyFrontRenderer == null) jerseyFrontRenderer = renderers[0];
+        }
+
+        private bool EnsureMaterial()
+        {
+            if (_material != null) return true;
+
+            AutoDiscoverRenderers();
+            if (jerseyBackRenderer == null && jerseyFrontRenderer == null) return false;
+
+            // Resources/Kits/OpenFifaKit.mat references the shader so it is included in player builds.
+            var template = kitMaterialTemplate != null ? kitMaterialTemplate : Resources.Load<Material>(KitShaderIds.MaterialResourcePath);
+            if (template != null && template.shader != null && template.shader.isSupported)
             {
-                var renderers = GetComponentsInChildren<Renderer>();
-                if (renderers.Length > 0 && jerseyBackRenderer == null)
-                    jerseyBackRenderer = renderers[0];
-                if (renderers.Length > 0 && jerseyFrontRenderer == null)
-                    jerseyFrontRenderer = renderers[0];
+                _material = new Material(template);
             }
+            else
+            {
+                var shader = Shader.Find(KitShaderIds.ShaderName);
+                if (shader == null || !shader.isSupported)
+                {
+                    if (!_loggedMissingShader)
+                    {
+                        Debug.LogWarning($"[JerseyRenderer] Shader '{KitShaderIds.ShaderName}' not found or unsupported; keeping the existing material.");
+                        _loggedMissingShader = true;
+                    }
+                    return false;
+                }
+                _material = new Material(shader);
+            }
+
+            _material.name = $"Kit_{gameObject.name}";
+            _material.hideFlags = HideFlags.DontSave;
+            _material.SetFloat(KitShaderIds.MappingMode, (float)mappingMode);
+            _material.SetFloat(KitShaderIds.FacingAngle, _facingDegrees * Mathf.Deg2Rad);
+            if (mappingMode == KitMappingMode.MeshUV)
+            {
+                _material.SetVector(KitShaderIds.BackPrintRect, meshBackPrintRect);
+                _material.SetVector(KitShaderIds.FrontPrintRect, meshFrontPrintRect);
+            }
+
+            if (jerseyBackRenderer != null) jerseyBackRenderer.sharedMaterial = _material;
+            if (jerseyFrontRenderer != null && jerseyFrontRenderer != jerseyBackRenderer)
+                jerseyFrontRenderer.sharedMaterial = _material;
+            return true;
         }
 
         private void ApplyDesignProperties(JerseyDesign design)
         {
-            if (design == null) return;
+            if (design == null || _material == null) return;
 
-            ApplyDesignToRenderer(jerseyBackRenderer, _backMpb, design);
-            ApplyDesignToRenderer(jerseyFrontRenderer, _frontMpb, design);
+            _material.SetColor(KitShaderIds.PrimaryColor, ToColor(design.PrimaryColor));
+            _material.SetColor(KitShaderIds.SecondaryColor, ToColor(design.SecondaryColor));
+            _material.SetColor(KitShaderIds.TertiaryColor, ToColor(design.TertiaryColor));
+            _material.SetFloat(KitShaderIds.PatternType, (float)design.Pattern);
+            _material.SetFloat(KitShaderIds.PatternScale, design.PatternScale);
+            _material.SetFloat(KitShaderIds.CollarStyle, (float)design.Collar);
         }
 
-        private void ApplyDesignToRenderer(Renderer renderer, MaterialPropertyBlock mpb, JerseyDesign design)
+        private void ApplyPrint(string playerName, int number, KitNameLayout layout, KitFontStyle style,
+            float outlineWidth, bool showFrontNumber, SimpleColor numberColor, SimpleColor outlineColor)
         {
-            if (renderer == null || mpb == null) return;
+            _material.SetColor(KitShaderIds.NumberColor, ToColor(numberColor));
+            _material.SetColor(KitShaderIds.NumberOutlineColor, ToColor(outlineColor));
 
-            renderer.GetPropertyBlock(mpb);
+            string key = string.Concat(playerName ?? "", "|", number.ToString(), "|", ((int)layout).ToString(), "|",
+                ((int)style).ToString(), "|", outlineWidth.ToString("F3"), "|", showFrontNumber ? "1" : "0", "|",
+                nameNumberTextureWidth.ToString(), "x", nameNumberTextureHeight.ToString());
 
-            mpb.SetColor(PrimaryColorId, ToUnityColor(design.PrimaryColor));
-            mpb.SetColor(SecondaryColorId, ToUnityColor(design.SecondaryColor));
-            mpb.SetColor(TertiaryColorId, ToUnityColor(design.TertiaryColor));
-            mpb.SetInt(PatternTypeId, (int)design.Pattern);
-            mpb.SetFloat(PatternScaleId, design.PatternScale);
-            mpb.SetInt(CollarStyleId, (int)design.Collar);
+            if (_printTexture == null || _printTexture.width != nameNumberTextureWidth
+                || _printTexture.height != nameNumberTextureHeight)
+            {
+                DestroyTexture(ref _printTexture);
+                _printTexture = KitPrintTextureBuilder.CreatePrintTexture(nameNumberTextureWidth, nameNumberTextureHeight);
+                _printKey = null;
+            }
 
-            renderer.SetPropertyBlock(mpb);
+            if (key != _printKey)
+            {
+                var printLayout = KitPrintLayoutLogic.Build(playerName, number, layout, style, outlineWidth,
+                    showFrontNumber, nameNumberTextureWidth, nameNumberTextureHeight);
+                KitPrintTextureBuilder.Write(_printTexture, printLayout, ref _printScratch);
+                _printKey = key;
+            }
+
+            _material.SetTexture(KitShaderIds.NameNumberTex, _printTexture);
+            _material.SetFloat(KitShaderIds.UseNameNumber, 1f);
         }
 
-        private void GenerateNameNumberTexture(PlayerNameConfig nameConfig, PlayerNumberConfig numberConfig, JerseyDesign design)
+        private void ApplyLicensedTextures(KitTextureSet textures)
         {
-            // Release previous texture
-            if (_nameNumberRT != null)
-            {
-                _nameNumberRT.Release();
-                DestroyImmediate(_nameNumberRT);
-            }
-
-            _nameNumberRT = new RenderTexture(nameNumberTextureWidth, nameNumberTextureHeight, 0, RenderTextureFormat.ARGB32);
-            _nameNumberRT.name = "JerseyNameNumber";
-            _nameNumberRT.Create();
-
-            // Clear to transparent
-            var previousActive = RenderTexture.active;
-            RenderTexture.active = _nameNumberRT;
-            GL.Clear(true, true, Color.clear);
-            RenderTexture.active = previousActive;
-
-            // Apply the generated texture to the back renderer
-            if (jerseyBackRenderer != null)
-            {
-                jerseyBackRenderer.GetPropertyBlock(_backMpb);
-                _backMpb.SetTexture(NameNumberTexId, _nameNumberRT);
-                jerseyBackRenderer.SetPropertyBlock(_backMpb);
-            }
+            bool useLicensed = textures.HasAlbedo;
+            _material.SetFloat(KitShaderIds.UseLicensedTextures, useLicensed ? 1f : 0f);
+            _material.SetTexture(KitShaderIds.KitAlbedo, useLicensed ? textures.Albedo : Texture2D.whiteTexture);
+            _material.SetTexture(KitShaderIds.KitNormal, useLicensed && textures.Normal != null ? textures.Normal : Texture2D.normalTexture);
+            _material.SetTexture(KitShaderIds.KitMask, useLicensed && textures.Mask != null ? textures.Mask : Texture2D.whiteTexture);
+            _material.SetFloat(KitShaderIds.LicensedHasNormal, useLicensed && textures.Normal != null ? 1f : 0f);
+            _material.SetFloat(KitShaderIds.LicensedHasMask, useLicensed && textures.Mask != null ? 1f : 0f);
         }
 
-        private void ApplyCrest(CrestConfig crest)
+        private void ApplyCrest(Texture2D crest, string initials, JerseyDesign design, KitFontStyle style)
         {
-            if (crest == null) return;
-
-            // Release previous crest texture
-            if (_crestRT != null)
+            if (crest == null && !string.IsNullOrEmpty(initials))
             {
-                _crestRT.Release();
-                DestroyImmediate(_crestRT);
+                // Original placeholder crest until licensed crest art is supplied.
+                crest = KitPrintTextureBuilder.GetPlaceholderCrest(initials, design.SecondaryColor,
+                    design.PrimaryColor, design.TertiaryColor, style, crestTextureSize);
             }
 
-            _crestRT = new RenderTexture(crestTextureSize, crestTextureSize, 0, RenderTextureFormat.ARGB32);
-            _crestRT.name = "JerseyCrest";
-            _crestRT.Create();
-
-            // Clear to transparent
-            var previousActive = RenderTexture.active;
-            RenderTexture.active = _crestRT;
-            GL.Clear(true, true, Color.clear);
-            RenderTexture.active = previousActive;
-
-            // Apply to front renderer
-            if (jerseyFrontRenderer != null)
-            {
-                jerseyFrontRenderer.GetPropertyBlock(_frontMpb);
-                _frontMpb.SetTexture(CrestTexId, _crestRT);
-                jerseyFrontRenderer.SetPropertyBlock(_frontMpb);
-            }
+            _material.SetTexture(KitShaderIds.CrestTex, crest != null ? crest : Texture2D.blackTexture);
+            _material.SetFloat(KitShaderIds.UseCrest, crest != null ? 1f : 0f);
         }
 
-        private void ReleaseTextures()
+        private void ApplySponsor(Texture2D sponsor)
         {
-            if (_nameNumberRT != null)
-            {
-                _nameNumberRT.Release();
-                DestroyImmediate(_nameNumberRT);
-                _nameNumberRT = null;
-            }
+            _material.SetTexture(KitShaderIds.SponsorTex, sponsor != null ? sponsor : Texture2D.blackTexture);
+            _material.SetFloat(KitShaderIds.UseSponsor, sponsor != null ? 1f : 0f);
+        }
 
-            if (_crestRT != null)
+        private void ApplyWear()
+        {
+            if (_material == null) return;
+            _material.SetFloat(KitShaderIds.Sweat, sweat);
+            _material.SetFloat(KitShaderIds.Dirt, dirt);
+        }
+
+        private void ReleaseResources()
+        {
+            DestroyTexture(ref _printTexture);
+            _printKey = null;
+            if (_material != null)
             {
-                _crestRT.Release();
-                DestroyImmediate(_crestRT);
-                _crestRT = null;
+                DestroySafely(_material);
+                _material = null;
             }
         }
 
-        private static Color ToUnityColor(SimpleColor c)
+        private static void DestroyTexture(ref Texture2D texture)
+        {
+            if (texture == null) return;
+            DestroySafely(texture);
+            texture = null;
+        }
+
+        private static void DestroySafely(UnityEngine.Object obj)
+        {
+            if (Application.isPlaying) Destroy(obj);
+            else DestroyImmediate(obj);
+        }
+
+        private static string Initials(string teamName)
+        {
+            if (string.IsNullOrWhiteSpace(teamName)) return "";
+            var parts = teamName.Split(new[] { ' ', '-' }, StringSplitOptions.RemoveEmptyEntries);
+            var result = "";
+            foreach (var part in parts)
+            {
+                if (result.Length >= 3) break;
+                result += char.ToUpperInvariant(part[0]);
+            }
+            return result;
+        }
+
+        private static Color ToColor(SimpleColor c)
         {
             return new Color(c.R, c.G, c.B, c.A);
         }
