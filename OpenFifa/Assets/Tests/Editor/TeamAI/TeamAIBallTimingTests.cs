@@ -58,7 +58,9 @@ namespace OpenFifa.Tests.Editor.TeamAI
                 float truth = IntegrateGround(cfg, v0, d);
                 float ai = model.GroundPassTime(d);
                 Assert.AreEqual(truth, ai, truth * 0.1f, $"ground pass {d} m");
+#pragma warning disable CS0618 // the obsolete default-config helper must still match the integrator
                 Assert.AreEqual(truth, TeamAIOnBall.GroundPassTime(d), truth * 0.1f, $"static ground pass {d} m");
+#pragma warning restore CS0618
             }
         }
 
@@ -87,7 +89,9 @@ namespace OpenFifa.Tests.Editor.TeamAI
                 float truth = IntegrateFlight(cfg, speed, act.LobElevationDeg, -8f, out float carry);
                 Assert.AreEqual(d, carry, 0.6f, "solver sanity");
                 Assert.AreEqual(truth, model.LobPassTime(d), truth * 0.1f, $"lob {d} m");
+#pragma warning disable CS0618 // the obsolete default-config helper must still match the integrator
                 Assert.AreEqual(truth, TeamAIOnBall.LobPassTime(d), truth * 0.1f, $"static lob {d} m");
+#pragma warning restore CS0618
             }
         }
 
@@ -128,7 +132,9 @@ namespace OpenFifa.Tests.Editor.TeamAI
             // The old flat model treated a lofted ball as rolling and decayed it; the static helper now flies it.
             // The static helper has no spin input: it must fly the ball exactly as the integrator flies a spinless one,
             // and the spin it ignores (8 rad/s of backspin here) only moves the ball a little.
+#pragma warning disable CS0618 // the default-config static helper is what this checks
             var flat = TeamAIMath.PredictBall(w.Ball.Position, w.Ball.Velocity, 1.5f);
+#pragma warning restore CS0618
             var spinless = new SimBall { Position = b.Position, Velocity = b.Velocity };
             float spinlessZ = BallIntegrator.PredictBall(spinless, cfg, w.Pitch, 1.5f).Position.Z;
             Assert.AreEqual(spinlessZ, flat.Z, 0.01f, "spinless helper matches the spinless integrator");

@@ -163,5 +163,28 @@ namespace OpenFifa.Tests.Editor
             Assert.AreEqual(0.7f, f.LeftStick.Y, 1e-6f);
             Assert.AreEqual(0.8f, f.LeftTrigger, 1e-6f);
         }
-    }
+    
+        [Test]
+        public void PushFrame_AnalogTrigger_UsesTheResolverHysteresis()
+        {
+            var q = new GamepadEdgeQueue();
+            var r = new GamepadControlResolver();
+            float t = 0f;
+            bool Shield(float lt)
+            {
+                q.PushFrame(new GamepadFrame(GamepadButton.None) { LeftTrigger = lt }, GamepadButton.None, GamepadButton.None);
+                var f = q.Drain();
+                bool queueHeld = (q.Reported & GamepadButton.LeftTrigger) != 0;
+                bool shield = (r.Tick(f, ControlContext.Attack(t += 1f / 60f)).Held & ControlHeld.Shield) != 0;
+                Assert.AreEqual(queueHeld, shield, "queue and resolver agree at LT " + lt);
+                return shield;
+            }
+            Assert.IsFalse(Shield(0.5f));
+            Assert.IsTrue(Shield(0.6f));
+            Assert.IsTrue(Shield(0.4f));
+            Assert.IsTrue(Shield(0.52f));
+            Assert.IsFalse(Shield(0.3f));
+            Assert.IsFalse(Shield(0.5f));
+        }
+}
 }

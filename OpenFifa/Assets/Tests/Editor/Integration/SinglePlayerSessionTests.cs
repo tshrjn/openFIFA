@@ -422,6 +422,7 @@ namespace OpenFifa.Tests.Editor.Integration
         /// Beginner AI keeper at 62/124). A shot stops counting at a block, deflection or outfielder's touch (TrackShot).
         /// Measured on seeds 1..24: user keeper skipped (7/12), skipped (18/25), 66.7% (28/42), 74.2, 67.9, 64.2, 62.4%;
         /// AI keeper 63.3% (81/128), 57.7% (45/78), 65.9% (27/41), then skipped (Professional up face under 40).
+        /// The skipped keepers are judged on further seeds by <see cref="Difficulty_LowVolumeKeepers_SaveRateInBandOnMoreSeeds"/>.
         /// </para>
         /// <para>
         /// The matches run in parallel on all cores: 3.2 minutes on 12 cores under Mono (26 CPU-minutes, so about half an hour on one
@@ -465,6 +466,67 @@ namespace OpenFifa.Tests.Editor.Integration
                 string name = TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i);
                 AssertSaveRate(name + " user keeper", t[i].UserGkSaved, t[i].UserGkConceded);
                 AssertSaveRate(name + " AI keeper", t[i].AIGkSaved, t[i].AIGkConceded);
+            }
+        }
+
+        /// <summary>
+        /// The keepers the ladder test cannot judge on seeds 1..24 because they face under <see cref="MinKeeperSample"/>
+        /// shots on target there: the user's keeper at Beginner and Amateur (the AI barely shoots), and the AI's keeper
+        /// from Professional up (the scripted user barely shoots). Each is played on further seeds (25 onwards, 24 at a
+        /// time, at most 144) until it has faced at least that many, then judged with the same 55-80% band.
+        /// </summary>
+        /// <remarks>
+        /// Batches of 24 seeds for the cases still short of the sample, in parallel on all cores. Every case must reach
+        /// the sample within 144 seeds, so none is silently skipped. Measured (Nov 2026): Beginner user keeper 73.5%
+        /// (36/49, seeds 25..120), Amateur user 64.2% (52/81, 25..72), Professional AI 79.0% (49/62, 25..72), World Class
+        /// AI 62.5% (25/40, 25..72), Legendary AI 68.1% (32/47, 25..96), Ultimate AI 66.0% (31/47, 25..120): 432 matches,
+        /// 14.8 minutes on 12 cores under Mono. Tagged Slow with a 60-minute timeout, like the ladder test.
+        /// </remarks>
+        [Test]
+        [Category("Slow")]
+        [Timeout(3600000)]
+        public void Difficulty_LowVolumeKeepers_SaveRateInBandOnMoreSeeds()
+        {
+            var cases = new (TeamAIDifficultyLevel Level, bool UserKeeper)[]
+            {
+                (TeamAIDifficultyLevel.Beginner, true), (TeamAIDifficultyLevel.Amateur, true),
+                (TeamAIDifficultyLevel.Professional, false), (TeamAIDifficultyLevel.WorldClass, false),
+                (TeamAIDifficultyLevel.Legendary, false), (TeamAIDifficultyLevel.Ultimate, false),
+            };
+            const int batch = 24, maxSeeds = 144;
+            const float half = 360f;
+            var saved = new int[cases.Length];
+            var conceded = new int[cases.Length];
+            var seedsUsed = new int[cases.Length];
+            var pending = new System.Collections.Generic.List<int>();
+            for (int first = 25; first < 25 + maxSeeds; first += batch)
+            {
+                pending.Clear();
+                for (int c = 0; c < cases.Length; c++)
+                    if (saved[c] + conceded[c] < MinKeeperSample) pending.Add(c);
+                if (pending.Count == 0) break;
+                var games = new LevelStats[pending.Count * batch];
+                var finite = new bool[games.Length];
+                int seed0 = first;
+                System.Threading.Tasks.Parallel.For(0, games.Length,
+                    new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) },
+                    k => games[k] = PlayOne(cases[pending[k / batch]].Level, (ulong)(seed0 + k % batch), half, out finite[k]));
+                for (int k = 0; k < games.Length; k++)
+                {
+                    int c = pending[k / batch];
+                    Assert.IsTrue(finite[k], $"{cases[c].Level} seed {seed0 + k % batch}: sim went NaN");
+                    saved[c] += cases[c].UserKeeper ? games[k].UserGkSaved : games[k].AIGkSaved;
+                    conceded[c] += cases[c].UserKeeper ? games[k].UserGkConceded : games[k].AIGkConceded;
+                }
+                foreach (int c in pending) seedsUsed[c] += batch;
+            }
+            for (int c = 0; c < cases.Length; c++)
+            {
+                string who = TeamAIDifficultyLadder.DisplayName(cases[c].Level) + (cases[c].UserKeeper ? " user keeper" : " AI keeper");
+                Log($"{who}: seeds 25..{24 + seedsUsed[c]}");
+                Assert.GreaterOrEqual(saved[c] + conceded[c], MinKeeperSample,
+                    $"{who}: only {saved[c] + conceded[c]} on-target shots in {seedsUsed[c]} seeds");
+                AssertSaveRate(who, saved[c], conceded[c]);
             }
         }
 
