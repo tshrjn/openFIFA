@@ -1,6 +1,10 @@
 namespace OpenFifa.Core
 {
-    /// <summary>One sampled gamepad state. Triggers are analog 0..1 and also count as held above 0.5.</summary>
+    /// <summary>
+    /// One sampled gamepad state. Triggers are analog 0..1; the resolver counts one as held from
+    /// <see cref="GamepadControlResolver.TriggerPressThreshold"/> until it drops below
+    /// <see cref="GamepadControlResolver.TriggerReleaseThreshold"/> (hysteresis).
+    /// </summary>
     public struct GamepadFrame
     {
         public GamepadButton Buttons;
@@ -43,6 +47,12 @@ namespace OpenFifa.Core
             GamepadButton.DpadUp, GamepadButton.DpadDown, GamepadButton.DpadLeft, GamepadButton.DpadRight,
         };
 
+        /// <summary>An analog trigger counts as pressed above this...</summary>
+        public const float TriggerPressThreshold = 0.55f;
+        /// <summary>...and stays held until it falls below this, so a trigger resting near one value does not chatter
+        /// between Shield/jockey/knuckleball (LT) or sprint (RT) on and off.</summary>
+        public const float TriggerReleaseThreshold = 0.35f;
+
         private readonly ChargeMeter _meter = new ChargeMeter();
         private readonly ControlKickBuffer _buffer = new ControlKickBuffer();
 
@@ -70,12 +80,16 @@ namespace OpenFifa.Core
 
         public bool IsCharging => _meter.IsCharging;
 
+        /// <summary>Trigger hysteresis: a trigger that was held stays held down to the release threshold.</summary>
+        public static bool TriggerHeld(float value, bool wasHeld) =>
+            value > (wasHeld ? TriggerReleaseThreshold : TriggerPressThreshold);
+
         public ControlIntent Tick(in GamepadFrame frame, in ControlContext ctx)
         {
             var s = Settings;
             GamepadButton held = frame.Buttons;
-            if (frame.LeftTrigger > 0.5f) held |= GamepadButton.LeftTrigger;
-            if (frame.RightTrigger > 0.5f) held |= GamepadButton.RightTrigger;
+            if (TriggerHeld(frame.LeftTrigger, (_prev & GamepadButton.LeftTrigger) != 0)) held |= GamepadButton.LeftTrigger;
+            if (TriggerHeld(frame.RightTrigger, (_prev & GamepadButton.RightTrigger) != 0)) held |= GamepadButton.RightTrigger;
             GamepadButton pressed = held & ~_prev;
             GamepadButton released = _prev & ~held;
             _prev = held;

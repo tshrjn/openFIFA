@@ -368,5 +368,47 @@ namespace OpenFifa.Tests.Editor
             var full = r.Tick(new GamepadFrame(GamepadButton.None, new ControlVec2(0f, 1f)), ControlContext.Attack(0.1f));
             Assert.AreEqual(1f, full.Move.Magnitude, 1e-5f);
         }
-    }
+    
+        [Test]
+        public void TriggerHeld_PressAt055_ReleaseBelow035()
+        {
+            Assert.IsFalse(GamepadControlResolver.TriggerHeld(0.5f, false));
+            Assert.IsTrue(GamepadControlResolver.TriggerHeld(0.56f, false));
+            Assert.IsTrue(GamepadControlResolver.TriggerHeld(0.4f, true), "held trigger stays held above the release threshold");
+            Assert.IsFalse(GamepadControlResolver.TriggerHeld(0.34f, true));
+        }
+
+        [Test]
+        public void Tick_LeftTriggerHoveringNearHalf_ShieldDoesNotChatter()
+        {
+            var r = new GamepadControlResolver();
+            float t = 0f;
+            Assert.AreEqual(0, (int)(r.Tick(new GamepadFrame(GamepadButton.None) { LeftTrigger = 0.5f }, ControlContext.Attack(t)).Held & ControlHeld.Shield),
+                "0.5 is below the press threshold");
+            t += Dt;
+            Assert.AreNotEqual(0, (int)(r.Tick(new GamepadFrame(GamepadButton.None) { LeftTrigger = 0.6f }, ControlContext.Attack(t)).Held & ControlHeld.Shield));
+            // A resting finger wobbling 0.4..0.55 (the old 0.5 threshold flipped every frame) keeps shielding.
+            foreach (float v in new[] { 0.45f, 0.52f, 0.4f, 0.55f, 0.38f, 0.49f })
+            {
+                t += Dt;
+                var held = r.Tick(new GamepadFrame(GamepadButton.None) { LeftTrigger = v }, ControlContext.Attack(t)).Held;
+                Assert.AreNotEqual(0, (int)(held & ControlHeld.Shield), "LT " + v);
+            }
+            t += Dt;
+            Assert.AreEqual(0, (int)(r.Tick(new GamepadFrame(GamepadButton.None) { LeftTrigger = 0.3f }, ControlContext.Attack(t)).Held & ControlHeld.Shield));
+            t += Dt;
+            Assert.AreEqual(0, (int)(r.Tick(new GamepadFrame(GamepadButton.None) { LeftTrigger = 0.5f }, ControlContext.Attack(t)).Held & ControlHeld.Shield),
+                "released: needs 0.55 again");
+        }
+
+        [Test]
+        public void Tick_RightTriggerHysteresis_SprintHeldUntilBelow035()
+        {
+            var r = new GamepadControlResolver();
+            Assert.IsFalse(r.Tick(new GamepadFrame(GamepadButton.None) { RightTrigger = 0.54f }, ControlContext.Attack(0f)).Sprint);
+            Assert.IsTrue(r.Tick(new GamepadFrame(GamepadButton.None) { RightTrigger = 0.7f }, ControlContext.Attack(Dt)).Sprint);
+            Assert.IsTrue(r.Tick(new GamepadFrame(GamepadButton.None) { RightTrigger = 0.36f }, ControlContext.Attack(2 * Dt)).Sprint);
+            Assert.IsFalse(r.Tick(new GamepadFrame(GamepadButton.None) { RightTrigger = 0.2f }, ControlContext.Attack(3 * Dt)).Sprint);
+        }
+}
 }
