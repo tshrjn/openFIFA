@@ -35,10 +35,10 @@ Input details (`TeammateCallResolver`):
 
 ## Co-op switching
 
-Each human keeps their own `HumanPlayerSelector` (auto-switch on reception, manual and directional switch). `CoopSwitchArbiter` runs after them each tick so two humans never control the same player:
-- If a human already controlled the contested player, they keep him. When you pass to your partner, your partner keeps the receiver and you stay on your own player.
-- Otherwise a manual switch beats an automatic one, and then the lower slot wins.
-- The loser goes back to his previous player if that player is still free and he didn't press switch. If he did press switch, he gets the best free player for the ball (or the free player in his flick direction).
+Each human seat has its own `HumanPlayerSelector`. The session passes every selector the other seats' players as `otherHumans`, and a selector never switches onto one of them. With two seats on one team:
+- Only the passer follows his own pass. If your partner passes to an AI teammate, you stay on your player.
+- When an AI teammate wins the ball, the nearer human takes him.
+- Manual and directional switches skip your partner's player.
 
 ## Team AI changes
 
@@ -48,13 +48,16 @@ Each human keeps their own `HumanPlayerSelector` (auto-switch on reception, manu
   - A run request sets `DirectedRunnerIndex`. That player sprints to the target, or in behind the offside line when there is no target.
   - A press request sets `RequestedPresserIndex`. That player closes down like a first presser even in a low block.
 
-## Session wiring (per sim tick, per human)
+## Playing it
 
-The single-player session holds a list of human slots. For each human:
-1. Build the `ControlContext`, then call `TeammateCallResolver.Filter(frame, ctx, controlledId, teammateOnBall, carrierPos, cameraYaw, resolver.IsCharging, ref world.Directives[team])`.
-2. Feed the filtered frame to that human's `GamepadControlResolver.Tick`.
-3. Map the intent to the sim as in single player.
-4. After `MatchSim.Step`, update each selector, then run `CoopSwitchArbiter.Resolve` per team for teams with two or more humans, then `TeammateCallResolver.ResolveArrival`.
-5. OR every human's controlled id into `humanMask` for `SimTeamAIAdapter.Fill`.
+Open `Assets/Scenes/LocalMultiplayerMatch.unity` (the single-player scene plus `LocalMultiplayerMatch`). Every connected pad shows up in the middle of the side-select screen. Push left or right, then press A / Cross to kick off. Markers in each seat's colour (P1 blue, P2 red, P3 green, P4 yellow) float over the controlled players. If a pad drops out, the match pauses with a prompt, and A / Cross on any pad takes the empty seat.
+
+Command line: `-lmBots` drives both seats with `ScriptedGamepadBot` (for captures), `-lmMode coop|h2h` sets the mode, and `-lmAutoStart` skips side select.
+
+## Code
+
+- `LocalMatch` seats every controller in a `SinglePlayerMatchSession`. Seat 1's side is the session's `HumanTeam`, and the other seats are added with `AddHumanSlot`. In head-to-head, both teams' AI teammates play at the level's teammate strength and both keepers keep their real ratings. A dropped pad hands its player to the AI and pauses the match.
+- `LocalGamepadInput` is one seat's `IHumanInputSource`: raw frame → `TeammateCallResolver` (writes `World.Directives`) → `GamepadControlResolver`.
+- With auto-switch on (every level today), a human almost always holds the team's ball carrier. So "call for the ball" mostly signals your co-op partner, which the HUD can show. The AI-carrier path is there for a future player-lock option.
 
 Tests: `Tests/Editor/LocalMultiplayer/` (category `LOCAL-2P`).
