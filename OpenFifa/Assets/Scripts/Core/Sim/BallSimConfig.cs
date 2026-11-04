@@ -52,7 +52,7 @@ namespace OpenFifa.Core
         public float LiftLinear = 0.981f;
 
         /// <summary>Overall multiplier on the fitted lift, for feel tuning (1 = the fit).</summary>
-        public float LiftScale = 1.2f;
+        public float LiftScale = 1.0f;
 
         /// <summary>
         /// Extra drag from spin while airborne: Cd += this * min(Sp, 1). A heavily spun ball loses pace a little
