@@ -1,0 +1,722 @@
+using System;
+
+namespace OpenFifa.Core
+{
+    /// <summary>
+    /// Team AI for one side: phase machine, formation anchors and per-player utility decisions
+    /// (on-ball, off-ball attacking, defending, goalkeeper). Call Decide at ~10 Hz (TeamAIDirector does this).
+    /// All working memory is preallocated; Decide allocates nothing.
+    /// </summary>
+    public sealed class TeamAIBrain
+    {
+        public const float FreeKickDistance = 9.15f;
+        public const float HeavyTouchDistance = 1.6f;
+
+        public readonly int Team;
+        public TeamAITactics Tactics;
+        public TeamAIDifficulty Difficulty { get; private set; }
+        public readonly TeamAIRandom Rng;
+        public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
+        public readonly TeamAIOnBall OnBall = new TeamAIOnBall();
+        /// <summary>Formation anchors by slot (0..10), world space.</summary>
+        public readonly SimVec3[] Anchors = new SimVec3[TeamAIFormations.SlotCount];
+
+        public TeamAIPhase Phase => PhaseMachine.Phase;
+        /// <summary>Our back-line depth (0..1 from our goal) this tick.</summary>
+        public float BackLineDepth { get; private set; }
+        /// <summary>Offside line our attackers must stay behind (0..1 from our goal).</summary>
+        public float OffsideDepth { get; private set; }
+        /// <summary>A press trigger is active (seen and past the reaction delay).</summary>
+        public bool PressTriggerActive { get; private set; }
+        /// <summary>A press trigger condition is true in the current world (before reaction delay).</summary>
+        public bool PressTriggerSeen { get; private set; }
+        public int PresserIndex { get; private set; } = -1;
+        public int SecondPresserIndex { get; private set; } = -1;
+        public int ChaserIndex { get; private set; } = -1;
+
+        private float _triggerSince = -1f;
+        private float _triggerLastSeen = -100f;
+        private int _lastOwnerId = int.MinValue;
+        private float _ownerSince;
+        private readonly bool[] _running = new bool[TeamAIWorld.MaxPlayers];
+        private readonly float[] _runStart = new float[TeamAIWorld.MaxPlayers];
+        private readonly bool[] _oppTaken = new bool[TeamAIWorld.MaxPlayers];
+        private readonly int[] _supporters = new int[2];
+        private SimVec3 _firstSupportSpot;
+
+        public TeamAIBrain(int team, TeamAITactics tactics, float difficulty, ulong seed)
+        {
+            Team = team;
+            Tactics = tactics ?? new TeamAITactics();
+            Difficulty = new TeamAIDifficulty(difficulty);
+            Rng = new TeamAIRandom(seed);
+        }
+
+        public void SetDifficulty(float theta) => Difficulty = new TeamAIDifficulty(theta);
+
+        /// <summary>
+        /// Run one decision tick for this team and write commands for its players into `output`
+        /// (indexed like world.Players). Other teams' entries are left untouched.
+        /// </summary>
+        public void Decide(TeamAIWorld world, TeamAIPitchControl pc, float dt, bool hasPossession, AIPlayerCommand[] output)
+        {
+            var pitch = world.Pitch;
+            int sign = world.AttackSign(Team);
+            var ball = TeamAIMath.Flat(world.Ball.Position);
+            float ballDepth = TeamAIMath.Depth(ball.Z, sign, pitch);
+            int ownerIndex = world.OwnerIndex;
+            int ownerTeam = ownerIndex >= 0 ? world.Players[ownerIndex].Team : -1;
+
+            if (world.Ball.OwnerId != _lastOwnerId)
+            {
+                _lastOwnerId = world.Ball.OwnerId;
+                _ownerSince = world.Time;
+            }
+
+            // ---- Layer 1: team phase ----
+            float nearest = NearestTeammateDistance(world, ball);
+            PhaseMachine.Update(dt, Tactics, hasPossession, ballDepth, nearest, world.MatchPhase, world.RestartTeam, Team);
+            var phase = PhaseMachine.Phase;
+            bool inPossession = TeamAIFormationShape.InPossession(phase);
+
+            // ---- Layer 2: formation anchors ----
+            float line = TeamAIFormationShape.ComputeAnchors(phase, Tactics, ball, sign, pitch, Anchors);
+            if (!inPossession && ownerIndex >= 0 && ownerTeam != Team)
+            {
+                // Ball pressure rule: drop the line when the carrier is unpressured and facing our goal.
+                float pressure = NearestTeammateDistance(world, ball);
+                var facing = world.Players[ownerIndex].Facing;
+                bool facingUs = facing.Z * -sign > 0.3f;
+                if (pressure > 5f && facingUs) line = Math.Max(0.05f, line - 0.04f);
+            }
+            BackLineDepth = line;
+            OffsideDepth = ComputeOffsideDepth(world, sign, ballDepth);
+
+            // ---- Press triggers (with reaction delay) ----
+            bool trigger = !hasPossession && DetectPressTrigger(world, sign, ownerIndex, ownerTeam);
+            PressTriggerSeen = trigger;
+            if (trigger)
+            {
+                if (_triggerSince < 0f) _triggerSince = world.Time;
+                _triggerLastSeen = world.Time;
+            }
+            else if (world.Time - _triggerLastSeen > 1.5f)
+            {
+                _triggerSince = -1f;
+            }
+            PressTriggerActive = _triggerSince >= 0f && world.Time - _triggerSince >= Difficulty.ReactionDelay;
+
+            // ---- Ball chaser / receiver for loose balls ----
+            ChaserIndex = -1;
+            SimVec3 chasePoint = ball;
+            if (ownerIndex < 0) ChaserIndex = BestInterceptor(world, Team, out chasePoint);
+
+            // ---- Pressers (out of possession) ----
+            PresserIndex = -1;
+            SecondPresserIndex = -1;
+            if (!hasPossession && ownerIndex >= 0 && ownerTeam != Team) SelectPressers(world, ball);
+
+            for (int i = 0; i < TeamAIWorld.MaxPlayers; i++) _oppTaken[i] = false;
+            _supporters[0] = -1;
+            _supporters[1] = -1;
+            if (hasPossession && ownerIndex >= 0 && ownerTeam == Team) SelectSupporters(world, ownerIndex);
+
+            int runners = 0;
+            int overlappers = 0;
+            bool setPiece = phase == TeamAIPhase.SetPieceFor || phase == TeamAIPhase.SetPieceAgainst;
+            int taker = phase == TeamAIPhase.SetPieceFor && ownerIndex < 0 ? SetPieceTaker(world, ball) : -1;
+
+            for (int i = 0; i < world.PlayerCount; i++)
+            {
+                ref var p = ref world.Players[i];
+                if (p.Team != Team) continue;
+                ref var cmd = ref output[i];
+                cmd = AIPlayerCommand.Idle(p.Id, p.Position);
+                if (!p.Active) continue;
+
+                var anchor = AnchorFor(p);
+
+                // On the ball.
+                if (i == ownerIndex)
+                {
+                    DecideOnBall(world, i, phase, setPiece, ref cmd);
+                    continue;
+                }
+
+                // Set piece taker walks to the ball.
+                if (i == taker)
+                {
+                    SetMove(ref cmd, p, ball, false, TeamAIIntent.SetPieceTaker);
+                    continue;
+                }
+
+                // Goalkeeper.
+                if (p.Role == TeamAIRole.GK)
+                {
+                    if (setPiece || (hasPossession && ownerIndex >= 0))
+                    {
+                        var gkPos = TeamAIGoalkeeper.PositionTarget(ball, sign, pitch, BackLineDepth);
+                        SetMove(ref cmd, p, gkPos, false, TeamAIIntent.GKPosition);
+                    }
+                    else
+                    {
+                        TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ref cmd);
+                    }
+                    continue;
+                }
+
+                if (setPiece)
+                {
+                    DecideSetPiece(world, i, anchor, ball, sign, phase, ref cmd);
+                    continue;
+                }
+
+                // Loose ball: the best interceptor goes for it.
+                if (i == ChaserIndex)
+                {
+                    bool ours = world.Ball.LastTouchTeam == Team && hasPossession;
+                    SetMove(ref cmd, p, chasePoint, true, ours ? TeamAIIntent.Receive : TeamAIIntent.ChaseBall);
+                    continue;
+                }
+
+                if (inPossession)
+                    DecideAttackingOffBall(world, pc, i, anchor, ownerIndex, phase, sign, ref runners, ref overlappers, ref cmd);
+                else
+                    DecideDefending(world, i, anchor, ownerIndex, phase, sign, ref cmd);
+            }
+        }
+
+        // ------------------------------------------------------------------ on ball
+
+        private void DecideOnBall(TeamAIWorld world, int i, TeamAIPhase phase, bool setPiece, ref AIPlayerCommand cmd)
+        {
+            ref var p = ref world.Players[i];
+            int sign = world.AttackSign(Team);
+            float delay = Difficulty.ReactionDelay * (1.3f - 0.6f * p.Reactions);
+            if (world.Time - _ownerSince < delay)
+            {
+                // Still reacting to the reception: protect the ball, drift forward.
+                var ahead = TeamAIMath.ClampToPitch(p.Position + new SimVec3(0f, 0f, sign * 2f), world.Pitch, 1f);
+                SetMove(ref cmd, p, setPiece ? p.Position : ahead, false, TeamAIIntent.Carry);
+                return;
+            }
+            var ctx = new TeamAIOnBallContext
+            {
+                IsGoalkeeper = p.Role == TeamAIRole.GK,
+                SetPiece = setPiece,
+                MatchPhase = world.MatchPhase,
+                OffsideDepth = OffsideDepth
+            };
+            OnBall.Decide(world, i, phase, Difficulty, Rng, ctx, ref cmd);
+        }
+
+        // ------------------------------------------------------------------ attacking off the ball
+
+        private void DecideAttackingOffBall(TeamAIWorld world, TeamAIPitchControl pc, int i, SimVec3 anchor, int ownerIndex,
+            TeamAIPhase phase, int sign, ref int runners, ref int overlappers, ref AIPlayerCommand cmd)
+        {
+            ref var p = ref world.Players[i];
+            var pitch = world.Pitch;
+            float onsideDepth = OffsideDepth - 0.008f;
+            bool attacking = phase == TeamAIPhase.Progression || phase == TeamAIPhase.FinalThird;
+            bool ownerOurs = ownerIndex >= 0 && world.Players[ownerIndex].Team == Team;
+            float myDepth = TeamAIMath.Depth(p.Position.Z, sign, pitch);
+
+            // Run in behind, timed against the offside line.
+            if (ownerOurs && attacking && runners < 2 &&
+                (p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM))
+            {
+                var owner = world.Players[ownerIndex];
+                float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
+                float ownerPressure = TeamAIOnBall.NearestOpponentDistance(world, Team, owner.Position);
+                bool ownerHasTime = ownerPressure > 3.5f && SimVec3.Dot(owner.Facing, new SimVec3(0f, 0f, sign)) > 0.2f;
+                bool continuing = _running[i] && world.Time - _runStart[i] < 3f && myDepth < 0.96f;
+                bool nearLine = myDepth >= OffsideDepth - 0.035f && myDepth <= OffsideDepth + 0.002f;
+                bool spaceBehind = OffsideDepth < 0.9f;
+                bool start = !continuing && ownerHasTime && nearLine && spaceBehind && ownerDepth < OffsideDepth &&
+                             Rng.NextFloat() >= Difficulty.LapseChance;
+                if (continuing || start)
+                {
+                    if (start) { _running[i] = true; _runStart[i] = world.Time; }
+                    runners++;
+                    float targetDepth = Math.Min(OffsideDepth + 0.12f, 0.95f);
+                    float x = TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
+                    var target = TeamAIMath.ClampToPitch(new SimVec3(x, 0f, TeamAIMath.DepthToZ(targetDepth, sign, pitch)), pitch, 1.5f);
+                    SetMove(ref cmd, p, target, true, TeamAIIntent.RunInBehind);
+                    return;
+                }
+            }
+            _running[i] = false;
+
+            // Support the ball carrier with an open angle.
+            if (ownerOurs && (i == _supporters[0] || i == _supporters[1]))
+            {
+                var spot = FindSupportSpot(world, pc, i, ownerIndex, anchor, sign, i == _supporters[1]);
+                if (i == _supporters[0]) _firstSupportSpot = spot;
+                SetMove(ref cmd, p, spot, TeamAIMath.FlatDistance(p.Position, spot) > 8f, TeamAIIntent.Support);
+                return;
+            }
+
+            // Overlap: ball-side full-back runs outside a wide carrier in the opponent half.
+            if (ownerOurs && p.Role == TeamAIRole.FB && overlappers == 0 && attacking)
+            {
+                var owner = world.Players[ownerIndex];
+                float ownerDepth = TeamAIMath.Depth(owner.Position.Z, sign, pitch);
+                bool sameSide = owner.Position.X * anchor.X > 0f && TeamAIMath.Abs(owner.Position.X) > 6f;
+                bool carrierRole = owner.Role == TeamAIRole.W || owner.Role == TeamAIRole.CM || owner.Role == TeamAIRole.AM;
+                if (sameSide && carrierRole && ownerDepth > 0.5f)
+                {
+                    overlappers++;
+                    float side = anchor.X > 0f ? 1f : -1f;
+                    float depth = Math.Min(ownerDepth + 0.1f, onsideDepth);
+                    var target = new SimVec3(side * (pitch.HalfWidth - 3f), 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
+                    SetMove(ref cmd, p, target, true, TeamAIIntent.Overlap);
+                    return;
+                }
+            }
+
+            // Wingers hold the width; everyone else holds the shape, staying onside.
+            var t = anchor;
+            var intent = TeamAIIntent.HoldShape;
+            if (p.Role == TeamAIRole.W)
+            {
+                t = new SimVec3((anchor.X >= 0f ? 1f : -1f) * (pitch.HalfWidth - 2.5f), 0f, anchor.Z);
+                intent = TeamAIIntent.HoldWidth;
+            }
+            float tDepth = TeamAIMath.Depth(t.Z, sign, pitch);
+            if (tDepth > onsideDepth && tDepth > 0.5f)
+                t = new SimVec3(t.X, 0f, TeamAIMath.DepthToZ(Math.Max(onsideDepth, 0.5f), sign, pitch));
+            SetMove(ref cmd, p, t, TeamAIMath.FlatDistance(p.Position, t) > 15f, intent);
+        }
+
+        private SimVec3 FindSupportSpot(TeamAIWorld world, TeamAIPitchControl pc, int i, int ownerIndex, SimVec3 anchor,
+            int sign, bool avoidFirst)
+        {
+            var pitch = world.Pitch;
+            var owner = world.Players[ownerIndex];
+            var from = TeamAIMath.Flat(owner.Position);
+            float ownerDepth = TeamAIMath.Depth(from.Z, sign, pitch);
+            var best = anchor;
+            float bestScore = float.MinValue;
+            var forward = new SimVec3(0f, 0f, sign);
+            for (int ring = 0; ring < 2; ring++)
+            {
+                float radius = ring == 0 ? 12f : 19f;
+                for (int k = 0; k < 8; k++)
+                {
+                    var dir = TeamAIMath.RotateFlat(forward, k * 0.785398f);
+                    var c = TeamAIMath.ClampToPitch(from + dir * radius, pitch, 2f);
+                    float cDepth = TeamAIMath.Depth(c.Z, sign, pitch);
+                    if (cDepth > OffsideDepth - 0.008f && cDepth > 0.5f) continue;
+                    if (avoidFirst && TeamAIMath.FlatDistance(c, _firstSupportSpot) < 8f) continue;
+                    float control = pc.ControlAt(Team, c);
+                    float lane = TeamAIOnBall.InterceptionRisk(world, Team, from, c,
+                        TeamAIOnBall.GroundPassTime(radius), false);
+                    float drift = TeamAIMath.FlatDistance(c, anchor);
+                    float score = control + 0.8f * (cDepth - ownerDepth) - 0.7f * lane -
+                                  0.02f * Math.Max(0f, drift - 10f);
+                    score += Rng.NextSigned() * Difficulty.DecisionNoise * 0.5f;
+                    if (score > bestScore) { bestScore = score; best = c; }
+                }
+            }
+            return best;
+        }
+
+        // ------------------------------------------------------------------ defending
+
+        private void DecideDefending(TeamAIWorld world, int i, SimVec3 anchor, int ownerIndex, TeamAIPhase phase, int sign,
+            ref AIPlayerCommand cmd)
+        {
+            ref var p = ref world.Players[i];
+            var pitch = world.Pitch;
+            var ball = TeamAIMath.Flat(world.Ball.Position);
+            var ownGoal = TeamAIMath.OwnGoal(sign, pitch);
+            float ballDepth = TeamAIMath.Depth(ball.Z, sign, pitch);
+            bool oppHasBall = ownerIndex >= 0 && world.Players[ownerIndex].Team != Team;
+
+            if (oppHasBall && (i == PresserIndex || i == SecondPresserIndex))
+            {
+                DecidePresser(world, i, anchor, ownerIndex, phase, sign, i == SecondPresserIndex, ref cmd);
+                return;
+            }
+
+            // Recovery: players caught upfield of the ball sprint back to shape.
+            if (phase == TeamAIPhase.Recovery || phase == TeamAIPhase.CounterPress)
+            {
+                float myDepth = TeamAIMath.Depth(p.Position.Z, sign, pitch);
+                if (phase == TeamAIPhase.Recovery && myDepth > ballDepth + 0.03f && p.Role != TeamAIRole.ST)
+                {
+                    SetMove(ref cmd, p, anchor, true, TeamAIIntent.Recover);
+                    return;
+                }
+            }
+
+            // Back line: hold one line, marking goal-side when an attacker is inside our zone.
+            if (p.Role == TeamAIRole.CB || p.Role == TeamAIRole.FB)
+            {
+                float lineZ = TeamAIMath.DepthToZ(BackLineDepth, sign, pitch);
+                var target = new SimVec3(anchor.X, 0f, lineZ);
+                var intent = TeamAIIntent.KeepLine;
+                int opp = FindMarkTarget(world, anchor, sign, 11f, BackLineDepth + 0.12f);
+                if (opp >= 0)
+                {
+                    _oppTaken[opp] = true;
+                    var op = world.Players[opp].Position;
+                    float oppDepth = TeamAIMath.Depth(op.Z, sign, pitch);
+                    float x = TeamAIMath.Lerp(anchor.X, op.X, 0.6f);
+                    float depth = BackLineDepth;
+                    if (oppDepth < BackLineDepth)
+                    {
+                        // Attacker already goal-side of the line: track him, goal-side.
+                        var mark = op + TeamAIMath.FlatDirection(op, ownGoal) * 1.5f;
+                        x = mark.X;
+                        depth = TeamAIMath.Depth(mark.Z, sign, pitch);
+                        intent = TeamAIIntent.Mark;
+                    }
+                    target = new SimVec3(x, 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
+                    cmd.TargetPlayerId = world.Players[opp].Id;
+                }
+                SetMove(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), false, intent);
+                return;
+            }
+
+            // Midfield: cut passing lanes (cover shadow) or mark in the low block.
+            if (oppHasBall)
+            {
+                int opp = FindShadowTarget(world, anchor, ownerIndex, sign);
+                if (opp >= 0)
+                {
+                    _oppTaken[opp] = true;
+                    var op = world.Players[opp].Position;
+                    var shadow = ball + (op - ball) * 0.4f;
+                    shadow = new SimVec3(shadow.X, 0f, shadow.Z);
+                    if (TeamAIMath.FlatDistance(shadow, anchor) < 12f)
+                    {
+                        cmd.TargetPlayerId = world.Players[opp].Id;
+                        SetMove(ref cmd, p, shadow, TeamAIMath.FlatDistance(p.Position, shadow) > 10f, TeamAIIntent.CoverShadow);
+                        return;
+                    }
+                }
+            }
+
+            SetMove(ref cmd, p, anchor, TeamAIMath.FlatDistance(p.Position, anchor) > 15f, TeamAIIntent.HoldShape);
+        }
+
+        private void DecidePresser(TeamAIWorld world, int i, SimVec3 anchor, int ownerIndex, TeamAIPhase phase, int sign,
+            bool second, ref AIPlayerCommand cmd)
+        {
+            ref var p = ref world.Players[i];
+            var pitch = world.Pitch;
+            var ball = TeamAIMath.Flat(world.Ball.Position);
+            var owner = world.Players[ownerIndex];
+            var ownGoal = TeamAIMath.OwnGoal(sign, pitch);
+            var toGoal = TeamAIMath.FlatDirection(ball, ownGoal);
+            float dist = TeamAIMath.FlatDistance(p.Position, ball);
+            float ballDepth = TeamAIMath.Depth(ball.Z, sign, pitch);
+            cmd.TargetPlayerId = owner.Id;
+
+            bool pressAllowed;
+            float aggression = Difficulty.PressAggression;
+            float anchorToBall = TeamAIMath.FlatDistance(anchor, ball);
+            switch (phase)
+            {
+                case TeamAIPhase.HighPress:
+                case TeamAIPhase.CounterPress:
+                    pressAllowed = true;
+                    break;
+                case TeamAIPhase.MidBlock:
+                    pressAllowed = PressTriggerActive || anchorToBall < 7f * aggression;
+                    break;
+                case TeamAIPhase.LowBlock:
+                    pressAllowed = PressTriggerActive && ballDepth < 0.4f || anchorToBall < 5f * aggression || ballDepth < 0.2f;
+                    break;
+                default:
+                    pressAllowed = PressTriggerActive || dist < 6f;
+                    break;
+            }
+            if (second && !PressTriggerActive && phase != TeamAIPhase.CounterPress) pressAllowed = false;
+
+            if (!pressAllowed)
+            {
+                // Contain: sit goal-side of the ball inside our zone, no sprint.
+                if (anchorToBall < 16f && !second)
+                {
+                    var contain = ball + toGoal * 4.5f;
+                    SetMove(ref cmd, p, contain, false, TeamAIIntent.Jockey);
+                    if (dist < 5.5f) { cmd.Action = TeamAIAction.Jockey; cmd.ActionTarget = ball; }
+                }
+                else
+                {
+                    SetMove(ref cmd, p, anchor, false, TeamAIIntent.HoldShape);
+                }
+                return;
+            }
+
+            if (dist > 2.4f)
+            {
+                // Close down on a goal-side curve.
+                var approach = ball + toGoal * (second ? 3f : 1.0f);
+                SetMove(ref cmd, p, approach, true, TeamAIIntent.Press);
+                // Slide: last-ditch, chasing a carrier who is getting away near our box.
+                bool goalSideNow = SimVec3.Dot(p.Position - ball, toGoal) > 0f;
+                float ownerSpeed = owner.Velocity.Flat.Magnitude;
+                if (!second && !goalSideNow && dist < 3.6f && ballDepth < 0.35f && ownerSpeed > p.MaxSpeed * 0.7f &&
+                    p.Defending > 0.5f && Rng.NextFloat() < p.Defending * 0.6f)
+                {
+                    cmd.Action = TeamAIAction.SlideTackle;
+                    cmd.ActionTarget = ball;
+                    cmd.Intent = TeamAIIntent.Tackle;
+                }
+                return;
+            }
+
+            // In tackling range: jockey or tackle.
+            bool exposed = TeamAIMath.FlatDistance(ball, owner.Position) > 1.0f;
+            bool facingAway = SimVec3.Dot(owner.Facing, toGoal) < -0.3f;
+            bool goalSide = SimVec3.Dot(p.Position - ball, toGoal) > -0.3f;
+            float success = 0.3f + 0.45f * p.Defending - 0.3f * owner.Dribbling + (exposed ? 0.3f : 0f) +
+                            (facingAway ? 0.1f : 0f);
+            success += Rng.NextSigned() * Difficulty.DecisionNoise;
+            if (goalSide && success > 0.55f)
+            {
+                SetMove(ref cmd, p, ball, false, TeamAIIntent.Tackle);
+                cmd.Action = TeamAIAction.Tackle;
+                cmd.ActionTarget = ball;
+                return;
+            }
+            var jockey = ball + toGoal * 1.5f;
+            SetMove(ref cmd, p, jockey, false, TeamAIIntent.Jockey);
+            cmd.Action = TeamAIAction.Jockey;
+            cmd.ActionTarget = ball;
+        }
+
+        private int FindMarkTarget(TeamAIWorld world, SimVec3 anchor, int sign, float radius, float maxDepth)
+        {
+            int best = -1;
+            float bestD = radius;
+            int owner = world.OwnerIndex;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team == Team || o.Role == TeamAIRole.GK || _oppTaken[j] || j == owner) continue;
+                float depth = TeamAIMath.Depth(o.Position.Z, sign, world.Pitch);
+                if (depth > maxDepth) continue;
+                float d = TeamAIMath.FlatDistance(o.Position, anchor);
+                // Runners already goal-side of our line are picked up from much further away, first.
+                if (depth < BackLineDepth) d -= 15f;
+                if (d < bestD) { bestD = d; best = j; }
+            }
+            return best;
+        }
+
+        private int FindShadowTarget(TeamAIWorld world, SimVec3 anchor, int ownerIndex, int sign)
+        {
+            int best = -1;
+            float bestScore = float.MinValue;
+            var ball = world.Ball.Position;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team == Team || j == ownerIndex || o.Role == TeamAIRole.GK || _oppTaken[j]) continue;
+                float dBall = TeamAIMath.FlatDistance(o.Position, ball);
+                float dAnchor = TeamAIMath.FlatDistance(o.Position, anchor);
+                if (dBall > 30f || dAnchor > 16f) continue;
+                // Danger: closer to our goal is worse.
+                float danger = 1f - TeamAIMath.Depth(o.Position.Z, sign, world.Pitch);
+                float score = danger - 0.03f * dAnchor;
+                if (score > bestScore) { bestScore = score; best = j; }
+            }
+            return best;
+        }
+
+        // ------------------------------------------------------------------ set pieces
+
+        private void DecideSetPiece(TeamAIWorld world, int i, SimVec3 anchor, SimVec3 ball, int sign, TeamAIPhase phase,
+            ref AIPlayerCommand cmd)
+        {
+            ref var p = ref world.Players[i];
+            var pitch = world.Pitch;
+            var t = anchor;
+            if (world.MatchPhase == TeamAIMatchPhase.Kickoff)
+            {
+                float d = TeamAIMath.Depth(t.Z, sign, pitch);
+                if (d > 0.49f) t = new SimVec3(t.X, 0f, TeamAIMath.DepthToZ(0.49f, sign, pitch));
+            }
+            if (phase == TeamAIPhase.SetPieceAgainst)
+            {
+                float d = TeamAIMath.FlatDistance(t, ball);
+                if (d < FreeKickDistance + 0.5f)
+                {
+                    var away = TeamAIMath.FlatDirection(ball, t);
+                    if (away.SqrMagnitude < 0.5f) away = TeamAIMath.FlatDirection(ball, TeamAIMath.OwnGoal(sign, pitch));
+                    t = ball + away * (FreeKickDistance + 0.5f);
+                }
+            }
+            t = TeamAIMath.ClampToPitch(t, pitch, 0.5f);
+            SetMove(ref cmd, p, t, false, TeamAIIntent.HoldShape);
+        }
+
+        private int SetPieceTaker(TeamAIWorld world, SimVec3 ball)
+        {
+            bool goalKick = world.MatchPhase == TeamAIMatchPhase.GoalKick;
+            int best = -1;
+            float bd = float.MaxValue;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team != Team) continue;
+                bool gk = o.Role == TeamAIRole.GK;
+                if (goalKick != gk) continue;
+                float d = TeamAIMath.FlatSqrDistance(o.Position, ball);
+                if (d < bd) { bd = d; best = j; }
+            }
+            return best;
+        }
+
+        // ------------------------------------------------------------------ helpers
+
+        private SimVec3 AnchorFor(in TeamAIPlayer p)
+        {
+            int slot = p.FormationSlot;
+            if (slot < 0 || slot >= TeamAIFormations.SlotCount) slot = 0;
+            return Anchors[slot];
+        }
+
+        private bool DetectPressTrigger(TeamAIWorld world, int sign, int ownerIndex, int ownerTeam)
+        {
+            var ball = world.Ball;
+            var pitch = world.Pitch;
+            if (ownerIndex >= 0 && ownerTeam != Team)
+            {
+                var o = world.Players[ownerIndex];
+                // Heavy touch: the ball has run away from the carrier.
+                if (TeamAIMath.FlatDistance(o.Position, ball.Position) > HeavyTouchDistance) return true;
+                // Back to goal: the carrier faces his own goal (our attacking direction).
+                if (o.Facing.Z * sign > 0.6f && o.Velocity.Flat.SqrMagnitude < 4f && o.Role != TeamAIRole.GK) return true;
+                // Touchline trap.
+                if (TeamAIMath.Abs(ball.Position.X) > pitch.HalfWidth - 5f) return true;
+                return false;
+            }
+            // Loose ball after their touch, slow and close to us.
+            if (ownerIndex < 0 && ball.LastTouchTeam >= 0 && ball.LastTouchTeam != Team &&
+                ball.Velocity.Flat.SqrMagnitude < 36f && NearestTeammateDistance(world, ball.Position) < 6f) return true;
+            return false;
+        }
+
+        private void SelectPressers(TeamAIWorld world, SimVec3 ball)
+        {
+            float b1 = float.MaxValue, b2 = float.MaxValue;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team != Team || o.Role == TeamAIRole.GK) continue;
+                float t = TeamAIMath.TimeToIntercept(o, ball, 0.2f);
+                if (t < b1) { b2 = b1; SecondPresserIndex = PresserIndex; b1 = t; PresserIndex = j; }
+                else if (t < b2) { b2 = t; SecondPresserIndex = j; }
+            }
+            bool twoPressers = PressTriggerActive || Phase == TeamAIPhase.CounterPress ||
+                               (Phase == TeamAIPhase.HighPress && Tactics.PressingIntensity >= 0.6f);
+            if (!twoPressers || Tactics.PressingIntensity < 0.3f) SecondPresserIndex = -1;
+        }
+
+        private void SelectSupporters(TeamAIWorld world, int ownerIndex)
+        {
+            float b1 = float.MaxValue, b2 = float.MaxValue;
+            var o = world.Players[ownerIndex].Position;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var p = world.Players[j];
+                if (j == ownerIndex || !p.Active || p.Team != Team || p.Role == TeamAIRole.GK || p.Role == TeamAIRole.ST) continue;
+                if (_running[j]) continue;
+                float d = TeamAIMath.FlatDistance(p.Position, o);
+                if (d < b1) { b2 = b1; _supporters[1] = _supporters[0]; b1 = d; _supporters[0] = j; }
+                else if (d < b2) { b2 = d; _supporters[1] = j; }
+            }
+            // Lapses at low difficulty: the second supporter switches off.
+            if (_supporters[1] >= 0 && Rng.NextFloat() < Difficulty.LapseChance) _supporters[1] = -1;
+        }
+
+        private int BestInterceptor(TeamAIWorld world, int team, out SimVec3 point)
+        {
+            var ball = world.Ball;
+            int best = -1;
+            float bestT = float.MaxValue;
+            point = TeamAIMath.Flat(ball.Position);
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team != team) continue;
+                if (o.Role == TeamAIRole.GK) continue; // keeper logic handles its own sweeps/claims
+                for (int k = 0; k <= 15; k++)
+                {
+                    float t = k * 0.2f;
+                    if (t >= bestT) break;
+                    var bp = TeamAIMath.PredictBall(ball.Position, ball.Velocity, t);
+                    if (TeamAIMath.TimeToIntercept(o, bp, 0.2f) <= t + 0.05f)
+                    {
+                        bestT = t;
+                        best = j;
+                        point = bp;
+                        break;
+                    }
+                }
+            }
+            if (best < 0)
+            {
+                // Nobody gets there inside 3 s: closest to the resting point goes.
+                var rest = TeamAIMath.PredictBall(ball.Position, ball.Velocity, 3f);
+                float bd = float.MaxValue;
+                for (int j = 0; j < world.PlayerCount; j++)
+                {
+                    var o = world.Players[j];
+                    if (!o.Active || o.Team != team || o.Role == TeamAIRole.GK) continue;
+                    float d = TeamAIMath.FlatSqrDistance(o.Position, rest);
+                    if (d < bd) { bd = d; best = j; }
+                }
+                point = rest;
+            }
+            point = TeamAIMath.ClampToPitch(point, world.Pitch, 0.3f);
+            return best;
+        }
+
+        private float ComputeOffsideDepth(TeamAIWorld world, int sign, float ballDepth)
+        {
+            // Second-last opponent (keeper usually the last), measured as depth from OUR goal.
+            float d1 = 0f, d2 = 0f; // deepest and second deepest opponents (closest to their own goal)
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team == Team) continue;
+                float d = TeamAIMath.Depth(o.Position.Z, sign, world.Pitch);
+                if (d > d1) { d2 = d1; d1 = d; }
+                else if (d > d2) d2 = d;
+            }
+            float line = d2;
+            if (ballDepth > line) line = ballDepth;
+            if (line < 0.5f) line = 0.5f;
+            return line;
+        }
+
+        private float NearestTeammateDistance(TeamAIWorld world, SimVec3 p)
+        {
+            float best = 999f;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team != Team || o.Role == TeamAIRole.GK) continue;
+                float d = TeamAIMath.FlatDistance(o.Position, p);
+                if (d < best) best = d;
+            }
+            return best;
+        }
+
+        private static void SetMove(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, bool sprint, TeamAIIntent intent)
+        {
+            cmd.MoveTarget = new SimVec3(target.X, 0f, target.Z);
+            float d = TeamAIMath.FlatDistance(p.Position, target);
+            cmd.MoveDirection = d > 0.6f ? TeamAIMath.FlatDirection(p.Position, target) : SimVec3.Zero;
+            cmd.Sprint = sprint && d > 1.5f;
+            cmd.Intent = intent;
+        }
+    }
+}
