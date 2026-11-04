@@ -13,11 +13,11 @@ namespace OpenFifa.Core
 
         /// <summary>0 (lightest) to 1 (darkest).</summary>
         public float SkinTone { get; }
-        /// <summary>One of <see cref="HairStyles"/>.</summary>
+        /// <summary>One of <see cref="HairStyles"/>, or null when unknown (the renderer picks a seeded style).</summary>
         public string HairStyle { get; }
         /// <summary>"#RRGGBB".</summary>
         public string HairColour { get; }
-        /// <summary>One of <see cref="FacialHairStyles"/>.</summary>
+        /// <summary>One of <see cref="FacialHairStyles"/>, or null when unknown (the renderer picks a seeded one).</summary>
         public string FacialHair { get; }
         public int HeightCm { get; }
         /// <summary>One of <see cref="Builds"/>.</summary>
@@ -29,9 +29,9 @@ namespace OpenFifa.Core
             string build, string bootColour)
         {
             SkinTone = skinTone < 0f ? 0f : (skinTone > 1f ? 1f : skinTone);
-            HairStyle = string.IsNullOrEmpty(hairStyle) ? "short" : hairStyle;
+            HairStyle = string.IsNullOrEmpty(hairStyle) ? null : hairStyle;
             HairColour = string.IsNullOrEmpty(hairColour) ? "#2B1D14" : hairColour;
-            FacialHair = string.IsNullOrEmpty(facialHair) ? "none" : facialHair;
+            FacialHair = string.IsNullOrEmpty(facialHair) ? null : facialHair;
             HeightCm = heightCm;
             Build = string.IsNullOrEmpty(build) ? "average" : build;
             BootColour = string.IsNullOrEmpty(bootColour) ? "#111111" : bootColour;
