@@ -11,6 +11,14 @@ namespace OpenFifa.Core
     {
         public const float FreeKickDistance = 9.15f;
         public const float HeavyTouchDistance = 1.6f;
+        /// <summary>Highest ball an outfielder can play (m), for interception points.</summary>
+        public const float InterceptHeight = 1.9f;
+        /// <summary>
+        /// Seconds added to the straight-line time to intercept when picking a loose-ball chase point: that model starts
+        /// at top speed, real players accelerate and turn. Without it the chaser aims for the last point he could
+        /// just reach and arrives late (seen in full-sim matches once ball prediction became exact).
+        /// </summary>
+        public const float ChaseAccelerationLag = 0.3f;
 
         public readonly int Team;
         public TeamAITactics Tactics;
@@ -18,6 +26,21 @@ namespace OpenFifa.Core
         public readonly TeamAIRandom Rng;
         public readonly TeamAIPhaseMachine PhaseMachine = new TeamAIPhaseMachine();
         public readonly TeamAIOnBall OnBall = new TeamAIOnBall();
+        /// <summary>Corner, penalty and near-box free-kick routines (planned while a restart is pending).</summary>
+        public readonly TeamAISetPieces SetPieces = new TeamAISetPieces();
+        /// <summary>This tick's sim-matched free-ball prediction (built when the ball is loose).</summary>
+        public readonly TeamAIBallTrajectory Trajectory = new TeamAIBallTrajectory();
+        /// <summary>A set-piece routine is running this tick.</summary>
+        public bool SetPieceRoutineActive { get; private set; }
+
+        private TeamAIBallModel _ballModel = TeamAIBallModel.Default;
+
+        /// <summary>Ball timing model; set it when the sim runs a non-default <see cref="BallSimConfig"/>.</summary>
+        public TeamAIBallModel BallModel
+        {
+            get => _ballModel;
+            set { _ballModel = value ?? TeamAIBallModel.Default; OnBall.Model = _ballModel; }
+        }
         /// <summary>Formation anchors by slot (0..10), world space.</summary>
         public readonly SimVec3[] Anchors = new SimVec3[TeamAIFormations.SlotCount];
 
@@ -49,14 +72,18 @@ namespace OpenFifa.Core
         public int RequestedPresserIndex { get; private set; } = -1;
 
         public TeamAIBrain(int team, TeamAITactics tactics, float difficulty, ulong seed)
+            : this(team, tactics, new TeamAIDifficulty(difficulty), seed) { }
+
+        public TeamAIBrain(int team, TeamAITactics tactics, TeamAIDifficulty difficulty, ulong seed)
         {
             Team = team;
             Tactics = tactics ?? new TeamAITactics();
-            Difficulty = new TeamAIDifficulty(difficulty);
+            Difficulty = difficulty;
             Rng = new TeamAIRandom(seed);
         }
 
         public void SetDifficulty(float theta) => Difficulty = new TeamAIDifficulty(theta);
+        public void SetDifficulty(TeamAIDifficulty difficulty) => Difficulty = difficulty;
 
         /// <summary>
         /// Run one decision tick for this team and write commands for its players into `output`
@@ -111,6 +138,7 @@ namespace OpenFifa.Core
             PressTriggerActive = _triggerSince >= 0f && world.Time - _triggerSince >= Difficulty.ReactionDelay;
 
             // ---- Ball chaser / receiver for loose balls ----
+            if (ownerIndex < 0) Trajectory.Build(world, _ballModel);
             ChaserIndex = -1;
             SimVec3 chasePoint = ball;
             if (ownerIndex < 0) ChaserIndex = BestInterceptor(world, Team, out chasePoint);
@@ -139,6 +167,8 @@ namespace OpenFifa.Core
             int overlappers = 0;
             bool setPiece = phase == TeamAIPhase.SetPieceFor || phase == TeamAIPhase.SetPieceAgainst;
             int taker = phase == TeamAIPhase.SetPieceFor && ownerIndex < 0 ? SetPieceTaker(world, ball) : -1;
+            int routineTaker = ownerIndex >= 0 && ownerTeam == Team ? ownerIndex : taker;
+            SetPieceRoutineActive = setPiece && SetPieces.Plan(world, Team, routineTaker, Rng, Difficulty);
 
             for (int i = 0; i < world.PlayerCount; i++)
             {
@@ -167,15 +197,30 @@ namespace OpenFifa.Core
                 // Goalkeeper.
                 if (p.Role == TeamAIRole.GK)
                 {
-                    if (setPiece || (hasPossession && ownerIndex >= 0))
+                    if (SetPieceRoutineActive && SetPieces.Roles[i] == TeamAISetPieceRole.Goalkeeper)
+                    {
+                        SetMove(ref cmd, p, SetPieces.Targets[i], TeamAIMath.FlatDistance(p.Position, SetPieces.Targets[i]) > 10f,
+                            TeamAIIntent.GKPosition);
+                    }
+                    else if (setPiece || (hasPossession && ownerIndex >= 0))
                     {
                         var gkPos = TeamAIGoalkeeper.PositionTarget(ball, sign, pitch, BackLineDepth);
                         SetMove(ref cmd, p, gkPos, false, TeamAIIntent.GKPosition);
                     }
                     else
                     {
-                        TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ref cmd);
+                        TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ownerIndex < 0 ? Trajectory : null, ref cmd);
                     }
+                    continue;
+                }
+
+                if (SetPieceRoutineActive && SetPieces.Roles[i] != TeamAISetPieceRole.None)
+                {
+                    var t = SetPieces.Targets[i];
+                    bool marker = SetPieces.Roles[i] == TeamAISetPieceRole.Marker;
+                    SetMove(ref cmd, p, t, TeamAIMath.FlatDistance(p.Position, t) > 12f,
+                        marker ? TeamAIIntent.Mark : TeamAIIntent.HoldShape);
+                    if (marker && SetPieces.MarkIndex[i] >= 0) cmd.TargetPlayerId = world.Players[SetPieces.MarkIndex[i]].Id;
                     continue;
                 }
 
@@ -221,6 +266,26 @@ namespace OpenFifa.Core
                 MatchPhase = world.MatchPhase,
                 OffsideDepth = OffsideDepth
             };
+            if (setPiece && SetPieceRoutineActive)
+            {
+                var kind = SetPieces.Kind;
+                bool ours = kind == TeamAISetPieceKind.CornerFor || kind == TeamAISetPieceKind.PenaltyFor ||
+                            kind == TeamAISetPieceKind.FreeKickFor;
+                if (ours)
+                {
+                    if (!SetPieces.ReadyToTake(world))
+                    {
+                        SetMove(ref cmd, p, p.Position, false, TeamAIIntent.SetPieceTaker);
+                        return;
+                    }
+                    if (SetPieces.ChooseTakerOption(world, i, Difficulty, Rng, out var opt))
+                    {
+                        OnBall.LastChoice = opt;
+                        TeamAIOnBall.ApplyOption(world, i, opt, Difficulty, Rng, ctx, ref cmd);
+                        return;
+                    }
+                }
+            }
             ref readonly var calls = ref world.Directives[Team];
             if (calls.PassCallActive(world.Time))
             {
@@ -750,8 +815,9 @@ namespace OpenFifa.Core
                 {
                     float t = k * 0.2f;
                     if (t >= bestT) break;
-                    var bp = TeamAIMath.PredictBall(ball.Position, ball.Velocity, t);
-                    if (TeamAIMath.TimeToIntercept(o, bp, 0.2f) <= t + 0.05f)
+                    if (Trajectory.HeightAt(t) > InterceptHeight) continue; // over everyone's head at that moment
+                    var bp = Trajectory.At(t);
+                    if (TeamAIMath.TimeToIntercept(o, bp, 0.2f) + ChaseAccelerationLag <= t + 0.05f)
                     {
                         bestT = t;
                         best = j;
@@ -763,7 +829,7 @@ namespace OpenFifa.Core
             if (best < 0)
             {
                 // Nobody gets there inside 3 s: closest to the resting point goes.
-                var rest = TeamAIMath.PredictBall(ball.Position, ball.Velocity, 3f);
+                var rest = Trajectory.At(3f);
                 float bd = float.MaxValue;
                 for (int j = 0; j < world.PlayerCount; j++)
                 {

@@ -60,7 +60,18 @@ namespace OpenFifa.Core
         /// Returns true when the keeper should commit to the ball (sweep/claim).
         /// </summary>
         public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
-            ref AIPlayerCommand cmd)
+            ref AIPlayerCommand cmd) => Decide(world, gkIndex, backLineDepth, teamHasPossession, null, ref cmd);
+
+        /// <summary>Goal-line spot for a penalty against: on the line between the posts until the kick (Law 14).</summary>
+        public static SimVec3 PenaltyLineTarget(int attackSign, PitchSpec pitch) =>
+            new SimVec3(0f, 0f, -attackSign * (pitch.HalfLength - 0.15f));
+
+        /// <summary>
+        /// Out-of-possession keeper behaviour. <paramref name="trajectory"/> is this tick's sim-matched free-ball
+        /// prediction (null falls back to <see cref="TeamAIMath.PredictBall"/>).
+        /// </summary>
+        public static void Decide(TeamAIWorld world, int gkIndex, float backLineDepth, bool teamHasPossession,
+            TeamAIBallTrajectory trajectory, ref AIPlayerCommand cmd)
         {
             var gk = world.Players[gkIndex];
             int sign = world.AttackSign(gk.Team);
@@ -74,8 +85,34 @@ namespace OpenFifa.Core
             cmd.Aim = SimVec3.Zero;
             cmd.TargetPlayerId = -1;
 
+            // 0) Penalty against: stay on the line until the kick.
+            if (world.MatchPhase == TeamAIMatchPhase.Penalty && world.RestartTeam >= 0 && world.RestartTeam != gk.Team)
+            {
+                SetMove(ref cmd, gk, PenaltyLineTarget(sign, pitch), false, TeamAIIntent.GKPosition);
+                return;
+            }
+
             // 1) Claim a cross: ball in the air heading for our box.
-            if (ball.OwnerId < 0 && ball.Position.Y > 1.2f)
+            if (ball.OwnerId < 0 && ball.Position.Y > 1.2f && trajectory != null)
+            {
+                // First moment the (drag-affected) ball comes down through catchable height.
+                for (int k = 3; k <= 60; k++)
+                {
+                    float t = k * TeamAIBallTrajectory.SampleDt;
+                    float h = trajectory.HeightAt(t);
+                    if (h > 2.2f || h >= trajectory.HeightAt(t - TeamAIBallTrajectory.SampleDt)) continue;
+                    var land = trajectory.At(t);
+                    float distToGoal = TeamAIMath.FlatDistance(land, ownGoal);
+                    bool inZone = distToGoal < 13f && TeamAIMath.Abs(land.X - ownGoal.X) < 11f;
+                    if (inZone && TeamAIMath.TimeToIntercept(gk, land, 0.25f) < t + 0.15f)
+                    {
+                        SetMove(ref cmd, gk, land, true, TeamAIIntent.GKClaim);
+                        return;
+                    }
+                    break;
+                }
+            }
+            else if (ball.OwnerId < 0 && ball.Position.Y > 1.2f)
             {
                 float vy = ball.Velocity.Y, y = ball.Position.Y;
                 // Time until the ball drops to 2.2 m (catchable): y + vy t - 4.905 t^2 = 2.2
@@ -107,7 +144,7 @@ namespace OpenFifa.Core
                 for (int k = 0; k <= 12; k++)
                 {
                     float t = k * 0.25f;
-                    var bp = TeamAIMath.PredictBall(ball.Position, ball.Velocity, t);
+                    var bp = trajectory != null ? trajectory.At(t) : TeamAIMath.PredictBall(ball.Position, ball.Velocity, t);
                     float depth = TeamAIMath.Depth(bp.Z, sign, pitch);
                     if (depth > backLineDepth || TeamAIMath.FlatDistance(bp, ownGoal) > 32f) continue;
                     float tg = TeamAIMath.TimeToIntercept(gk, bp, 0.2f);

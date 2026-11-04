@@ -36,7 +36,8 @@ namespace OpenFifa.Core
             OpponentReactionBonus = opponentReactionBonus;
         }
 
-        public TeamAIDifficulty OpponentDifficulty => new TeamAIDifficulty(OpponentTheta);
+        /// <summary>Opponent AI difficulty, with <see cref="OpponentReactionBonus"/> applied to the reaction delay.</summary>
+        public TeamAIDifficulty OpponentDifficulty => new TeamAIDifficulty(OpponentTheta, OpponentReactionBonus);
         public TeamAIDifficulty TeammateDifficulty => new TeamAIDifficulty(TeammateTheta);
     }
 

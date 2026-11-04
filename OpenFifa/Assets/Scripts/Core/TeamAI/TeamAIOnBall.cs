@@ -51,6 +51,9 @@ namespace OpenFifa.Core
         /// <summary>Chosen option of the last decision.</summary>
         public TeamAIOption LastChoice;
 
+        /// <summary>Ball timing model (sim-matched). Set by the brain; defaults to the default ball config.</summary>
+        public TeamAIBallModel Model = TeamAIBallModel.Default;
+
         private int _calledReceiver = -1;
         private bool _calledThrough;
 
@@ -72,13 +75,14 @@ namespace OpenFifa.Core
             return TeamAIMath.Sigmoid(-1.25f + 1.6f * angle - 0.08f * dist);
         }
 
-        public static float GroundPassTime(float dist)
-        {
-            float v0 = TeamAIMath.Clamp(9f + 0.45f * dist, 10f, 25f);
-            return dist / (0.8f * v0);
-        }
+        /// <summary>Seconds for an AI ground pass of this length, from the sim's ball integrator (default config).</summary>
+        public static float GroundPassTime(float dist) => TeamAIBallModel.Default.GroundPassTime(dist);
 
-        public static float LobPassTime(float dist) => 0.9f + dist / 20f;
+        /// <summary>Flight time of an AI lob of this length, from the sim's ball integrator (default config).</summary>
+        public static float LobPassTime(float dist) => TeamAIBallModel.Default.LobPassTime(dist);
+
+        /// <summary>Flight time of a cross of this length, from the sim's ball integrator (default config).</summary>
+        public static float CrossTime(float dist) => TeamAIBallModel.Default.CrossTime(dist);
 
         /// <summary>
         /// Probability-like risk (0..1) that an opponent intercepts a pass from `from` to `to` arriving after
@@ -161,7 +165,7 @@ namespace OpenFifa.Core
                     float dist = TeamAIMath.FlatDistance(ballPos, through);
                     if (dist > 8f && dist < MaxGroundPass)
                     {
-                        float tBall = GroundPassTime(dist);
+                        float tBall = Model.GroundPassTime(dist);
                         float tRec = TeamAIMath.TimeToIntercept(rec, through, 0.15f);
                         if (tRec <= tBall + 0.5f)
                             Consider(world, ownerIndex, j, through, TeamAIAction.ThroughPass, dist, false, owner, sign, ownerDepth, diff, rng);
@@ -229,7 +233,8 @@ namespace OpenFifa.Core
         {
             var pitch = world.Pitch;
             var from = TeamAIMath.Flat(world.Ball.Position);
-            float tBall = lofted ? LobPassTime(dist) : GroundPassTime(dist);
+            float tBall = action == TeamAIAction.Cross ? Model.CrossTime(dist)
+                : lofted ? Model.LobPassTime(dist) : Model.GroundPassTime(dist);
             float control = TeamAIPitchControl.Evaluate(world, owner.Team, target, tBall, ownerIndex);
             float risk = InterceptionRisk(world, owner.Team, from, target, tBall, lofted);
             float targetDepth = TeamAIMath.Depth(target.Z, sign, pitch);
@@ -254,7 +259,7 @@ namespace OpenFifa.Core
             {
                 float power = action == TeamAIAction.LobPass ? TeamAIMath.Clamp(dist / MaxLobPass, 0.25f, 1f)
                     : action == TeamAIAction.Cross ? TeamAIMath.Clamp(dist / 45f, 0.35f, 1f)
-                    : TeamAIMath.Clamp(dist / MaxGroundPass, 0.12f, 1f);
+                    : TeamAIBallModel.GroundPassPower(dist);
                 LastBestPass = new TeamAIOption
                 {
                     Action = action, Intent = TeamAIIntent.Pass, Target = target, TargetIndex = recIndex,
@@ -358,7 +363,7 @@ namespace OpenFifa.Core
             }
         }
 
-        private static void ApplyOption(TeamAIWorld world, int ownerIndex, in TeamAIOption opt, in TeamAIDifficulty diff,
+        internal static void ApplyOption(TeamAIWorld world, int ownerIndex, in TeamAIOption opt, in TeamAIDifficulty diff,
             TeamAIRandom rng, in TeamAIOnBallContext ctx, ref AIPlayerCommand cmd)
         {
             var owner = world.Players[ownerIndex];

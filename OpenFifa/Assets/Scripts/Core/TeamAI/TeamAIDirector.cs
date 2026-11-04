@@ -24,10 +24,28 @@ namespace OpenFifa.Core
 
         public TeamAIDirector(PitchSpec pitch, TeamAITactics home, TeamAITactics away, float homeDifficulty,
             float awayDifficulty, ulong seed)
+            : this(pitch, home, away, new TeamAIDifficulty(homeDifficulty), new TeamAIDifficulty(awayDifficulty), seed) { }
+
+        public TeamAIDirector(PitchSpec pitch, TeamAITactics home, TeamAITactics away, TeamAIDifficulty homeDifficulty,
+            TeamAIDifficulty awayDifficulty, ulong seed)
         {
             PitchControl = new TeamAIPitchControl(pitch);
             Brains[0] = new TeamAIBrain(0, home, homeDifficulty, seed * 2UL + 1UL);
             Brains[1] = new TeamAIBrain(1, away, awayDifficulty, seed * 2UL + 2UL);
+        }
+
+        /// <summary>
+        /// Single-player director: the AI opponents of <paramref name="humanTeam"/> get the ladder's opponent difficulty
+        /// (theta plus OpponentReactionBonus), the human's AI teammates get the teammate difficulty.
+        /// </summary>
+        public static TeamAIDirector ForSinglePlayer(PitchSpec pitch, TeamAITactics home, TeamAITactics away,
+            int humanTeam, in TeamAIDifficultyProfile profile, ulong seed)
+        {
+            var opp = profile.OpponentDifficulty;
+            var mate = profile.TeammateDifficulty;
+            return humanTeam == 0
+                ? new TeamAIDirector(pitch, home, away, mate, opp, seed)
+                : new TeamAIDirector(pitch, home, away, opp, mate, seed);
         }
 
         /// <summary>Advance by dt. Returns true when a decision tick ran and Commands were refreshed.</summary>

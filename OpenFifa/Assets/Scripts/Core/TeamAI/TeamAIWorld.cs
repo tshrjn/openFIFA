@@ -53,6 +53,8 @@ namespace OpenFifa.Core
     {
         public SimVec3 Position;
         public SimVec3 Velocity;
+        /// <summary>Ball spin (rad/s, world axes). Optional: zero is fine; used by the ball prediction.</summary>
+        public SimVec3 Spin;
         /// <summary>Id of the player in control, -1 when loose or in flight.</summary>
         public int OwnerId;
         /// <summary>Team of the last touch, -1 when unknown.</summary>
@@ -78,6 +80,8 @@ namespace OpenFifa.Core
         public TeamAIMatchPhase MatchPhase = TeamAIMatchPhase.InPlay;
         /// <summary>Team awarded the current restart, -1 when in play.</summary>
         public int RestartTeam = -1;
+        /// <summary>The current free kick is indirect (no direct shot). Only read while MatchPhase is FreeKick.</summary>
+        public bool IndirectFreeKick;
         /// <summary>Match clock in seconds (sim time, never wall time).</summary>
         public float Time;
         /// <summary>Human calls to AI teammates, per team (0 = home, 1 = away). See <see cref="TeamAIUserDirectives"/>.</summary>
