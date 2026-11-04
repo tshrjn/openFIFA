@@ -266,7 +266,8 @@ namespace OpenFifa.Tests.Editor
             var director = new CrowdDirector(config);
 
             director.HandleEvent(CrowdGameEvent.NearMiss, eventPositionX: 24f, eventPositionZ: 0f);
-            director.Update(1f);
+            // Farthest (West) section is ~69 units away: 69 * 0.02 = 1.38 s delay; nearest stands until 0.42 + 3 s.
+            director.Update(2f);
 
             for (int i = 0; i < director.Sections.Count; i++)
             {

@@ -150,7 +150,8 @@ namespace OpenFifa.Core
             long hash = 0;
             for (int i = 0; i < 64; i++)
             {
-                if (gray8x8[i] >= avg)
+                // Tolerance: on flat images float summation puts avg a hair off each pixel, flipping bits at random.
+                if (gray8x8[i] >= avg - 0.5f)
                     hash |= (1L << i);
             }
 
@@ -163,7 +164,8 @@ namespace OpenFifa.Core
         /// </summary>
         public int HammingDistance(long hashA, long hashB)
         {
-            long xor = hashA ^ hashB;
+            // ulong: an arithmetic right shift of a negative long never reaches 0 (infinite loop).
+            ulong xor = (ulong)(hashA ^ hashB);
             int distance = 0;
             while (xor != 0)
             {
