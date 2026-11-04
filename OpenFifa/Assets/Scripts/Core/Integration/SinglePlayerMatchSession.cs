@@ -356,6 +356,8 @@ namespace OpenFifa.Core
                 var slot = HumanSlots[k];
                 var ctx = HumanControlAdapter.BuildContext(Sim, slot.Team, slot.ControlledId);
                 ControlIntent ci = slot.Input != null ? slot.Input.Read(this, slot, ctx) : default;
+                // Play stopped: walk a seat player who wandered into the run-off back on (the team AI only repositions its own).
+                if (slot.Input != null) SeatRestartGuard.Apply(Sim, slot.ControlledId, CameraYaw, ref ci);
                 slot.LastControlIntent = ci;
                 if (k < _slotIntents.Length) _slotIntents[k] = ci;
             }

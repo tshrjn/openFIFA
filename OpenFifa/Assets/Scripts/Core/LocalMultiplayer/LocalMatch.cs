@@ -95,14 +95,11 @@ namespace OpenFifa.Core
 
         private void Bind(ControllerSeat seat, HumanSlot slot)
         {
-            var input = Guard(_inputFor(seat));
+            var input = _inputFor(seat);
             slot.Input = input;
             _slotBySeat[seat.Slot] = slot;
             _inputBySeat[seat.Slot] = input;
         }
-
-        private static IHumanInputSource Guard(IHumanInputSource input) =>
-            input == null || input is SeatRestartGuard ? input : new SeatRestartGuard(input);
 
         private void OnOrphaned(ControllerSeat seat)
         {
@@ -114,7 +111,7 @@ namespace OpenFifa.Core
         private void OnRestored(ControllerSeat seat)
         {
             if (!_slotBySeat.TryGetValue(seat.Slot, out var slot)) return;
-            var input = Guard(_inputFor(seat));
+            var input = _inputFor(seat);
             _inputBySeat[seat.Slot] = input;
             slot.Input = input;
             if (!Controllers.AwaitingReconnect) Session.Resume();

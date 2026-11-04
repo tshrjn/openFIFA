@@ -265,25 +265,38 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             }
         }
 
-        [Test]
-        public void Seats_PlayStopped_SeatPlayersWalkBackOntoThePitch()
+        [TestCase(1)]
+        [TestCase(2)]
+        public void Seats_PlayStopped_SeatPlayersWalkBackOnAndRespectKickOffHalves(int seats)
         {
-            // Bots chase the ball out of play; while play is stopped the guard walks them back on (the sim alone
-            // lets them stand 4 m into the run-off).
+            // Bots chase the ball out of play; while play is stopped the session walks them back on (the sim alone
+            // lets them stand 4 m into the run-off). Applies to the single-player seat too (seats = 1).
             var m = new LocalMatch(new SinglePlayerMatchOptions
             {
                 Level = TeamAIDifficultyLevel.Professional, Seed = 1, Config = new MatchSimConfig { HalfDurationSeconds = 360f },
-            }, Seats(2, 0), _ => new ScriptedGamepadBot());
+            }, Seats(seats, 0), _ => new ScriptedGamepadBot());
             var s = m.Session;
-            Assert.IsInstanceOf<SeatRestartGuard>(s.HumanSlots[0].Input);
             float worst = 0f;
+            int kickOffTicks = 0;
             for (int i = 0; i < 60 * 200 && !s.IsFinished; i++)
             {
                 s.StepOnce(null);
-                if (s.Sim.State.Phase == SimMatchPhase.InPlay) continue;
-                for (int k = 0; k < 2; k++) worst = System.Math.Max(worst, Excursion(s, s.HumanSlots[k].ControlledId));
+                var st = s.Sim.State;
+                if (st.Phase == SimMatchPhase.InPlay) continue;
+                for (int k = 0; k < seats; k++)
+                {
+                    int id = s.HumanSlots[k].ControlledId;
+                    worst = System.Math.Max(worst, Excursion(s, id));
+                    if (st.Phase == SimMatchPhase.AwaitingRestart && st.PendingRestart == RestartType.KickOff && id != st.RestartTakerId)
+                    {
+                        kickOffTicks++;
+                        float own = st.Players[id].Position.Z * s.Sim.AttackSign(MatchSim.TeamOf(id));
+                        Assert.LessOrEqual(own, 0.01f, $"seat {k} in the opponents' half at a kick-off (tick {st.Tick})");
+                    }
+                }
             }
             Assert.Less(worst, 2.5f, "a seat player stood deep in the run-off while play was stopped");
+            if (seats > 1) Assert.Greater(kickOffTicks, 0, "no kick-off was checked"); // a lone seat is the taker at its own kick-off
         }
 
         [Test]
