@@ -70,7 +70,7 @@ namespace OpenFifa.Core
         /// pattern along the flight path, seeded per strike. Only <see cref="KickStyle.Knuckle"/> shots knuckle
         /// (<see cref="SimBall.KnuckleSeed"/>). 0 disables it.
         /// </summary>
-        public float KnuckleForceCoefficient = 0.25f;
+        public float KnuckleForceCoefficient = 0.4f;
 
         /// <summary>Knuckle effect fades in between these speeds (m/s).</summary>
         public float KnuckleMinSpeed = 19f;

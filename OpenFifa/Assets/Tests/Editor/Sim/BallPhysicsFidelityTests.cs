@@ -167,7 +167,7 @@ namespace OpenFifa.Tests.Editor.Sim
             {
                 BallIntegrator.Step(ref b, cfg, Huge, Dt);
                 SimVec3 f = BallIntegrator.KnuckleForce(cfg, b, b.Velocity, b.Spin, b.Velocity.Magnitude);
-                Assert.Less(SimVec3.Distance(f, prev), 1.0f, $"step {i}: smooth, no phase jumps (a yaw wrap once jumped ~7 N)");
+                Assert.Less(SimVec3.Distance(f, prev), 1.8f, $"step {i}: smooth, no phase jumps (a yaw wrap once jumped ~7 N)");
                 prev = f;
             }
         }

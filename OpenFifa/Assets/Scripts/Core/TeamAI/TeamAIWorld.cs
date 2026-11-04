@@ -58,6 +58,10 @@ namespace OpenFifa.Core
         public SimVec3 Velocity;
         /// <summary>Ball spin (rad/s, world axes). Optional: zero is fine; used by the ball prediction.</summary>
         public SimVec3 Spin;
+        /// <summary>Knuckle-shot state copied from the sim (<see cref="SimBall.KnuckleSeed"/>; 0 = not knuckling), so the
+        /// AI's prediction (e.g. the keeper's) includes the wobble.</summary>
+        public float KnuckleSeed;
+        public SimVec3 KnuckleOrigin;
         /// <summary>Id of the player in control, -1 when loose or in flight.</summary>
         public int OwnerId;
         /// <summary>Team of the last touch, -1 when unknown.</summary>
