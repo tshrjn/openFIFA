@@ -4,7 +4,7 @@ using OpenFifa.Core;
 namespace OpenFifa.Tests.Editor.LocalMultiplayer
 {
     [TestFixture]
-    [Category("LOCAL-2P")]
+    [Category("LOCAL_2P")]
     public class TeammateCallResolverTests
     {
         private const float Dt = 1f / 60f;

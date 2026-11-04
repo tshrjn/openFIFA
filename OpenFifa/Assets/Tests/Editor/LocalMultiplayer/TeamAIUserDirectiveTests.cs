@@ -5,7 +5,7 @@ using OpenFifa.Tests.Editor.TeamAI;
 namespace OpenFifa.Tests.Editor.LocalMultiplayer
 {
     [TestFixture]
-    [Category("LOCAL-2P")]
+    [Category("LOCAL_2P")]
     public class TeamAIUserDirectiveTests
     {
         private static readonly PitchSpec Pitch = PitchSpec.Standard;
