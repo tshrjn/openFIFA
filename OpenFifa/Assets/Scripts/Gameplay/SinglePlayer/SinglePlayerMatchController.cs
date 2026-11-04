@@ -141,7 +141,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     // away from the broadcast camera.
                     l.transform.rotation = Quaternion.Euler(40f, -75f, 0f);
                     l.shadows = LightShadows.Soft; // resolution, cascades and bias come from the URP asset
+                    BroadcastLighting.ConfigureSun(l); // warm tint, shadow strength 0.8, high soft-shadow filter
                 }
+            BroadcastLighting.ApplyAmbient(); // trilight fill so shaded sides are not black
 
             var cam = Camera.main;
             if (cam == null)
@@ -156,6 +158,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var camData = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>()
                           ?? cam.gameObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
             camData.renderPostProcessing = true; // ACES tonemapping / grade from the scene's global volume
+            BroadcastLighting.ConfigureAntialiasing(camData); // SMAA on top of MSAA 4x
             BroadcastCamera = cam.GetComponent<SinglePlayerCamera>() ?? cam.gameObject.AddComponent<SinglePlayerCamera>();
             BroadcastCamera.HalfLength = pitch.HalfLength;
             BroadcastCamera.HalfWidth = pitch.HalfWidth;
@@ -352,8 +355,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
             return _netMaterial;
         }
 
-        /// <summary>Marker ring radii (m) and its lift above the grass surface (the pitch cube's top is at 0.05 m).</summary>
-        public const float RingInner = 0.62f, RingOuter = 0.8f, RingY = 0.09f;
+        /// <summary>
+        /// Marker ring radii (m) and its lift above the grass surface (the pitch cube's top is at 0.05 m). About 35%
+        /// smaller than the first version (0.62 / 0.8), which dominated the player silhouette at broadcast distance.
+        /// </summary>
+        public const float RingInner = 0.4f, RingOuter = 0.52f, RingY = 0.09f;
 
         /// <summary>
         /// Controlled-player ring: a flat annulus mesh, unlit (Sprites/Default, transparent queue, no z-write, no shadows),
@@ -483,13 +489,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 options.PlayerNames = names;
                 options.PlayerIds = ids;
                 Names = names;
-                var numbers = new int[MatchSimState.PlayerCount];
-                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
-                {
-                    numbers[i] = hs.Starters[i] != null ? hs.Starters[i].ShirtNumber : i + 1;
-                    numbers[i + MatchSetup.PlayersPerTeam] = aws.Starters[i] != null ? aws.Starters[i].ShirtNumber : i + 1;
-                }
-                ShirtNumbers = numbers;
+                // Per sim id from each side's own sheet (two clubs can both field a No. 11: that is roster data, not a bug).
+                ShirtNumbers = MatchSheetNumbers.Build(hs, aws);
                 homeColor = ParseColour(HomeClub.PrimaryColour, homeColor);
                 awayColor = ParseColour(AwayClub.PrimaryColour, awayColor);
                 if (ColourDistance(homeColor, awayColor) < 0.35f) awayColor = ParseColour(AwayClub.AwayColour, awayColor);
@@ -498,9 +499,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 Names = new string[MatchSimState.PlayerCount];
                 for (int i = 0; i < Names.Length; i++) Names[i] = (i < 11 ? "H" : "A") + (i % 11 + 1);
-                var numbers = new int[MatchSimState.PlayerCount];
-                for (int i = 0; i < numbers.Length; i++) numbers[i] = i % MatchSetup.PlayersPerTeam + 1;
-                ShirtNumbers = numbers;
+                ShirtNumbers = MatchSheetNumbers.Default();
             }
             HomeColour = homeColor;
             AwayColour = awayColor;
@@ -661,6 +660,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (!Frozen)
             {
                 if (!PinCameraYaw) Session.CameraYaw = BroadcastCamera.YawRadians;
+                BroadcastCamera.AttackDirection = BroadcastFraming.AttackDirection(Session.Sim);
                 Session.Advance(Time.deltaTime, null, _realClock);
 
                 var cues = Session.FrameCues;
@@ -770,8 +770,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private readonly List<Material> _netMaterials = new List<Material>(2);
         private readonly List<Vector3> _netMouths = new List<Vector3>(2);
 
-        /// <summary>Smallest on-screen ball diameter (px at the current resolution) before the visual is scaled up.</summary>
-        public const float MinBallPixels = 6f;
+        /// <summary>
+        /// Smallest on-screen ball diameter (px at the current resolution) before the visual is scaled up. Set above the
+        /// 6 px target because the shaded underside and MSAA eat about a pixel (6 px requested measured 3-5 px).
+        /// </summary>
+        public const float MinBallPixels = 7.5f, MaxBallScale = 3f;
 
         /// <summary>
         /// Ball readability at broadcast distance: scales the visual ball up (never below its true size, at most 2.2x)
@@ -785,7 +788,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Vector3 p = _ball.position;
             float d = Vector3.Distance(cam.transform.position, p);
             float px = 2f * _ballRadius * Screen.height / (2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
-            float k = px > 0.01f ? Mathf.Clamp(MinBallPixels / px, 1f, 2.2f) : 1f;
+            float k = BroadcastFraming.BallScale(px, MinBallPixels, MaxBallScale);
             _ball.localScale = Vector3.one * (2f * _ballRadius * k);
             float r = _ballRadius * k;
             if (p.y < r) _ball.position = new Vector3(p.x, r, p.z);
@@ -793,10 +796,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (_ballShadow != null)
             {
                 float h = Mathf.Max(0f, p.y - _ballRadius);
-                float size = Mathf.Max(0.45f, 2.6f * r) * (1f + h * 0.12f);
+                // Contact shadow: about 0.5 m and dark on the ground, spreading and fading as the ball rises.
+                float size = Mathf.Max(0.5f, 2.4f * r) * (1f + h * 0.12f);
                 _ballShadow.position = new Vector3(p.x, RingY - 0.01f, p.z);
                 _ballShadow.localScale = new Vector3(size, 1f, size);
-                _ballShadowMat.color = new Color(0f, 0f, 0f, Mathf.Lerp(0.55f, 0.12f, Mathf.Clamp01(h / 8f)));
+                _ballShadowMat.color = new Color(0f, 0f, 0f, Mathf.Lerp(0.8f, 0.15f, Mathf.Clamp01(h / 6f)));
             }
         }
 
@@ -809,8 +813,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 for (int x = 0; x < N; x++)
                 {
                     float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / c;
-                    float a = Mathf.Clamp01(1f - d);
-                    px[y * N + x] = new Color32(255, 255, 255, (byte)(a * a * 255f));
+                    // Solid core to ~45% of the radius, then a soft falloff: reads as a contact shadow, not a smudge.
+                    float a = Mathf.Clamp01((1f - d) / 0.55f);
+                    px[y * N + x] = new Color32(255, 255, 255, (byte)(a * a * (3f - 2f * a) * 255f));
                 }
             var tex = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, name = "BallShadow" };
             tex.SetPixels32(px);

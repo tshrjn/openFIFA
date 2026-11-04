@@ -165,14 +165,28 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
             if (!profile.Has<ColorAdjustments>())
             {
                 var colour = AddComponent<ColorAdjustments>(profile);
-                colour.postExposure.Override(0.35f); // ACES darkens mid-tones; bring the exposure back
-                colour.contrast.Override(6f);
-                colour.saturation.Override(-12f);
+                colour.postExposure.Override(0.05f); // ACES darkens mid-tones; the trilight fill (BroadcastLighting) adds the rest
+                colour.contrast.Override(10f); // mild S-curve
+                colour.saturation.Override(-15f);
                 changed = true;
             }
             if (!profile.Has<WhiteBalance>())
             {
-                AddComponent<WhiteBalance>(profile).temperature.Override(6f);
+                AddComponent<WhiteBalance>(profile).temperature.Override(12f); // warm afternoon grade
+                changed = true;
+            }
+            if (!profile.Has<LiftGammaGain>())
+            {
+                var lgg = AddComponent<LiftGammaGain>(profile);
+                lgg.lift.Override(new Vector4(1f, 0.995f, 0.98f, 0.02f)); // slight warm lift of the blacks
+                lgg.gain.Override(new Vector4(1f, 0.995f, 0.985f, 0f));
+                changed = true;
+            }
+            if (!profile.Has<Vignette>())
+            {
+                var vig = AddComponent<Vignette>(profile);
+                vig.intensity.Override(0.16f);
+                vig.smoothness.Override(0.45f);
                 changed = true;
             }
             if (!profile.Has<Bloom>())

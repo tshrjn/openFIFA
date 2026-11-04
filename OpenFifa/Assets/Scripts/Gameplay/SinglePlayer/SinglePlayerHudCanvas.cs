@@ -42,6 +42,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         // Scorebug.
         private Text _homeAbbr, _awayAbbr, _score, _clock;
         private Image _homeChip, _awayChip;
+        // Procedural crests (shield + club colours + initials) beside the abbreviations; rebuilt when the club or colour changes.
+        private readonly Image[] _crest = new Image[2];
+        private readonly Text[] _crestText = new Text[2];
+        private readonly Texture2D[] _crestTex = new Texture2D[2];
+        private readonly string[] _crestKey = new string[2];
+        public const int CrestPx = 64;
+        public const float CrestSize = 26f;
         private int _scoreKey = int.MinValue, _clockKey = int.MinValue;
         private string _homeShown, _awayShown;
 
@@ -80,6 +87,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void OnDestroy()
         {
             if (Canvas != null) Destroy(Canvas.gameObject);
+            for (int i = 0; i < 2; i++)
+            {
+                if (_crest[i] != null && _crest[i].sprite != null) Destroy(_crest[i].sprite);
+                if (_crestTex[i] != null) Destroy(_crestTex[i]);
+            }
         }
 
         private void LateUpdate()
@@ -99,6 +111,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 _scoreKey = _clockKey = int.MinValue;
             }
             UpdateColours();
+            UpdateCrests();
             UpdateScorebug();
             UpdatePanels();
             UpdateRadar();
@@ -137,16 +150,28 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         private void BuildScorebug(RectTransform root)
         {
-            const float chip = 6f, team = 56f, score = 64f, clockW = 66f;
-            float w = chip + team + score + team + chip + clockW;
+            const float chip = 6f, crest = 32f, team = 50f, score = 64f, clockW = 66f;
+            float w = chip + crest + team + score + team + crest + chip + clockW;
             var bug = MakeRect(root, "Scorebug", new Vector2(0f, 1f), new Vector2(20f, -16f), new Vector2(w, ScorebugHeight));
             Img(bug, "Back", new Vector2(0f, 0f), new Vector2(w - clockW, ScorebugHeight), new Color(0.04f, 0.06f, 0.1f, 0.9f));
             _homeChip = Img(bug, "HomeChip", new Vector2(0f, 0f), new Vector2(chip, ScorebugHeight), Color.red);
-            _homeAbbr = Txt(bug, "Home", new Vector2(chip, 0f), new Vector2(team, ScorebugHeight), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-            Img(bug, "ScoreBox", new Vector2(chip + team, 0f), new Vector2(score, ScorebugHeight), new Color(0.95f, 0.95f, 0.96f, 0.97f));
-            _score = Txt(bug, "Score", new Vector2(chip + team, 0f), new Vector2(score, ScorebugHeight), 18, FontStyle.Bold, new Color(0.05f, 0.07f, 0.12f), TextAnchor.MiddleCenter);
-            _awayAbbr = Txt(bug, "Away", new Vector2(chip + team + score, 0f), new Vector2(team, ScorebugHeight), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
-            _awayChip = Img(bug, "AwayChip", new Vector2(chip + 2f * team + score, 0f), new Vector2(chip, ScorebugHeight), Color.blue);
+            float pad = (ScorebugHeight - CrestSize) * 0.5f;
+            _crest[0] = Img(bug, "HomeCrest", new Vector2(chip + (crest - CrestSize) * 0.5f, pad), new Vector2(CrestSize, CrestSize), Color.white);
+            _homeAbbr = Txt(bug, "Home", new Vector2(chip + crest, 0f), new Vector2(team, ScorebugHeight), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            float sx = chip + crest + team;
+            Img(bug, "ScoreBox", new Vector2(sx, 0f), new Vector2(score, ScorebugHeight), new Color(0.95f, 0.95f, 0.96f, 0.97f));
+            _score = Txt(bug, "Score", new Vector2(sx, 0f), new Vector2(score, ScorebugHeight), 18, FontStyle.Bold, new Color(0.05f, 0.07f, 0.12f), TextAnchor.MiddleCenter);
+            _awayAbbr = Txt(bug, "Away", new Vector2(sx + score, 0f), new Vector2(team, ScorebugHeight), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            _crest[1] = Img(bug, "AwayCrest", new Vector2(sx + score + team + (crest - CrestSize) * 0.5f, pad), new Vector2(CrestSize, CrestSize), Color.white);
+            _awayChip = Img(bug, "AwayChip", new Vector2(sx + score + team + crest, 0f), new Vector2(chip, ScorebugHeight), Color.blue);
+            for (int i = 0; i < 2; i++)
+            {
+                _crest[i].preserveAspect = true;
+                _crest[i].enabled = false;
+                // Initials over the shield body (upper part, above the point).
+                _crestText[i] = Txt(_crest[i].rectTransform, "Initials", new Vector2(0f, CrestSize * 0.3f), new Vector2(CrestSize, CrestSize * 0.6f),
+                    10, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            }
             Img(bug, "ClockBox", new Vector2(w - clockW, 0f), new Vector2(clockW, ScorebugHeight), new Color(0.1f, 0.13f, 0.2f, 0.9f));
             _clock = Txt(bug, "Clock", new Vector2(w - clockW, 0f), new Vector2(clockW, ScorebugHeight), 16, FontStyle.Normal, Color.white, TextAnchor.MiddleCenter);
         }
@@ -236,6 +261,64 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _panelBar[1].color = Opaque(_awayCol);
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
                 _radarDotImg[i].color = Opaque(i < MatchSetup.PlayersPerTeam ? _homeCol : _awayCol);
+        }
+
+        private void UpdateCrests()
+        {
+            for (int side = 0; side < 2; side++)
+            {
+                var club = side == 0 ? _c.HomeClub : _c.AwayClub;
+                Color primary = Opaque(side == 0 ? _c.HomeColour : _c.AwayColour);
+                string name = club != null ? club.Name : (side == 0 ? "Home" : "Away");
+                string shortName = club != null ? club.ShortName : (side == 0 ? "HOM" : "AWY");
+                string key = name + "|" + shortName + "|" + ColorUtility.ToHtmlStringRGB(primary) + "|" + (club != null ? club.SecondaryColour : "");
+                if (key == _crestKey[side]) continue;
+                _crestKey[side] = key;
+                Color secondary = club != null && ColorUtility.TryParseHtmlString(club.SecondaryColour, out var sc) ? sc : Color.white;
+                // A secondary that is too close to the shirt colour would vanish: fall back to white or near-black.
+                if (Mathf.Abs(secondary.r - primary.r) + Mathf.Abs(secondary.g - primary.g) + Mathf.Abs(secondary.b - primary.b) < 0.35f)
+                    secondary = primary.grayscale > 0.6f ? new Color(0.08f, 0.08f, 0.1f) : Color.white;
+                if (_crestTex[side] == null)
+                    _crestTex[side] = new Texture2D(CrestPx, CrestPx, TextureFormat.RGBA32, false)
+                        { name = "Crest" + side, wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+                FillCrest(_crestTex[side], ClubCrest.PatternFor(shortName), primary, secondary);
+                if (_crest[side].sprite == null)
+                    _crest[side].sprite = Sprite.Create(_crestTex[side], new Rect(0, 0, CrestPx, CrestPx), new Vector2(0.5f, 0.5f), 100f);
+                _crest[side].enabled = true;
+                _crestText[side].text = ClubCrest.Initials(name);
+                // Dark initials on a light shield, white on a dark one.
+                _crestText[side].color = primary.grayscale > 0.62f ? new Color(0.06f, 0.07f, 0.1f) : Color.white;
+            }
+        }
+
+        /// <summary>Shield (supersampled 2 x 2 for a smooth edge) with a light outline, the club pattern and a soft top highlight.</summary>
+        private static void FillCrest(Texture2D tex, ClubCrest.Pattern pattern, Color primary, Color secondary)
+        {
+            int n = tex.width;
+            var px = new Color32[n * n];
+            var outline = new Color(0.95f, 0.95f, 0.95f);
+            for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                Color acc = Color.clear;
+                int hits = 0;
+                for (int sy = 0; sy < 2; sy++)
+                for (int sxx = 0; sxx < 2; sxx++)
+                {
+                    float u = (x + 0.25f + 0.5f * sxx) / n, v = (y + 0.25f + 0.5f * sy) / n;
+                    if (!ClubCrest.InShield(u, v)) continue;
+                    Color c = ClubCrest.OnBorder(u, v, 0.06f) ? outline
+                        : ClubCrest.Secondary(pattern, u, v) ? secondary : primary;
+                    c = Color.Lerp(c, Color.white, Mathf.Clamp01((v - 0.7f) * 0.35f));
+                    acc += c;
+                    hits++;
+                }
+                // Straight (not premultiplied) alpha: average colour of the covered samples, coverage as alpha.
+                if (hits > 0) { acc /= hits; acc.a = hits / 4f; }
+                px[y * n + x] = acc;
+            }
+            tex.SetPixels32(px);
+            tex.Apply(false, false);
         }
 
         private void UpdateScorebug()
