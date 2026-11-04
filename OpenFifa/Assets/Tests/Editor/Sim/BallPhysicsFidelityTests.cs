@@ -33,7 +33,7 @@ namespace OpenFifa.Tests.Editor.Sim
             return b;
         }
 
-        private static BallSimConfig NoKnuckle() => new BallSimConfig { KnuckleForceCoefficient = 0f };
+        private static BallSimConfig NoKnuckle() => new BallSimConfig();
 
         // ---- Aerodynamics. ----
 
@@ -96,49 +96,139 @@ namespace OpenFifa.Tests.Editor.Sim
 
         // ---- Knuckleball. ----
 
-        [Test]
-        public void Knuckle_NoSpinFastShot_WobblesOffItsLine_DifferentlyFromDifferentSpots()
+        private static SimBall KnuckleBall(float speed, float elevationDeg, SimVec3 dir, SimVec3 from, float seed)
         {
-            var on = new BallSimConfig();
-            var off = NoKnuckle();
-            float maxDev = 0f;
-            float first = float.NaN;
-            bool differs = false;
-            for (int i = 0; i < 5; i++)
+            float e = elevationDeg * SimMath.Deg2Rad;
+            SimVec3 flat = dir.Flat.Normalized;
+            var b = new SimBall
             {
-                float x = -8f + 4f * i, z = 3f * i;
-                var a = FlyForward(Launch(29f, 8f, SimVec3.Zero, x, z), on, 25f);
-                var b = FlyForward(Launch(29f, 8f, SimVec3.Zero, x, z), off, 25f);
-                float dev = a.Position.X - b.Position.X;
+                Position = new SimVec3(from.X, 0.11f, from.Z),
+                Velocity = flat * (speed * (float)System.Math.Cos(e)) + new SimVec3(0f, speed * (float)System.Math.Sin(e), 0f),
+                KnuckleSeed = seed,
+            };
+            b.KnuckleOrigin = b.Position;
+            return b;
+        }
+
+        /// <summary>Signed sideways offset (m, right of travel) of a knuckle shot vs the same shot without knuckle, after 25 m.</summary>
+        private static float KnuckleDeviation(SimVec3 dir, SimVec3 from, float seed)
+        {
+            var on = KnuckleBall(29f, 8f, dir, from, seed);
+            var off = on;
+            off.ClearKnuckle();
+            var cfg = new BallSimConfig();
+            SimVec3 f = dir.Flat.Normalized;
+            for (int i = 0; i < 600; i++)
+            {
+                if (SimVec3.Dot(on.Position - from, f) >= 25f) break;
+                BallIntegrator.Step(ref on, cfg, Huge, Dt);
+                BallIntegrator.Step(ref off, cfg, Huge, Dt);
+            }
+
+            SimVec3 right = new SimVec3(f.Z, 0f, -f.X);
+            return SimVec3.Dot(on.Position - off.Position, right);
+        }
+
+        [Test]
+        public void Knuckle_ShotWobblesOffItsLine_EachSeedItsOwnWay()
+        {
+            float maxDev = 0f, min = float.MaxValue, max = float.MinValue;
+            for (int i = 1; i <= 6; i++)
+            {
+                float dev = KnuckleDeviation(new SimVec3(0f, 0f, 1f), SimVec3.Zero, i / 7f);
                 maxDev = SimMath.Max(maxDev, SimMath.Abs(dev));
-                if (float.IsNaN(first)) first = dev;
-                else if (SimMath.Abs(dev - first) > 0.1f) differs = true;
+                min = SimMath.Min(min, dev);
+                max = SimMath.Max(max, dev);
                 Assert.Less(SimMath.Abs(dev), 1.5f, "a wobble, not a curler");
             }
 
             Assert.Greater(maxDev, 0.2f, "knuckling shots move off their line");
-            Assert.IsTrue(differs, "each strike wobbles its own way");
+            Assert.Greater(max - min, 0.2f, "each strike wobbles its own way");
         }
 
         [Test]
-        public void Knuckle_SameStrike_IsDeterministic()
+        public void Knuckle_SameSeed_SameWobbleInEveryDirectionAndPlace()
         {
-            var c = new BallSimConfig();
-            var a = FlyForward(Launch(29f, 8f, SimVec3.Zero, 3f, 1f), c, 25f);
-            var b = FlyForward(Launch(29f, 8f, SimVec3.Zero, 3f, 1f), c, 25f);
-            Assert.IsTrue(a.Position.Equals(b.Position) && a.Velocity.Equals(b.Velocity));
+            // Regression: the phase once came from absolute yaw/position (a +-pi jump for -Z shots and different drift
+            // per direction). Now it depends only on the seed and the distance flown.
+            float reference = KnuckleDeviation(new SimVec3(0f, 0f, 1f), SimVec3.Zero, 0.4f);
+            foreach (var dir in new[] { new SimVec3(0f, 0f, -1f), new SimVec3(-0.02f, 0f, -1f), new SimVec3(0.02f, 0f, -1f),
+                         new SimVec3(1f, 0f, 0.3f), new SimVec3(-1f, 0f, -0.7f) })
+                Assert.AreEqual(reference, KnuckleDeviation(dir, new SimVec3(13f, 0f, -21f), 0.4f), 0.02f, $"dir {dir.X},{dir.Z}");
+        }
+
+        [Test]
+        public void Knuckle_ForceIsContinuousAlongTheFlight()
+        {
+            var cfg = new BallSimConfig();
+            var b = KnuckleBall(29f, 8f, new SimVec3(-0.01f, 0f, -1f), SimVec3.Zero, 0.3f);
+            SimVec3 prev = BallIntegrator.KnuckleForce(cfg, b, b.Velocity, b.Spin, b.Velocity.Magnitude);
+            for (int i = 0; i < 100; i++)
+            {
+                BallIntegrator.Step(ref b, cfg, Huge, Dt);
+                SimVec3 f = BallIntegrator.KnuckleForce(cfg, b, b.Velocity, b.Spin, b.Velocity.Magnitude);
+                Assert.Less(SimVec3.Distance(f, prev), 1.0f, $"step {i}: smooth, no phase jumps (a yaw wrap once jumped ~7 N)");
+                prev = f;
+            }
+        }
+
+        [Test]
+        public void Knuckle_OnlyFlaggedShots_NotSpinlessHeadersOrLobs()
+        {
+            var cfg = new BallSimConfig();
+            var plain = KnuckleBall(29f, 8f, new SimVec3(0f, 0f, 1f), SimVec3.Zero, 0f);
+            Assert.IsFalse(plain.Knuckling);
+            Assert.AreEqual(SimVec3.Zero, BallIntegrator.KnuckleForce(cfg, plain, plain.Velocity, plain.Spin, 29f));
+        }
+
+        [Test]
+        public void Knuckle_EndsAtFirstBounce()
+        {
+            var b = KnuckleBall(25f, 12f, new SimVec3(0f, 0f, 1f), SimVec3.Zero, 0.6f);
+            var landed = SimTestHelpers.FlyUntilFirstBounce(b, new BallSimConfig(), Huge);
+            Assert.IsFalse(landed.Knuckling);
         }
 
         [Test]
         public void Knuckle_SpinningOrSlowBall_Unaffected()
         {
-            var on = new BallSimConfig();
-            var off = NoKnuckle();
-            var top = new SimVec3(30f, 0f, 0f);
-            Assert.IsTrue(FlyForward(Launch(29f, 8f, top, 2f), on, 25f).Position
-                .Equals(FlyForward(Launch(29f, 8f, top, 2f), off, 25f).Position), "spun ball");
-            Assert.IsTrue(FlyForward(Launch(15f, 20f, SimVec3.Zero, 2f), on, 15f).Position
-                .Equals(FlyForward(Launch(15f, 20f, SimVec3.Zero, 2f), off, 15f).Position), "slow ball");
+            var cfg = new BallSimConfig();
+            var spun = KnuckleBall(29f, 8f, new SimVec3(0f, 0f, 1f), SimVec3.Zero, 0.5f);
+            spun.Spin = new SimVec3(30f, 0f, 0f);
+            Assert.AreEqual(SimVec3.Zero, BallIntegrator.KnuckleForce(cfg, spun, spun.Velocity, spun.Spin, 29f));
+            var slow = KnuckleBall(15f, 8f, new SimVec3(0f, 0f, 1f), SimVec3.Zero, 0.5f);
+            Assert.AreEqual(SimVec3.Zero, BallIntegrator.KnuckleForce(cfg, slow, slow.Velocity, slow.Spin, 15f));
+        }
+
+        [Test]
+        public void SinDeterministic_CloseToMathSin()
+        {
+            for (float x = -40f; x <= 40f; x += 0.37f)
+                Assert.AreEqual((float)System.Math.Sin(x), SimMath.SinDeterministic(x), 0.002f, $"x {x}");
+        }
+
+        [Test]
+        public void KnuckleShot_InMatch_SeedsTheBallAndHeadersDoNot()
+        {
+            var sim = SimTestHelpers.NewSim(9);
+            SimTestHelpers.ForceOpenPlay(sim);
+            SimTestHelpers.ParkTeam(sim, SimTeam.Away, 45f);
+            SimTestHelpers.Place(sim, 9, 0f, 20f);
+            SimTestHelpers.SetBall(sim, new SimVec3(0f, 0.11f, 20.5f), SimVec3.Zero);
+            sim.State.Owner = 9;
+            sim.State.PossessionTeam = SimTeam.Home;
+            var intents = SimTestHelpers.IdleIntents();
+            intents[9] = new PlayerIntent { Action = IntentAction.Shoot, Power = 0.9f, Style = KickStyle.Knuckle,
+                Aim = new SimVec3(0f, 0f, 1f) };
+            bool kicked = false;
+            for (int t = 0; t < 60 && !kicked; t++)
+            {
+                foreach (var e in sim.Step(intents)) if (e.Type == MatchEventType.Shot) kicked = true;
+                intents = SimTestHelpers.IdleIntents();
+            }
+
+            Assert.IsTrue(kicked, "shot taken");
+            Assert.IsTrue(sim.State.Ball.Knuckling, "a knuckle shot is seeded");
         }
 
         [Test]
@@ -186,9 +276,9 @@ namespace OpenFifa.Tests.Editor.Sim
         [Test]
         public void Surface_RollDistance_HeavyShortest_DryLongest()
         {
-            float heavy = SimTestHelpers.RollUntilStopped(RollFrom(12f), new BallSimConfig().ApplySurface(PitchSurface.Heavy), Huge).Position.Z;
+            float heavy = SimTestHelpers.RollUntilStopped(RollFrom(12f), new BallSimConfig().WithSurface(PitchSurface.Heavy), Huge).Position.Z;
             float normal = SimTestHelpers.RollUntilStopped(RollFrom(12f), new BallSimConfig(), Huge).Position.Z;
-            float dry = SimTestHelpers.RollUntilStopped(RollFrom(12f), new BallSimConfig().ApplySurface(PitchSurface.Dry), Huge).Position.Z;
+            float dry = SimTestHelpers.RollUntilStopped(RollFrom(12f), new BallSimConfig().WithSurface(PitchSurface.Dry), Huge).Position.Z;
             Assert.Less(heavy, normal - 2f);
             Assert.Greater(dry, normal + 1f);
         }
@@ -197,9 +287,9 @@ namespace OpenFifa.Tests.Editor.Sim
         public void Surface_Bounce_DryHighest_WetAndHeavyDead()
         {
             float normal = FirstReboundApex(new BallSimConfig());
-            Assert.Greater(FirstReboundApex(new BallSimConfig().ApplySurface(PitchSurface.Dry)), normal + 0.1f);
-            Assert.Less(FirstReboundApex(new BallSimConfig().ApplySurface(PitchSurface.Wet)), normal - 0.1f);
-            Assert.Less(FirstReboundApex(new BallSimConfig().ApplySurface(PitchSurface.Heavy)), normal - 0.1f);
+            Assert.Greater(FirstReboundApex(new BallSimConfig().WithSurface(PitchSurface.Dry)), normal + 0.1f);
+            Assert.Less(FirstReboundApex(new BallSimConfig().WithSurface(PitchSurface.Wet)), normal - 0.1f);
+            Assert.Less(FirstReboundApex(new BallSimConfig().WithSurface(PitchSurface.Heavy)), normal - 0.1f);
         }
 
         [Test]
@@ -213,24 +303,52 @@ namespace OpenFifa.Tests.Editor.Sim
                 return 0f;
             }
 
-            Assert.Greater(SpeedAfterBounce(new BallSimConfig().ApplySurface(PitchSurface.Wet)),
+            Assert.Greater(SpeedAfterBounce(new BallSimConfig().WithSurface(PitchSurface.Wet)),
                 SpeedAfterBounce(new BallSimConfig()) + 0.5f);
         }
 
         [Test]
-        public void Surface_ApplyNormal_RestoresDefaultsAndPredictionFollowsSurface()
+        public void Surface_WithSurface_ReturnsCopy_KeepsTuning_AndPredictionFollowsIt()
         {
-            var c = new BallSimConfig();
+            var c = new BallSimConfig { RollingResistance = 0.11f, LiftScale = 1.1f };
             float normal = BallFlight.GroundRollDistance(c, 12f);
-            c.ApplySurface(PitchSurface.Heavy);
-            Assert.AreEqual(PitchSurface.Heavy, c.Surface);
-            Assert.Less(BallFlight.GroundRollDistance(c, 12f), normal - 2f, "the roll table is rebuilt for the new surface");
-            c.ApplySurface(PitchSurface.Normal);
-            var d = new BallSimConfig();
-            Assert.AreEqual(d.RollingResistance, c.RollingResistance);
-            Assert.AreEqual(d.GroundRestitution, c.GroundRestitution);
-            Assert.AreEqual(d.RollingDragPerSpeed, c.RollingDragPerSpeed);
-            Assert.AreEqual(normal, BallFlight.GroundRollDistance(c, 12f), 1e-4f);
+            var heavy = c.WithSurface(PitchSurface.Heavy);
+            Assert.AreEqual(PitchSurface.Heavy, heavy.Surface);
+            Assert.AreEqual(PitchSurface.Normal, c.Surface, "the source config is untouched");
+            Assert.AreEqual(0.11f, c.RollingResistance);
+            Assert.AreEqual(0.11f * 1.3f, heavy.RollingResistance, 1e-5f, "custom tuning is scaled, not reset");
+            Assert.AreEqual(1.1f, heavy.LiftScale, "air values kept");
+            Assert.Less(BallFlight.GroundRollDistance(heavy, 12f), normal - 2f, "heavy roll table");
+            Assert.AreEqual(normal, BallFlight.GroundRollDistance(c, 12f), 1e-4f, "source roll table unchanged");
+            Assert.Throws<System.InvalidOperationException>(() => heavy.WithSurface(PitchSurface.Wet));
+        }
+
+        [Test]
+        public void Surface_WetDribble_TouchStillReachesItsTarget()
+        {
+            // The dribble touch speed accounts for water drag, so touches do not fall short on a wet pitch.
+            foreach (var surface in new[] { PitchSurface.Normal, PitchSurface.Wet })
+            {
+                var cfg = new MatchSimConfig();
+                cfg.Ball = cfg.Ball.WithSurface(surface);
+                var sim = SimTestHelpers.NewSim(5, cfg);
+                SimTestHelpers.ForceOpenPlay(sim);
+                SimTestHelpers.ParkTeam(sim, SimTeam.Away, 45f);
+                SimTestHelpers.Place(sim, 9, 0f, 0f);
+                SimTestHelpers.SetBall(sim, new SimVec3(0f, 0.11f, 0.5f), SimVec3.Zero);
+                sim.State.Owner = 9;
+                sim.State.PossessionTeam = SimTeam.Home;
+                var intents = SimTestHelpers.IdleIntents();
+                intents[9] = new PlayerIntent { Move = new SimVec3(0f, 0f, 1f) };
+                int loose = 0;
+                for (int t = 0; t < 240; t++)
+                {
+                    sim.Step(intents);
+                    if (sim.State.Owner != 9) loose++;
+                }
+
+                Assert.AreEqual(0, loose, $"{surface}: dribble keeps the ball");
+            }
         }
 
         [Test]
@@ -274,6 +392,30 @@ namespace OpenFifa.Tests.Editor.Sim
 
             Assert.AreEqual(0.11f, sim.State.Ball.Position.Y, 0.05f, "lands at the feet");
             Assert.AreEqual(9, sim.State.Owner);
+        }
+
+        [Test]
+        public void FirstTouch_AerialBall_PredictedDribbleTouchTickMatchesActual()
+        {
+            var sim = Receiver(new SimVec3(0f, 1.2f, 9.2f), new SimVec3(0f, -0.5f, 5f));
+            var intents = SimTestHelpers.IdleIntents();
+            Assert.IsTrue(SimTestHelpers.StepUntil(sim, intents, MatchEventType.FirstTouch, 30, out _));
+            int checks = 0;
+            for (int t = 0; t < 40; t++)
+            {
+                bool predicted = sim.TryPredictDribbleTouch(9, 120, out int predictedTick, out _);
+                int actual = -1;
+                var probe = sim.State; // the sim steps forward; record when the touch really happens
+                for (int k = 0; k < 120 && actual < 0; k++)
+                    foreach (var e in sim.Step(intents))
+                        if (e.Type == MatchEventType.DribbleTouch && e.PlayerId == 9) actual = sim.State.Tick;
+                Assert.IsTrue(predicted, $"from tick {t}");
+                Assert.AreEqual(predictedTick, actual, $"prediction made {t} ticks after the first touch");
+                checks++;
+                break;
+            }
+
+            Assert.AreEqual(1, checks);
         }
 
         [Test]

@@ -1,6 +1,6 @@
 namespace OpenFifa.Core
 {
-    /// <summary>Pitch condition for ball roll and bounce (<see cref="BallSimConfig.ApplySurface"/>).</summary>
+    /// <summary>Pitch condition for ball roll and bounce (<see cref="BallSimConfig.WithSurface"/>).</summary>
     public enum PitchSurface
     {
         Normal = 0,

@@ -89,6 +89,7 @@ namespace OpenFifa.Core
                         // Through the valve: extra pace, almost no spin (the residual spin keeps it knuckling).
                         speed *= cfg.KnuckleShotSpeedFactor;
                         spinLocal = new SimVec3(cfg.KnuckleShotResidualSpin, 0f, 0f);
+                        result.Knuckle = true;
                     }
 
                     break;
@@ -102,7 +103,7 @@ namespace OpenFifa.Core
                     float sideSpin = foot == SimFoot.Right ? -s : s;
                     spinLocal = new SimVec3(5f, sideSpin, 0f);
                     float d = req.HasTarget ? distance : 20f;
-                    curlPreAim = CurlPreAim(sideSpin, d, speed, ball);
+                    curlPreAim = CurlPreAim(sideSpin, d, speed, ball, spinLocal.Magnitude);
                     break;
                 }
                 case IntentAction.DrivenShot:
@@ -135,6 +136,7 @@ namespace OpenFifa.Core
                 elevation = PlayerIntent.IsShotAction(req.Action) ? -4f * SimMath.Deg2Rad : elevation * 0.6f + 0.1f;
                 spinLocal = SimVec3.Zero;
                 curlPreAim = 0f;
+                result.Knuckle = false;
             }
 
             // Error cone.
@@ -352,10 +354,12 @@ namespace OpenFifa.Core
         /// Yaw offset (radians) to aim outside the target so that a ball with side spin curls back onto the line.
         /// Small-angle estimate: theta = 0.5 * a_lateral * T / v with a_lateral = S * w * v / m, T = d / v.
         /// </summary>
-        public static float CurlPreAim(float sideSpin, float distance, float speed, BallSimConfig ball)
+        /// <param name="totalSpin">|w| including any top spin (the lift depends on the whole spin parameter);
+        /// defaults to |sideSpin|.</param>
+        public static float CurlPreAim(float sideSpin, float distance, float speed, BallSimConfig ball, float totalSpin = -1f)
         {
             if (speed < 1f) return 0f;
-            float magnus = BallIntegrator.EffectiveMagnusCoefficient(ball, SimMath.Abs(sideSpin), speed);
+            float magnus = BallIntegrator.EffectiveMagnusCoefficient(ball, totalSpin >= 0f ? totalSpin : SimMath.Abs(sideSpin), speed);
             float theta = 0.5f * magnus * sideSpin * distance / (ball.Mass * speed);
             // Positive side spin curls toward +right, so pre-aim to the left (negative yaw) and vice versa.
             return -theta * 0.85f;

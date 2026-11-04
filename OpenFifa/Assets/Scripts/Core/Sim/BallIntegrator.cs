@@ -47,7 +47,7 @@ namespace OpenFifa.Core
             }
             else
             {
-                force += MagnusForce(cfg, v, w, speed) + KnuckleForce(cfg, ball.Position, v, w, speed);
+                force += MagnusForce(cfg, v, w, speed) + KnuckleForce(cfg, ball, v, w, speed);
                 v += force * (dt / m) + new SimVec3(0f, -cfg.Gravity * dt, 0f);
                 float spinDecay = SimMath.Decay(dt, cfg.AirSpinDecayTime);
                 w *= spinDecay;
@@ -77,6 +77,8 @@ namespace OpenFifa.Core
             }
 
             flags |= CollideGoalFrames(p0, ref p, ref v, ref w, cfg, pitch);
+            // A knuckle shot stops wobbling once it hits the ground or the frame.
+            if (ball.Knuckling && (ball.Grounded || flags != BallStepFlags.None)) ball.ClearKnuckle();
 
             // Net capture: the ball has wholly crossed the goal line inside the mouth.
             float halfGoal = pitch.GoalWidth * 0.5f;
@@ -155,15 +157,17 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Knuckleball force: side and vertical wobble for a fast ball with (almost) no spin. It is a smooth,
-        /// deterministic function of where the ball is along its path and of its heading, so the same strike from the
-        /// same spot always moves the same way (replays and AI prediction agree), but different strikes wobble
-        /// differently. Zero below <see cref="BallSimConfig.KnuckleMinSpeed"/> or with a spin parameter above
+        /// Knuckleball force for a <see cref="KickStyle.Knuckle"/> strike (<see cref="SimBall.Knuckling"/>): side and
+        /// vertical wobble for a fast ball with (almost) no spin. It is a smooth function of the flat distance flown
+        /// from <see cref="SimBall.KnuckleOrigin"/> and of the per-strike <see cref="SimBall.KnuckleSeed"/>, so it is
+        /// continuous in any direction of play, every strike wobbles its own way, and replays and AI prediction from
+        /// the same state agree. Uses <see cref="SimMath.SinDeterministic"/> so platforms agree bit for bit. Zero below
+        /// <see cref="BallSimConfig.KnuckleMinSpeed"/> or with a spin parameter above
         /// <see cref="BallSimConfig.KnuckleMaxSpinParameter"/>.
         /// </summary>
-        public static SimVec3 KnuckleForce(BallSimConfig cfg, SimVec3 p, SimVec3 v, SimVec3 w, float speed)
+        public static SimVec3 KnuckleForce(BallSimConfig cfg, in SimBall ball, SimVec3 v, SimVec3 w, float speed)
         {
-            if (cfg.KnuckleForceCoefficient <= 0f || speed <= cfg.KnuckleMinSpeed) return SimVec3.Zero;
+            if (!ball.Knuckling || cfg.KnuckleForceCoefficient <= 0f || speed <= cfg.KnuckleMinSpeed) return SimVec3.Zero;
             float sp = cfg.Radius * w.Magnitude / speed;
             if (sp >= cfg.KnuckleMaxSpinParameter) return SimVec3.Zero;
             float weight = (1f - sp / cfg.KnuckleMaxSpinParameter)
@@ -171,20 +175,15 @@ namespace OpenFifa.Core
 
             float flat = SimMath.Sqrt(v.X * v.X + v.Z * v.Z);
             if (flat < Epsilon) return SimVec3.Zero;
-            float dx = v.X / flat, dz = v.Z / flat;
             // Side axis (horizontal, right of travel) and an "up" axis across the path.
-            SimVec3 side = new SimVec3(dz, 0f, -dx);
-            SimVec3 dir = v / speed;
-            SimVec3 up = SimVec3.Cross(dir, side);
-            // Path coordinate along the heading, plus a heading/offset term so each strike has its own phase.
-            float along = p.X * dx + p.Z * dz;
-            float across = p.X * dz - p.Z * dx;
-            float k = 6.2831853f / SimMath.Max(1f, cfg.KnuckleWavelength);
-            float yaw = (float)System.Math.Atan2(dx, dz);
-            float phase1 = 5.3f * yaw + 0.71f * across;
-            float phase2 = 3.7f * yaw - 0.53f * across + 1.9f;
-            float s1 = (float)System.Math.Sin(k * along + phase1);
-            float s2 = (float)System.Math.Sin(0.77f * k * along + phase2);
+            SimVec3 side = new SimVec3(v.Z / flat, 0f, -v.X / flat);
+            SimVec3 up = SimVec3.Cross(v / speed, side);
+            SimVec3 d = (ball.Position - ball.KnuckleOrigin).Flat;
+            float s = d.Magnitude;
+            float k = SimMath.TwoPi / SimMath.Max(1f, cfg.KnuckleWavelength);
+            float seed = ball.KnuckleSeed * SimMath.TwoPi;
+            float s1 = SimMath.SinDeterministic(k * s + seed);
+            float s2 = SimMath.SinDeterministic(0.77f * k * s + 2.7f * seed + 1.9f);
             float q = 0.5f * cfg.AirDensity * cfg.CrossSectionArea * speed * speed * cfg.KnuckleForceCoefficient * weight;
             return side * (q * s1) + up * (q * 0.6f * s2);
         }

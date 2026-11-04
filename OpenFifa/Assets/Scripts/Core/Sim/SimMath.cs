@@ -31,6 +31,22 @@ namespace OpenFifa.Core
         /// <summary>Unit flat vector for a yaw angle (inverse of <see cref="Yaw"/>).</summary>
         public static SimVec3 FromYaw(float yaw) => new SimVec3((float)Math.Sin(yaw), 0f, (float)Math.Cos(yaw));
 
+        /// <summary>
+        /// Sine using only float multiply/add (parabolic approximation with one refinement, max error ~0.001), so it
+        /// gives bit-identical results on every platform, unlike <see cref="Math.Sin"/>. For sim forces, not geometry.
+        /// </summary>
+        public static float SinDeterministic(float x)
+        {
+            float turns = x * (1f / TwoPi) + 0.5f;
+            int whole = (int)turns;
+            if (turns < whole) whole--; // floor for negatives
+            x -= whole * TwoPi; // now in [-pi, pi)
+            const float b = 4f / Pi;
+            const float c = -4f / (Pi * Pi);
+            float y = b * x + c * x * (x < 0f ? -x : x);
+            return 0.225f * (y * (y < 0f ? -y : y) - y) + y;
+        }
+
         /// <summary>Wraps an angle to (-pi, pi].</summary>
         public static float WrapAngle(float a)
         {

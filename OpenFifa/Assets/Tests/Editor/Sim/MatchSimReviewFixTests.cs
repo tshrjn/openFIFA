@@ -95,14 +95,10 @@ namespace OpenFifa.Tests.Editor.Sim
                 bool held = false;
                 for (int t = 0; t < 120; t++)
                 {
-                    float flight = sim.State.Ball.Velocity.Magnitude * sim.Config.Dt;
                     var ev = sim.Step(intents);
                     for (int i = 0; i < ev.Count; i++) if (ev[i].Type == MatchEventType.Save && ev[i].Detail == 1) { held = true; caught++; }
-                    // The save resolves at closest approach, up to one ball substep past the tick's end, so a fast ball
-                    // may legitimately travel a little more than one tick of flight; a teleport into the hands is far more.
                     float jump = SimVec3.Distance(prev, sim.State.Ball.Position);
-                    float limit = SimMath.Max(0.4f, flight * 1.5f);
-                    Assert.Less(jump, limit, $"seed {seed} tick {t}: ball jumped {jump:F2} m in one tick");
+                    Assert.Less(jump, 0.4f, $"seed {seed} tick {t}: ball jumped {jump:F2} m in one tick");
                     prev = sim.State.Ball.Position;
                 }
 

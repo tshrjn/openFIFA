@@ -37,11 +37,15 @@ namespace OpenFifa.Core
         public float MagnusCoefficient = 0.0020f;
 
         /// <summary>
-        /// Magnus lift from the spin parameter Sp = r|omega|/|v| (wind-tunnel fits for footballs, e.g. Goff and Carre,
-        /// Hong and Asai): F = 0.5 rho A C_L(Sp) |v|^2 along (omega x v), with C_L = Sp / (LiftSaturation Sp + LiftLinear).
-        /// C_L grows almost linearly for small Sp and saturates (~0.3-0.35) for heavily spun slow balls, so a soft
-        /// chip with lots of spin does not swerve like a rocket, and a fast ball with a little spin still curls.
-        /// False falls back to the linear <see cref="MagnusCoefficient"/>.
+        /// Magnus lift from the spin parameter Sp = r|omega|/|v|: F = 0.5 rho A C_L(Sp) |v|^2 along (omega x v), with the
+        /// saturating form C_L = LiftScale * Sp / (LiftSaturation Sp + LiftLinear) (the shape of Sawicki et al.'s
+        /// spinning-ball fit). C_L grows almost linearly for small Sp and levels off for heavily spun slow balls, so a
+        /// soft, heavily spun ball does not swerve like a rocket while a fast ball with a little spin still curls.
+        /// TUNED, NOT MEASURED: at LiftScale 1 this gives C_L ~0.09-0.19 for Sp 0.1-0.3, below the ~0.2-0.3 reported in
+        /// football wind-tunnel and flight studies (Goff and Carre; Hong and Asai). It is kept low so the 25 m/s,
+        /// 60 rad/s free kick bends ~3 m over 25 m with this game's kick spins; raise LiftScale toward ~1.5 together with
+        /// lower kick spins if curl should match the measured coefficients. False falls back to the linear
+        /// <see cref="MagnusCoefficient"/>.
         /// </summary>
         public bool UseSpinParameterLift = true;
 
@@ -62,10 +66,11 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Knuckleball: a fast ball with almost no spin sheds its wake asymmetrically, so it wobbles and dips
-        /// unpredictably. Modelled as a side + vertical force coefficient (times 0.5 rho A v^2) that follows a smooth,
-        /// deterministic pattern along the flight path. 0 disables it.
+        /// unpredictably. Modelled as a side + vertical force coefficient (times 0.5 rho A v^2) that follows a smooth
+        /// pattern along the flight path, seeded per strike. Only <see cref="KickStyle.Knuckle"/> shots knuckle
+        /// (<see cref="SimBall.KnuckleSeed"/>). 0 disables it.
         /// </summary>
-        public float KnuckleForceCoefficient = 0.18f;
+        public float KnuckleForceCoefficient = 0.25f;
 
         /// <summary>Knuckle effect fades in between these speeds (m/s).</summary>
         public float KnuckleMinSpeed = 19f;
@@ -74,8 +79,8 @@ namespace OpenFifa.Core
         /// <summary>Spin parameter above which there is no knuckle effect (it fades out linearly below it).</summary>
         public float KnuckleMaxSpinParameter = 0.03f;
 
-        /// <summary>Distance (m) over which the knuckle side force completes one wobble.</summary>
-        public float KnuckleWavelength = 16f;
+        /// <summary>Distance (m) over which the knuckle side force completes one wobble (~3 wobbles on a 25 m shot).</summary>
+        public float KnuckleWavelength = 8f;
 
         /// <summary>Spin time constant in flight (s). Spin decays as exp(-t / tau).</summary>
         public float AirSpinDecayTime = 5f;
@@ -103,7 +108,7 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Extra rolling deceleration proportional to speed (1/s): long or wet grass drags a fast ball more than a slow
-        /// one. 0 on a normal pitch; see <see cref="ApplySurface"/>.
+        /// one. 0 on a normal pitch; see <see cref="WithSurface"/>.
         /// </summary>
         public float RollingDragPerSpeed = 0f;
 
@@ -140,57 +145,56 @@ namespace OpenFifa.Core
         /// <summary>Lazily built lofted-launch lookups for <see cref="KickSolver.LoftTable"/> (validated against the fields above).</summary>
         [System.NonSerialized] internal KickSolver.LoftTable[] CachedLoftTables;
 
-        /// <summary>The surface last applied with <see cref="ApplySurface"/> (Normal for a fresh config).</summary>
+        /// <summary>The pitch condition this config was made for (<see cref="WithSurface"/>). Normal for a fresh config.</summary>
         public PitchSurface Surface = PitchSurface.Normal;
 
         /// <summary>
-        /// Sets the ground coefficients for a pitch condition. Air values are untouched.
+        /// A copy of this (Normal) config with its ground coefficients adjusted for a pitch condition; air values and any
+        /// custom tuning are kept, this config is not changed. Build the match sim AND the AI ball model
+        /// (<see cref="TeamAIBallModel"/>) from the returned config so their flight and roll tables agree.
         /// <list type="bullet">
-        /// <item>Normal: the defaults above (well-kept, watered before kick-off).</item>
+        /// <item>Normal: an unchanged copy (well-kept, watered before kick-off).</item>
         /// <item>Dry: firm and fast. Bounces higher and runs on, rolls a little further.</item>
-        /// <item>Wet: rain on the surface. The ball skids on after a bounce (low friction), bounces lower, rolls further,
-        /// but standing water adds speed-dependent drag.</item>
-        /// <item>Heavy: long, soft or worn grass. Dead bounce, slows quickly.</item>
+        /// <item>Wet: rain on the surface. The ball skids on after a bounce (low friction) and bounces lower; standing
+        /// water adds speed-dependent drag.</item>
+        /// <item>Heavy: long, soft or snowy grass. Dead bounce, slows quickly.</item>
         /// </list>
         /// APPROXIMATIONS chosen for feel (sports-turf studies give rolling deceleration of ~0.5-1.5 m/s^2 and
-        /// vertical restitution of ~0.5-0.8 across these conditions).
+        /// vertical restitution of ~0.5-0.8 across these conditions). Throws if this config is already non-Normal.
         /// </summary>
-        public BallSimConfig ApplySurface(PitchSurface surface)
+        public BallSimConfig WithSurface(PitchSurface surface)
         {
-            var d = Defaults;
-            GroundRestitution = d.GroundRestitution;
-            BounceFriction = d.BounceFriction;
-            SlidingFriction = d.SlidingFriction;
-            RollingResistance = d.RollingResistance;
-            RollingDragPerSpeed = d.RollingDragPerSpeed;
+            if (Surface != PitchSurface.Normal)
+                throw new System.InvalidOperationException($"WithSurface needs a Normal config (this one is {Surface}).");
+            BallSimConfig c = Clone();
+            c.CachedRollTable = null;
+            c.CachedLoftTables = null;
             switch (surface)
             {
                 case PitchSurface.Dry:
-                    GroundRestitution = 0.74f;
-                    BounceFriction = 0.55f;
-                    RollingResistance = 0.085f;
+                    c.GroundRestitution *= 1.14f;
+                    c.BounceFriction *= 1.1f;
+                    c.RollingResistance *= 0.85f;
                     break;
                 case PitchSurface.Wet:
-                    GroundRestitution = 0.55f;
-                    BounceFriction = 0.22f;
-                    SlidingFriction = 0.22f;
-                    RollingResistance = 0.07f;
-                    RollingDragPerSpeed = 0.035f;
+                    c.GroundRestitution *= 0.85f;
+                    c.BounceFriction *= 0.45f;
+                    c.SlidingFriction *= 0.55f;
+                    c.RollingResistance *= 0.7f;
+                    c.RollingDragPerSpeed += 0.035f;
                     break;
                 case PitchSurface.Heavy:
-                    GroundRestitution = 0.52f;
-                    BounceFriction = 0.6f;
-                    SlidingFriction = 0.5f;
-                    RollingResistance = 0.13f;
-                    RollingDragPerSpeed = 0.02f;
+                    c.GroundRestitution *= 0.8f;
+                    c.BounceFriction *= 1.2f;
+                    c.SlidingFriction *= 1.25f;
+                    c.RollingResistance *= 1.3f;
+                    c.RollingDragPerSpeed += 0.02f;
                     break;
             }
 
-            Surface = surface;
-            return this;
+            c.Surface = surface;
+            return c;
         }
-
-        private static readonly BallSimConfig Defaults = new BallSimConfig();
 
         public BallSimConfig Clone() => (BallSimConfig)MemberwiseClone();
     }
