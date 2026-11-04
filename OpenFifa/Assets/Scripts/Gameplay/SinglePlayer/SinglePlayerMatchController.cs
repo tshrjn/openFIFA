@@ -266,6 +266,25 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Tint(b.gameObject, c);
         }
 
+        private readonly Dictionary<(Material, Color), Material> _tinted = new Dictionary<(Material, Color), Material>();
+
+        private void OnDestroy()
+        {
+            foreach (var m in _tinted.Values) if (m != null) Destroy(m);
+            _tinted.Clear();
+        }
+
+        private Material TintedMaterial(Material source, Color c)
+        {
+            if (source == null) return null;
+            if (_tinted.TryGetValue((source, c), out var m)) return m;
+            m = new Material(source) { name = source.name + " (team)" };
+            if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, c);
+            if (m.HasProperty(ColorId)) m.SetColor(ColorId, c);
+            _tinted[(source, c)] = m;
+            return m;
+        }
+
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
         private static readonly int ColorId = Shader.PropertyToID("_Color");
 
@@ -460,13 +479,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     if (animator == null) animator = model.AddComponent<Animator>();
                     if (AnimatorController != null) animator.runtimeAnimatorController = AnimatorController;
                     animator.applyRootMotion = false;
+                    // One shared material per (source material, colour) instead of a MaterialPropertyBlock per
+                    // renderer: property blocks opt renderers out of the SRP Batcher, these keep all 22 batched.
                     foreach (var r in model.GetComponentsInChildren<Renderer>())
                     {
-                        var block = new MaterialPropertyBlock();
-                        r.GetPropertyBlock(block);
-                        block.SetColor(BaseColorId, c);
-                        block.SetColor(ColorId, c);
-                        r.SetPropertyBlock(block);
+                        var mats = r.sharedMaterials;
+                        for (int m = 0; m < mats.Length; m++) mats[m] = TintedMaterial(mats[m], c);
+                        r.sharedMaterials = mats;
                     }
                     var driver = p.gameObject.AddComponent<PlayerAnimationDriver>();
                     driver.Source = new SimPlayerAnimSource(Session, id);
