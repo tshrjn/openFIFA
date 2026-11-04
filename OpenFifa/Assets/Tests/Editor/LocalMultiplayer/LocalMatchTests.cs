@@ -52,6 +52,81 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             Assert.Greater(switches, 0, "seat 0 should change player during a minute of play");
         }
 
+        private static SinglePlayerMatchOptions Ultimate(ulong seed = 3) => new SinglePlayerMatchOptions
+        {
+            Level = TeamAIDifficultyLevel.Ultimate,
+            Seed = seed,
+            Config = new MatchSimConfig { HalfDurationSeconds = 60f },
+        };
+
+        private static void AssertRealRatings(SinglePlayerMatchSession s, MatchSetup original, SimTeam team)
+        {
+            for (int k = 0; k < MatchSetup.PlayersPerTeam; k++)
+            {
+                int id = MatchSim.FirstId(team) + k;
+                var o = team == SimTeam.Home ? original.Home[k] : original.Away[k];
+                var a = s.Sim.AttributesOf(id);
+                Assert.AreEqual(o.Pace, a.Pace, $"{team} {k} pace");
+                Assert.AreEqual(o.Finishing, a.Finishing, $"{team} {k} finishing");
+                Assert.AreEqual(o.StandingTackle, a.StandingTackle, $"{team} {k} tackling");
+                Assert.AreEqual(o.GkReflexes, a.GkReflexes, $"{team} {k} reflexes");
+            }
+        }
+
+        [Test]
+        public void HeadToHead_Ultimate_NoTeamGetsOutfieldOrKeeperDeltas_AndAIRatingsMatch()
+        {
+            var opts = Ultimate();
+            Assert.Greater(SinglePlayerDifficulty.For(opts.Level).OpponentOutfieldDelta, 0);
+            var m = new LocalMatch(opts, Seats(1, 1), _ => new ScriptedGamepadBot());
+            var s = m.Session;
+            var original = MatchSetup.CreateDefault(opts.Seed);
+            AssertRealRatings(s, original, SimTeam.Home);
+            AssertRealRatings(s, original, SimTeam.Away);
+            // The team AI's cached skills are re-read too: they match a session whose ratings were never shifted.
+            var neutral = new SinglePlayerMatchSession(Options());
+            for (int id = 0; id < MatchSimState.PlayerCount; id++)
+            {
+                Assert.AreEqual(neutral.AI.World.Players[id].Shooting, s.AI.World.Players[id].Shooting, 1e-6f, "shooting " + id);
+                Assert.AreEqual(neutral.AI.World.Players[id].Goalkeeping, s.AI.World.Players[id].Goalkeeping, 1e-6f, "keeping " + id);
+            }
+        }
+
+        [Test]
+        public void CoopHeadToHead_Ultimate_NoTeamGetsDeltas()
+        {
+            var opts = Ultimate();
+            var m = new LocalMatch(opts, Seats(2, 1), _ => new ScriptedGamepadBot());
+            var original = MatchSetup.CreateDefault(opts.Seed);
+            AssertRealRatings(m.Session, original, SimTeam.Home);
+            AssertRealRatings(m.Session, original, SimTeam.Away);
+        }
+
+        [Test]
+        public void CoopVsAI_UltimateHomeHumans_OnlyTheAllAISideGetsTheOutfieldDelta() => OnlyAISideShifted(2, 0);
+
+        [Test]
+        public void CoopVsAI_UltimateAwayHumans_OnlyTheAllAISideGetsTheOutfieldDelta() => OnlyAISideShifted(0, 2);
+
+        private static void OnlyAISideShifted(int homePads, int awayPads)
+        {
+            var opts = Ultimate();
+            var m = new LocalMatch(opts, Seats(homePads, awayPads), _ => new ScriptedGamepadBot());
+            var s = m.Session;
+            var original = MatchSetup.CreateDefault(opts.Seed);
+            var human = homePads > 0 ? SimTeam.Home : SimTeam.Away;
+            var ai = MatchSim.Opponent(human);
+            var prof = SinglePlayerDifficulty.For(opts.Level);
+            for (int k = 1; k < MatchSetup.PlayersPerTeam; k++)
+            {
+                var oh = human == SimTeam.Home ? original.Home[k] : original.Away[k];
+                var oa = ai == SimTeam.Home ? original.Home[k] : original.Away[k];
+                Assert.AreEqual(oh.Pace, s.Sim.AttributesOf(MatchSim.FirstId(human) + k).Pace, "human side " + k);
+                Assert.AreEqual(System.Math.Min(99, oa.Pace + prof.OpponentOutfieldDelta),
+                    s.Sim.AttributesOf(MatchSim.FirstId(ai) + k).Pace, "AI side " + k);
+            }
+        }
+
         [Test]
         public void HeadToHead_OneSeatPerTeam_EqualAIAndRealKeepers()
         {

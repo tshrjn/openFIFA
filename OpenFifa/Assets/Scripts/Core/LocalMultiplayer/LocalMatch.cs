@@ -119,7 +119,7 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Humans on both sides: neither team is "the AI opponent", so both teams' AI teammates play at the level's
-        /// teammate strength and both keepers keep their real ratings.
+        /// teammate strength and every player keeps the real ratings (no keeper or outfield difficulty deltas).
         /// </summary>
         public static void MakeFair(SinglePlayerMatchSession session, SinglePlayerMatchOptions options)
         {
@@ -127,15 +127,14 @@ namespace OpenFifa.Core
             session.Director.Brains[0].SetDifficulty(mate);
             session.Director.Brains[1].SetDifficulty(mate);
             var original = options.Setup ?? MatchSetup.CreateDefault(options.Seed);
-            RestoreKeeper(session.Sim.AttributesOf(MatchSim.KeeperId(SimTeam.Home)), original.Home[0]);
-            RestoreKeeper(session.Sim.AttributesOf(MatchSim.KeeperId(SimTeam.Away)), original.Away[0]);
-        }
-
-        private static void RestoreKeeper(SimPlayerAttributes live, SimPlayerAttributes original)
-        {
-            if (live == null || original == null) return;
-            live.GkReflexes = original.GkReflexes;
-            live.GkDiving = original.GkDiving;
+            var live = session.Sim.Setup;
+            for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+            {
+                // Fresh copies: the sim reads attributes through the setup's arrays, and the caller's objects stay untouched.
+                if (original.Home[i] != null) live.Home[i] = original.Home[i].Clone();
+                if (original.Away[i] != null) live.Away[i] = original.Away[i].Clone();
+            }
+            session.AI.RefreshRatings();
         }
     }
 }

@@ -56,6 +56,9 @@ namespace OpenFifa.Tests.Editor.Integration
                 var level = (TeamAIDifficultyLevel)i;
                 var p = SinglePlayerDifficulty.For(level);
                 var l = TeamAIDifficultyLadder.For(level);
+                // The user's AI teammates are never weaker than a Semi-Pro opponent, at any level.
+                Assert.GreaterOrEqual(p.TeammateTheta, TeamAIDifficultyLadder.For(TeamAIDifficultyLevel.SemiPro).OpponentTheta,
+                    level + " teammate theta below the Semi-Pro opponent");
                 Assert.AreEqual(l.OpponentTheta, p.OpponentTheta);
                 Assert.AreEqual(l.TeammateTheta, p.TeammateTheta);
                 if (i > 0)
@@ -257,11 +260,12 @@ namespace OpenFifa.Tests.Editor.Integration
         /// Fixed, representative seed set: seeds 1..24, full-length 2 x 6-minute halves, all seven levels (168 matches).
         /// Outcomes are chaotic in the seed (any parameter change reshuffles every match), so fewer seeds or shorter halves
         /// are not representative: with 4-minute halves World Class and Legendary tie on goal difference, and with seeds
-        /// 1..16 the World Class to Legendary step is only +5 goals. Measured on this set (Nov 2026 ladder retune), totals
-        /// over 24 matches: goal difference -68 / -39 / -12 / 19 / 52 / 65 / 106 (steps 29 27 31 33 13 41) and balance
-        /// -93.6 / -41.0 / 0.2 / 49.8 / 102.4 / 145.2 / 203.0 (steps 52.6 41.2 49.6 52.6 42.8 57.8). Over 48 seeds every
-        /// step is at least 3 standard errors of the paired difference in goal difference and 3.7 in balance.
-        /// The thresholds (each step at least 0.25 goals and 1.0 balance per match) sit at half the smallest measured step.
+        /// 1..16 some steps shrink to +10 goals. Measured on this set (Nov 2026 ladder retune, after the keeper-delta
+        /// review), totals over 24 matches: goal difference -68 / -29 / 0 / 16 / 28 / 64 / 91 (steps 39 29 16 12 36 27) and
+        /// balance -101.0 / -39.2 / 6.2 / 49.6 / 76.6 / 131.0 / 182.4 (steps 61.8 45.4 43.4 27.0 54.4 51.4). Over 48
+        /// seeds every step is at least 2.5 standard errors of the paired difference in goal difference and 3.9 in balance.
+        /// The thresholds (each step at least 0.25 goals and 0.5 balance per match) sit at about half the smallest
+        /// measured step.
         /// </para>
         /// <para>
         /// The matches run in parallel on all cores: 3.2 minutes on 12 cores under Mono (26 CPU-minutes, so about half an hour on one
@@ -287,13 +291,13 @@ namespace OpenFifa.Tests.Editor.Integration
                 float balStep = Balance(t[i]) - Balance(t[i - 1]);
                 Assert.GreaterOrEqual(gdStep, (int)Math.Ceiling(0.25f * seeds),
                     $"{step}: AI goal difference should rise by at least 0.25 per match (got {gdStep} over {seeds})");
-                Assert.GreaterOrEqual(balStep, 1.0f * seeds,
-                    $"{step}: balance should rise by at least 1.0 per match (got {balStep:F1} over {seeds})");
+                Assert.GreaterOrEqual(balStep, 0.5f * seeds,
+                    $"{step}: balance should rise by at least 0.5 per match (got {balStep:F1} over {seeds})");
             }
 
             var beg = t[(int)TeamAIDifficultyLevel.Beginner];
             var ult = t[(int)TeamAIDifficultyLevel.Ultimate];
-            // Beginner: the user clearly wins (measured 73 goals to 5); Ultimate: the AI clearly does (measured 114 to 8).
+            // Beginner: the user clearly wins (measured 72 goals to 4); Ultimate: the AI clearly does (measured 102 to 11).
             Assert.Greater(beg.HumanGoals, 2 * beg.AIGoals + seeds / 2, "the user should clearly outscore the Beginner AI");
             Assert.Greater(ult.AIGoals, 2 * ult.HumanGoals + seeds, "the Ultimate AI should clearly outscore the user");
             // Threat and the user's chances move the right way end to end.

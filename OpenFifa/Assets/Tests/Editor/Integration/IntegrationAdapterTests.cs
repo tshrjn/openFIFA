@@ -405,6 +405,41 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreEqual(TeamAIFormation.F352, RosterMatchBuilder.ParseFormation("3-5-2"));
         }
 
+        /// <summary>
+        /// The difficulty rating deltas are hidden: they live only in the session's private copy of the setup, so the
+        /// team sheets, the caller's setup and the roster players (what the HUD, team sheet and commentary show) keep
+        /// the real ratings, while the sim's AI side plays with the shifted ones.
+        /// </summary>
+        [Test]
+        public void RosterSetup_UltimateDeltas_NeverReachTeamSheetsSetupOrRoster()
+        {
+            var problems = new List<string>();
+            var leagues = RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems);
+            var clubs = leagues[0].Clubs;
+            var setup = RosterMatchBuilder.BuildSetup(clubs[0], clubs[1], 5, out var home, out var away, out var names, out var ids);
+            var rosterAway = RosterMatchBuilder.ToSimAttributes(away.Starters[7]);
+            int sheetPace = away.Attributes[7].Pace, setupPace = setup.Away[7].Pace, homePace = setup.Home[7].Pace;
+            int sheetGk = away.Attributes[0].GkReflexes, homeGk = setup.Home[0].GkReflexes;
+            var session = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+            {
+                Level = TeamAIDifficultyLevel.Ultimate, Setup = setup, Seed = 5, HomeTactics = home.Tactics,
+                AwayTactics = away.Tactics, PlayerNames = names, PlayerIds = ids,
+            });
+            var prof = session.Profile;
+            Assert.Greater(prof.OpponentOutfieldDelta, 0);
+            // Sim: the AI (away) outfielder is shifted, the user's side is not.
+            Assert.AreEqual(System.Math.Min(99, setupPace + prof.OpponentOutfieldDelta), session.Sim.AttributesOf(11 + 7).Pace);
+            Assert.AreEqual(homePace, session.Sim.AttributesOf(7).Pace);
+            // Everything a display reads keeps the real values.
+            Assert.AreEqual(sheetPace, away.Attributes[7].Pace);
+            Assert.AreEqual(setupPace, setup.Away[7].Pace);
+            Assert.AreEqual(sheetGk, away.Attributes[0].GkReflexes);
+            Assert.AreEqual(homeGk, setup.Home[0].GkReflexes);
+            Assert.AreEqual(rosterAway.Pace, RosterMatchBuilder.ToSimAttributes(away.Starters[7]).Pace);
+            Assert.AreEqual(sheetPace, rosterAway.Pace);
+            Assert.AreNotSame(setup.Away[7], session.Sim.AttributesOf(11 + 7));
+        }
+
         [Test]
         public void RosterSetup_BundledLeague_BuildsPlayableMatch()
         {

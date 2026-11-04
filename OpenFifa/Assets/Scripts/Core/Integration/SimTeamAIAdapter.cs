@@ -88,8 +88,22 @@ namespace OpenFifa.Core
 
             for (int id = 0; id < MatchSimState.PlayerCount; id++)
             {
-                var p = TeamAIPlayer.Create(id, id < MatchSetup.PlayersPerTeam ? 0 : 1, RoleOfPlayer[id], SlotOfPlayer[id], SimVec3.Zero);
-                var a = sim.AttributesOf(id);
+                World.Players[id] = TeamAIPlayer.Create(id, id < MatchSetup.PlayersPerTeam ? 0 : 1, RoleOfPlayer[id], SlotOfPlayer[id], SimVec3.Zero);
+            }
+            World.PlayerCount = MatchSimState.PlayerCount;
+            RefreshRatings();
+        }
+
+        /// <summary>
+        /// Re-reads every player's skill ratings from the sim's attributes into <see cref="World"/>. Call it after the
+        /// match's attributes change (e.g. local head-to-head restoring the real ratings over the difficulty deltas).
+        /// </summary>
+        public void RefreshRatings()
+        {
+            for (int id = 0; id < MatchSimState.PlayerCount; id++)
+            {
+                ref var p = ref World.Players[id];
+                var a = _sim.AttributesOf(id);
                 p.Passing = Avg(a.ShortPassing, a.LongPassing, a.Vision);
                 p.Shooting = Avg(a.Finishing, a.ShotPower, a.Composure);
                 p.Dribbling = Avg(a.Dribbling, a.BallControl, a.Agility);
@@ -97,9 +111,7 @@ namespace OpenFifa.Core
                 p.Reactions = SimPlayerAttributes.N(a.Reactions);
                 p.BallControl = SimPlayerAttributes.N(a.BallControl);
                 p.Goalkeeping = a.IsGoalkeeper ? Avg(a.GkDiving, a.GkReflexes, a.GkPositioning) : 0.1f;
-                World.Players[id] = p;
             }
-            World.PlayerCount = MatchSimState.PlayerCount;
         }
 
         private static float Avg(int a, int b, int c) => (SimPlayerAttributes.N(a) + SimPlayerAttributes.N(b) + SimPlayerAttributes.N(c)) / 3f;
