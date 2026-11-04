@@ -51,7 +51,46 @@ namespace OpenFifa.Core
         F433 = 0,
         F4231 = 1,
         F442 = 2,
-        F352 = 3
+        F352 = 3,
+        /// <summary>4-1-4-1: a single holding midfielder behind a flat four.</summary>
+        F4141 = 4,
+        /// <summary>4-1-2-1-2: the narrow diamond (no wingers; full-backs give the width).</summary>
+        F41212 = 5,
+        /// <summary>3-4-3: three centre-backs, wing-backs, two wide forwards.</summary>
+        F343 = 6,
+        /// <summary>5-3-2: a back five whose wing-backs push on in possession.</summary>
+        F532 = 7
+    }
+
+    /// <summary>
+    /// Team mentality, set by the manager (<see cref="TeamAIManager"/>) from the score and the clock, or fixed by the
+    /// user. Shifts line height, pressing and how many players join the attack on top of the team's style.
+    /// </summary>
+    public enum TeamAIMentality
+    {
+        UltraDefensive = -2,
+        Defensive = -1,
+        Balanced = 0,
+        Attacking = 1,
+        AllOutAttack = 2
+    }
+
+    /// <summary>Named team styles (see <see cref="TeamAITactics.FromStyle"/>).</summary>
+    public enum TeamAIStyle
+    {
+        Balanced = 0,
+        /// <summary>Patient short passing, high line, keeper and centre-backs split to build up.</summary>
+        Possession = 1,
+        /// <summary>Gegenpress: very high line, relentless press and counter-press.</summary>
+        HighPress = 2,
+        /// <summary>Deep mid block, then fast vertical breaks with runners going early.</summary>
+        CounterAttack = 3,
+        /// <summary>Direct: long balls into the forwards, few players committed in build-up.</summary>
+        LongBall = 4,
+        /// <summary>Wide shape, full-backs overlap, crosses into the box.</summary>
+        WingPlay = 5,
+        /// <summary>Low block, narrow and compact, little pressing, clear it long.</summary>
+        ParkTheBus = 6
     }
 
     /// <summary>

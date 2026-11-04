@@ -121,6 +121,12 @@ namespace OpenFifa.Core
             World.Ball.LastTouchTeam = TeamIndex(s.LastTouchTeam);
             World.HomeAttackSign = _sim.AttackSign(SimTeam.Home);
             World.Time = s.Tick * cfg.Dt; // monotonic across halves
+            World.Score[0] = s.HomeScore;
+            World.Score[1] = s.AwayScore;
+            float half = cfg.HalfDurationSeconds > 1f ? cfg.HalfDurationSeconds : 1f;
+            float inHalf = s.Clock / half;
+            if (inHalf > 1f) inHalf = 1f;
+            World.MatchProgress = s.Phase == SimMatchPhase.FullTime ? 1f : 0.5f * (s.Half - 1) + 0.5f * inHalf;
             MapPhase(s, out World.MatchPhase, out World.RestartTeam);
             World.IndirectFreeKick = s.Phase != SimMatchPhase.InPlay && s.PendingRestart == RestartType.IndirectFreeKick;
         }
