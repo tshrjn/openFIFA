@@ -61,6 +61,8 @@ namespace OpenFifa.Core
         private float _triggerLastSeen = -100f;
         private int _lastOwnerId = int.MinValue;
         private float _ownerSince;
+        private float _prevOffsideDepth = -1f;
+        private float _lineSpeed;
         private readonly bool[] _running = new bool[TeamAIWorld.MaxPlayers];
         private readonly float[] _runStart = new float[TeamAIWorld.MaxPlayers];
         private readonly bool[] _oppTaken = new bool[TeamAIWorld.MaxPlayers];
@@ -122,6 +124,11 @@ namespace OpenFifa.Core
             }
             BackLineDepth = line;
             OffsideDepth = ComputeOffsideDepth(world, sign, ballDepth);
+            // Speed of the offside line (m/s toward the opponent goal), for runners timing a run in behind it.
+            _lineSpeed = _prevOffsideDepth >= 0f && dt > 1e-4f
+                ? TeamAIMath.Clamp((OffsideDepth - _prevOffsideDepth) * 2f * pitch.HalfLength / dt, -9f, 9f)
+                : 0f;
+            _prevOffsideDepth = OffsideDepth;
 
             // ---- Press triggers (with reaction delay) ----
             bool trigger = !hasPossession && DetectPressTrigger(world, sign, ownerIndex, ownerTeam);
@@ -234,7 +241,7 @@ namespace OpenFifa.Core
                 if (i == ChaserIndex)
                 {
                     bool ours = world.Ball.LastTouchTeam == Team && hasPossession;
-                    SetMove(ref cmd, p, chasePoint, true, ours ? TeamAIIntent.Receive : TeamAIIntent.ChaseBall);
+                    SetMoveTracking(ref cmd, p, chasePoint, world.Ball.Velocity, true, ours ? TeamAIIntent.Receive : TeamAIIntent.ChaseBall);
                     continue;
                 }
 
@@ -330,7 +337,8 @@ namespace OpenFifa.Core
                     target = TeamAIMath.ClampToPitch(new SimVec3(TeamAIMath.Lerp(p.Position.X, 0f, 0.3f), 0f,
                         TeamAIMath.DepthToZ(targetDepth, sign, pitch)), pitch, 1.5f);
                 }
-                SetMove(ref cmd, p, target, true, TeamAIIntent.RunInBehind);
+                SetMoveTracking(ref cmd, p, target, d.RunHasTarget ? SimVec3.Zero : LineVelocity(sign), true,
+                    TeamAIIntent.RunInBehind);
                 return;
             }
 
@@ -356,7 +364,7 @@ namespace OpenFifa.Core
                     float targetDepth = Math.Min(OffsideDepth + 0.12f, 0.95f);
                     float x = TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
                     var target = TeamAIMath.ClampToPitch(new SimVec3(x, 0f, TeamAIMath.DepthToZ(targetDepth, sign, pitch)), pitch, 1.5f);
-                    SetMove(ref cmd, p, target, true, TeamAIIntent.RunInBehind);
+                    SetMoveTracking(ref cmd, p, target, LineVelocity(sign), true, TeamAIIntent.RunInBehind);
                     return;
                 }
             }
@@ -473,6 +481,7 @@ namespace OpenFifa.Core
                 float lineZ = TeamAIMath.DepthToZ(BackLineDepth, sign, pitch);
                 var target = new SimVec3(anchor.X, 0f, lineZ);
                 var intent = TeamAIIntent.KeepLine;
+                var markVel = SimVec3.Zero;
                 int opp = FindMarkTarget(world, anchor, sign, 11f, BackLineDepth + 0.12f);
                 if (opp >= 0)
                 {
@@ -490,9 +499,10 @@ namespace OpenFifa.Core
                         intent = TeamAIIntent.Mark;
                     }
                     target = new SimVec3(x, 0f, TeamAIMath.DepthToZ(depth, sign, pitch));
-                    cmd.TargetPlayerId = world.Players[opp].Id;
+                    markVel = intent == TeamAIIntent.Mark ? world.Players[opp].Velocity : SimVec3.Zero;
                 }
-                SetMove(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), false, intent);
+                SetMoveTracking(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), markVel, false, intent);
+                if (opp >= 0) cmd.TargetPlayerId = world.Players[opp].Id;
                 return;
             }
 
@@ -509,7 +519,10 @@ namespace OpenFifa.Core
                     if (TeamAIMath.FlatDistance(shadow, anchor) < 12f)
                     {
                         cmd.TargetPlayerId = world.Players[opp].Id;
-                        SetMove(ref cmd, p, shadow, TeamAIMath.FlatDistance(p.Position, shadow) > 10f, TeamAIIntent.CoverShadow);
+                        // The shadow point sits 40% of the way from the ball to the runner and moves with both.
+                        var shadowVel = world.Ball.Velocity * 0.6f + world.Players[opp].Velocity * 0.4f;
+                        SetMoveTracking(ref cmd, p, shadow, shadowVel, TeamAIMath.FlatDistance(p.Position, shadow) > 10f,
+                            TeamAIIntent.CoverShadow);
                         return;
                     }
                 }
@@ -564,7 +577,7 @@ namespace OpenFifa.Core
                 if (anchorToBall < 16f && !second)
                 {
                     var contain = ball + toGoal * 4.5f;
-                    SetMove(ref cmd, p, contain, false, TeamAIIntent.Jockey);
+                    SetMoveTracking(ref cmd, p, contain, owner.Velocity, false, TeamAIIntent.Jockey);
                     if (dist < 5.5f) { cmd.Action = TeamAIAction.Jockey; cmd.ActionTarget = ball; }
                 }
                 else
@@ -578,7 +591,7 @@ namespace OpenFifa.Core
             {
                 // Close down on a goal-side curve.
                 var approach = ball + toGoal * (second ? 3f : 1.0f);
-                SetMove(ref cmd, p, approach, true, TeamAIIntent.Press);
+                SetMoveTracking(ref cmd, p, approach, owner.Velocity, true, TeamAIIntent.Press);
                 // Slide: last-ditch, chasing a carrier who is getting away near our box.
                 bool goalSideNow = SimVec3.Dot(p.Position - ball, toGoal) > 0f;
                 float ownerSpeed = owner.Velocity.Flat.Magnitude;
@@ -601,13 +614,13 @@ namespace OpenFifa.Core
             success += Rng.NextSigned() * Difficulty.DecisionNoise;
             if (goalSide && success > TackleThreshold(Difficulty.Theta))
             {
-                SetMove(ref cmd, p, ball, false, TeamAIIntent.Tackle);
+                SetMoveTracking(ref cmd, p, ball, owner.Velocity, false, TeamAIIntent.Tackle);
                 cmd.Action = TeamAIAction.Tackle;
                 cmd.ActionTarget = ball;
                 return;
             }
             var jockey = ball + toGoal * 1.5f;
-            SetMove(ref cmd, p, jockey, false, TeamAIIntent.Jockey);
+            SetMoveTracking(ref cmd, p, jockey, owner.Velocity, false, TeamAIIntent.Jockey);
             cmd.Action = TeamAIAction.Jockey;
             cmd.ActionTarget = ball;
         }
@@ -902,6 +915,18 @@ namespace OpenFifa.Core
             cmd.MoveDirection = d > 0.6f ? TeamAIMath.FlatDirection(p.Position, target) : SimVec3.Zero;
             cmd.Sprint = sprint && d > 1.5f;
             cmd.Intent = intent;
+            cmd.MoveTargetVelocity = SimVec3.Zero;
+        }
+
+        /// <summary>Velocity of the offside line our runners time their runs against (flat, along the attack).</summary>
+        private SimVec3 LineVelocity(int sign) => new SimVec3(0f, 0f, sign * _lineSpeed);
+
+        /// <summary>SetMove for a target that moves with <paramref name="targetVelocity"/> (see <see cref="AIPlayerCommand.MoveTargetVelocity"/>).</summary>
+        private static void SetMoveTracking(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, SimVec3 targetVelocity,
+            bool sprint, TeamAIIntent intent)
+        {
+            SetMove(ref cmd, p, target, sprint, intent);
+            cmd.MoveTargetVelocity = new SimVec3(targetVelocity.X, 0f, targetVelocity.Z);
         }
     }
 }

@@ -115,6 +115,12 @@ namespace OpenFifa.Core
         public SimVec3 MoveTarget;
         /// <summary>Unit flat direction toward MoveTarget, or zero when arrived.</summary>
         public SimVec3 MoveDirection;
+        /// <summary>
+        /// Flat velocity of whatever <see cref="MoveTarget"/> follows (the ball carrier for a press, the ball for a chase,
+        /// the offside line for a run in behind, a marked runner); zero for a fixed spot. The adapter brakes on the
+        /// closing speed relative to it, so a player chasing a moving target does not pull up short of it.
+        /// </summary>
+        public SimVec3 MoveTargetVelocity;
         public bool Sprint;
         public TeamAIAction Action;
         /// <summary>Point the action is aimed at (pass target, shot aim point, tackle point).</summary>
@@ -134,6 +140,7 @@ namespace OpenFifa.Core
                 PlayerId = id,
                 MoveTarget = pos,
                 MoveDirection = SimVec3.Zero,
+                MoveTargetVelocity = SimVec3.Zero,
                 Sprint = false,
                 Action = TeamAIAction.None,
                 ActionTarget = pos,

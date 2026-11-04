@@ -80,6 +80,17 @@ namespace OpenFifa.Core
         public TeamAIOption LastCarry;
         /// <summary>Chosen option of the last decision.</summary>
         public TeamAIOption LastChoice;
+        /// <summary>Least blocked pass of the last decision (Block = 999 when none was considered).</summary>
+        public TeamAIOption LastSafestPass;
+        /// <summary>
+        /// Seconds the current carrier has been keeping the ball (shielding, or carrying because every kick was
+        /// blocked) at the last decision; 0 when he is not keeping it.
+        /// </summary>
+        public float KeepSeconds { get; private set; }
+
+        private int _keepOwnerId = -1;
+        private float _keepSince = -1f;
+        private float _keepLastSeen = -100f;
 
         /// <summary>Ball timing model (sim-matched). Set by the brain; defaults to the default ball config.</summary>
         public TeamAIBallModel Model = TeamAIBallModel.Default;
@@ -241,6 +252,7 @@ namespace OpenFifa.Core
             LastBestPass = new TeamAIOption { Score = -999f, TargetIndex = -1 };
             LastShot = new TeamAIOption { Score = -999f, TargetIndex = -1 };
             LastCarry = new TeamAIOption { Score = -999f, TargetIndex = -1 };
+            LastSafestPass = new TeamAIOption { Score = -999f, TargetIndex = -1, Block = 999f };
 
             // ---- Passes ----
             bool crossZone = ownerDepth > 0.76f && TeamAIMath.Abs(ballPos.X) > pitch.PenaltyAreaWidth * 0.5f - 2f;
@@ -278,7 +290,7 @@ namespace OpenFifa.Core
                     float dist = TeamAIMath.FlatDistance(ballPos, through);
                     if (dist > 8f && dist < MaxGroundPass)
                     {
-                        float tBall = Model.GroundPassTime(dist);
+                        float tBall = Model.GroundPassTimeTo(dist, rec.BallControl);
                         float tRec = TeamAIMath.TimeToIntercept(rec, through, 0.15f);
                         if (tRec <= tBall + 0.5f)
                             Consider(world, ownerIndex, j, through, TeamAIAction.ThroughPass, dist, false, owner, sign, ownerDepth, diff, rng);
@@ -320,6 +332,7 @@ namespace OpenFifa.Core
             if (!ctx.SetPiece && ownerDepth < 0.22f && pressure < 2.5f + 1.5f * (1f - diff.Theta) &&
                 best.Score < 0.15f - 0.15f * diff.Theta)
                 canClear = PickClearance(world, team, ballPos, sign, out clearTo);
+            bool keeping = false;
             if (canClear)
             {
                 best = new TeamAIOption
@@ -331,6 +344,7 @@ namespace OpenFifa.Core
             // Every kick would be smothered at the foot: keep the ball (turn away, or shield) until a lane opens.
             else if (!ctx.SetPiece && best.Action != TeamAIAction.None && best.Block > 0.6f * PressAwareness(diff.Theta))
             {
+                keeping = true;
                 if (LastCarry.Score > -998f && LastCarry.Risk < 0.85f) best = LastCarry;
                 else
                 {
@@ -345,6 +359,7 @@ namespace OpenFifa.Core
             // Shield: tight pressure, nothing on, back to goal.
             else if (!ctx.SetPiece && !ctx.IsGoalkeeper && pressure < 1.8f && best.Score < 0.12f)
             {
+                keeping = true;
                 best = new TeamAIOption
                 {
                     Action = TeamAIAction.Shield, Intent = TeamAIIntent.Shield, Target = ballPos, TargetIndex = -1,
@@ -355,6 +370,28 @@ namespace OpenFifa.Core
             {
                 // Nothing evaluated (e.g. set piece with no receiver): hold the ball.
                 best = new TeamAIOption { Action = TeamAIAction.None, Intent = TeamAIIntent.Carry, Target = ballPos, TargetIndex = -1 };
+            }
+
+            // Keeping the ball has a time limit (the keeper has his 6 s): against a presser who stays on him the
+            // carrier would otherwise shield forever. Past the limit he turns into space if there is any, then plays
+            // the least blocked pass (often back to the keeper) or a hopeful ball / clearance.
+            if (keeping && !ctx.IsGoalkeeper)
+            {
+                if (owner.Id != _keepOwnerId || _keepSince < 0f || world.Time - _keepLastSeen > KeepGap)
+                {
+                    _keepOwnerId = owner.Id;
+                    _keepSince = world.Time;
+                }
+                _keepLastSeen = world.Time;
+                KeepSeconds = world.Time - _keepSince;
+                float limit = KeepLimit(diff.Theta);
+                if (KeepSeconds >= limit)
+                    best = Escalate(world, team, ballPos, sign, ownerDepth, best, KeepSeconds - limit);
+            }
+            else
+            {
+                _keepSince = -1f;
+                KeepSeconds = 0f;
             }
 
             LastChoice = best;
@@ -380,17 +417,49 @@ namespace OpenFifa.Core
             {
                 float dist = TeamAIMath.FlatDistance(from, p);
                 float t = action == TeamAIAction.LobPass ? Model.LobPassTime(dist)
-                    : action == TeamAIAction.Cross ? Model.CrossTime(dist) : Model.GroundPassTime(dist);
+                    : action == TeamAIAction.Cross ? Model.CrossTime(dist) : Model.GroundPassTimeTo(dist, rec.BallControl);
                 p = rec.Position + vel * t + extra;
             }
             return TeamAIMath.ClampToPitch(new SimVec3(p.X, 0f, p.Z), pitch, 0.5f);
         }
 
-        private static bool PickClearance(TeamAIWorld world, int team, SimVec3 ballPos, int sign, out SimVec3 clearTo)
+        /// <summary>
+        /// Seconds a carrier keeps the ball (shielding, or carrying because every kick is blocked) before he forces
+        /// the issue: 2.5 s at theta 0 down to 1.5 s at theta 1, since a strong side moves the ball on sooner.
+        /// </summary>
+        public static float KeepLimit(float theta) => TeamAIMath.Lerp(2.5f, 1.5f, TeamAIMath.Clamp01(theta));
+
+        /// <summary>Seconds past <see cref="KeepLimit"/> during which a turn into space is still tried before a kick.</summary>
+        public const float KeepTurnWindow = 0.8f;
+        /// <summary>A gap (s) between keeping decisions longer than this starts a new keep.</summary>
+        private const float KeepGap = 0.5f;
+
+        private TeamAIOption Escalate(TeamAIWorld world, int team, SimVec3 ballPos, int sign, float ownerDepth,
+            in TeamAIOption kept, float pastLimit)
+        {
+            // 1. Turn and carry into space, if a lane is genuinely open (and he is not already carrying).
+            if (pastLimit < KeepTurnWindow && kept.Intent != TeamAIIntent.Carry && LastCarry.Score > -998f &&
+                LastCarry.Control > 0.6f)
+                return LastCarry;
+            // 2. The least blocked pass, back to the keeper included.
+            if (LastSafestPass.TargetIndex >= 0 && LastSafestPass.Block < 0.9f) return LastSafestPass;
+            // 3. A hopeful ball forward (a clearance from deep), into the least blocked channel.
+            float depth = TeamAIMath.Clamp(ownerDepth + 0.25f, 0.62f, 0.9f);
+            PickClearance(world, team, ballPos, sign, out var to, depth);
+            float dist = TeamAIMath.FlatDistance(ballPos, to);
+            return new TeamAIOption
+            {
+                Action = TeamAIAction.LobPass, Intent = TeamAIIntent.Clear, Target = to, TargetIndex = -1,
+                Score = kept.Score, Power = ownerDepth < 0.3f ? 1f : TeamAIMath.Clamp(dist / MaxLobPass, 0.4f, 1f)
+            };
+        }
+
+        private static bool PickClearance(TeamAIWorld world, int team, SimVec3 ballPos, int sign, out SimVec3 clearTo,
+            float depth = 0.62f)
         {
             var pitch = world.Pitch;
             float side = ballPos.X >= 0f ? 1f : -1f;
-            float z = TeamAIMath.DepthToZ(0.62f, sign, pitch);
+            float z = TeamAIMath.DepthToZ(depth, sign, pitch);
             clearTo = new SimVec3(side * pitch.HalfWidth * 0.6f, 0f, z);
             float bestBlock = BlockRisk(world, team, ballPos, TeamAIMath.FlatDirection(ballPos, clearTo), LobLaunchDelay);
             for (int k = 0; k < 2; k++)
@@ -407,10 +476,13 @@ namespace OpenFifa.Core
         {
             var pitch = world.Pitch;
             var from = TeamAIMath.Flat(world.Ball.Position);
+            // Ground passes arrive no faster than the receiver can take cleanly (TeamAIBallModel.GroundPassPower).
+            float recControl = world.Players[recIndex].BallControl;
+            float groundPower = lofted ? 0f : Model.GroundPassPower(dist, recControl);
             float tBall = action == TeamAIAction.Cross ? Model.CrossTime(dist)
-                : lofted ? Model.LobPassTime(dist) : Model.GroundPassTime(dist);
+                : lofted ? Model.LobPassTime(dist) : Model.GroundPassTime(dist, Model.ArrivalSpeedForPower(groundPower));
             float control = TeamAIPitchControl.Evaluate(world, owner.Team, target, tBall, ownerIndex);
-            float launch = lofted ? 0f : Model.GroundLaunchSpeed(dist, Model.ArrivalSpeedForPower(TeamAIBallModel.GroundPassPower(dist)));
+            float launch = lofted ? 0f : Model.GroundLaunchSpeed(dist, Model.ArrivalSpeedForPower(groundPower));
             float risk = InterceptionRisk(world, owner.Team, from, target, tBall, lofted, NearPasserRadius, lofted ? null : Model, launch);
             bool fromHands = owner.Role == TeamAIRole.GK && world.Ball.Position.Y > 0.5f;
             float block = BlockRisk(world, owner.Team, from, TeamAIMath.FlatDirection(from, target),
@@ -446,16 +518,22 @@ namespace OpenFifa.Core
                 score += kindMatches ? TeamAIUserDirectives.PassCallBonus : TeamAIUserDirectives.PassCallBonus * 0.5f;
             }
 
-            if (score > LastBestPass.Score)
+            bool bestSoFar = score > LastBestPass.Score;
+            // Least blocked pass, ties (within 0.05) broken by score: the way out for a carrier kept too long.
+            bool safest = block < LastSafestPass.Block - 0.05f ||
+                          (block < LastSafestPass.Block + 0.05f && score > LastSafestPass.Score);
+            if (bestSoFar || safest)
             {
                 float power = action == TeamAIAction.LobPass ? TeamAIMath.Clamp(dist / MaxLobPass, 0.25f, 1f)
                     : action == TeamAIAction.Cross ? TeamAIMath.Clamp(dist / 45f, 0.35f, 1f)
-                    : TeamAIBallModel.GroundPassPower(dist);
-                LastBestPass = new TeamAIOption
+                    : groundPower;
+                var opt = new TeamAIOption
                 {
                     Action = action, Intent = TeamAIIntent.Pass, Target = target, TargetIndex = recIndex,
                     Score = score, Control = control, Risk = risk, Power = power, Block = block
                 };
+                if (bestSoFar) LastBestPass = opt;
+                if (safest) LastSafestPass = opt;
             }
         }
 

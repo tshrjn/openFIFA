@@ -613,7 +613,8 @@ namespace OpenFifa.Core
                         if (score > best.Score)
                         {
                             float power = action == TeamAIAction.Pass
-                                ? TeamAIMath.Clamp(dist / TeamAIOnBall.MaxGroundPass, 0.12f, 1f)
+                                ? Math.Min(TeamAIMath.Clamp(dist / TeamAIOnBall.MaxGroundPass, 0.12f, 1f),
+                                    TeamAIBallModel.Default.GroundPassPower(dist, rec.BallControl))
                                 : TeamAIMath.Clamp(dist / 45f, 0.35f, 1f);
                             best = new TeamAIOption
                             {

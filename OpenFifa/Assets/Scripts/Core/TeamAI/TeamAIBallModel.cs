@@ -31,6 +31,14 @@ namespace OpenFifa.Core
         public readonly float PassArrivalSpeedMin;
         public readonly float PassArrivalSpeedRange;
         public readonly float PassMaxSpeed;
+        /// <summary>Sim first touch: relative ball speed (m/s) a 0-control player kills cleanly, and the gain up to 1.</summary>
+        public readonly float FirstTouchCleanSpeedMin;
+        public readonly float FirstTouchCleanSpeedRange;
+        /// <summary>
+        /// Margin (m/s) AI ground passes keep under the receiver's clean first-touch speed: the sim judges the ball's
+        /// speed relative to the receiver, who is often stepping toward it.
+        /// </summary>
+        public const float FirstTouchMargin = 1.5f;
         /// <summary>Extra lead (m) the sim gives a through ball along the receiver's run.</summary>
         public readonly float ThroughLeadDistance;
 
@@ -54,6 +62,8 @@ namespace OpenFifa.Core
             PassArrivalSpeedMin = actions.PassArrivalSpeedMin;
             PassArrivalSpeedRange = actions.PassArrivalSpeedRange;
             PassMaxSpeed = actions.PassMaxSpeed;
+            FirstTouchCleanSpeedMin = actions.FirstTouchCleanSpeedMin;
+            FirstTouchCleanSpeedRange = actions.FirstTouchCleanSpeedRange;
             ThroughLeadDistance = actions.ThroughLeadDistance;
 
             // ---- Rolling master run ----
@@ -125,14 +135,37 @@ namespace OpenFifa.Core
         public float ArrivalSpeedForPower(float power) => PassArrivalSpeedMin + PassArrivalSpeedRange * TeamAIMath.Clamp01(power);
 
         /// <summary>
-        /// The power the team AI uses for a ground pass of this length (see TeamAIOnBall). Passes are played firm: the
-        /// arrival speed (4 + 5 x power m/s) stays well under any receiver's clean first-touch speed (6 + 12 x control),
-        /// and a soft pass (a 15 m ball taking ~1.9 s) is picked off by anyone near the lane.
+        /// The power the team AI would use for a ground pass of this length to a receiver with a perfect first touch
+        /// (see <see cref="GroundPassPower(float, float)"/>): 0.5 + dist / 60, capped at 1. Passes are played firm: a
+        /// soft pass (a 15 m ball taking ~1.9 s) is picked off by anyone near the lane.
         /// </summary>
         public static float GroundPassPower(float dist) => TeamAIMath.Clamp(0.5f + dist / 60f, 0.5f, 1f);
 
-        /// <summary>Seconds for an AI ground pass of <paramref name="dist"/> m (power from the AI's own mapping).</summary>
+        /// <summary>
+        /// Power for a ground pass of <paramref name="dist"/> m to a receiver with ball control
+        /// <paramref name="receiverControl"/> (0..1): the firm <see cref="GroundPassPower(float)"/>, lowered so the
+        /// ball arrives (<see cref="ArrivalSpeedForPower"/>, 4 + 5 x power m/s with the default config) at least
+        /// <see cref="FirstTouchMargin"/> under his clean first-touch speed (6 + 12 x control). A 0-control receiver
+        /// (clean up to 6 m/s) gets a 4.5 m/s ball; from control 0.375 up every pass keeps its firm power.
+        /// </summary>
+        public float GroundPassPower(float dist, float receiverControl)
+        {
+            float power = GroundPassPower(dist);
+            float maxArrive = MaxCleanArrivalSpeed(receiverControl);
+            float cap = PassArrivalSpeedRange > 1e-4f ? (maxArrive - PassArrivalSpeedMin) / PassArrivalSpeedRange : 1f;
+            return TeamAIMath.Clamp01(Math.Min(power, cap));
+        }
+
+        /// <summary>Fastest arrival (m/s) a receiver of this control takes cleanly, less <see cref="FirstTouchMargin"/>.</summary>
+        public float MaxCleanArrivalSpeed(float receiverControl) =>
+            FirstTouchCleanSpeedMin + FirstTouchCleanSpeedRange * TeamAIMath.Clamp01(receiverControl) - FirstTouchMargin;
+
+        /// <summary>Seconds for an AI ground pass of <paramref name="dist"/> m (power from <see cref="GroundPassPower(float)"/>).</summary>
         public float GroundPassTime(float dist) => GroundPassTime(dist, ArrivalSpeedForPower(GroundPassPower(dist)));
+
+        /// <summary>Seconds for an AI ground pass of <paramref name="dist"/> m to a receiver of this ball control.</summary>
+        public float GroundPassTimeTo(float dist, float receiverControl) =>
+            GroundPassTime(dist, ArrivalSpeedForPower(GroundPassPower(dist, receiverControl)));
 
         /// <summary>
         /// Seconds for a ground pass of <paramref name="dist"/> m whose launch speed is chosen so it arrives at

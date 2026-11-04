@@ -21,6 +21,8 @@ namespace OpenFifa.Core
         public float Defending;
         public float Reactions;
         public float Goalkeeping;
+        /// <summary>Ball control (0..1): sets the fastest pass he can take cleanly on the first touch.</summary>
+        public float BallControl;
         public bool Active;
         public bool HumanControlled;
 
@@ -42,6 +44,7 @@ namespace OpenFifa.Core
                 Defending = 0.7f,
                 Reactions = 0.7f,
                 Goalkeeping = role == TeamAIRole.GK ? 0.75f : 0.1f,
+                BallControl = 0.7f,
                 Active = true,
                 HumanControlled = false
             };

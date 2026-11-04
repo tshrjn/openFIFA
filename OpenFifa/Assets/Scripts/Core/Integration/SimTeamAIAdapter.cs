@@ -16,6 +16,14 @@ namespace OpenFifa.Core
         public const float ArriveDeceleration = 5f;
         /// <summary>Throttle while braking: low enough to shed speed, non-zero so the player keeps turning to the spot.</summary>
         public const float BrakeThrottle = 0.05f;
+        /// <summary>A move target slower than this (m/s) is treated as a fixed spot.</summary>
+        public const float MovingTargetSpeed = 0.5f;
+        /// <summary>
+        /// Typical jog and sprint top speeds (m/s; sim: sprint 6.6-9.7, jog 62% of it) used to turn a target's speed
+        /// into a throttle. Only used to keep pace with a moving target; the live closing speed corrects any error.
+        /// </summary>
+        public const float AssumedJogSpeed = 5f;
+        public const float AssumedSprintSpeed = 8f;
 
         public readonly TeamAIWorld World;
         public readonly TeamAITactics HomeTactics;
@@ -60,6 +68,7 @@ namespace OpenFifa.Core
                 p.Dribbling = Avg(a.Dribbling, a.BallControl, a.Agility);
                 p.Defending = Avg(a.StandingTackle, a.SlidingTackle, a.Reactions);
                 p.Reactions = SimPlayerAttributes.N(a.Reactions);
+                p.BallControl = SimPlayerAttributes.N(a.BallControl);
                 p.Goalkeeping = a.IsGoalkeeper ? Avg(a.GkDiving, a.GkReflexes, a.GkPositioning) : 0.1f;
                 World.Players[id] = p;
             }
@@ -184,6 +193,12 @@ namespace OpenFifa.Core
         /// Converts one AI command to a sim intent. Movement throttles down near the target. One-shot actions
         /// (kicks, tackles) are only forwarded when <paramref name="allowOneShot"/> is true, so a command that stays
         /// current for several ticks fires once; held actions (jockey, shield) pass every tick.
+        /// <para>
+        /// Arrival braking is on the closing speed: for a fixed spot that is the player's speed, for a target moving
+        /// away along the approach (<see cref="AIPlayerCommand.MoveTargetVelocity"/>: a fleeing carrier, a rolling
+        /// ball, the offside line) only the speed in excess of the target's counts, so a presser keeps running onto a
+        /// carrier instead of pulling up 6 m short of him.
+        /// </para>
         /// </summary>
         public static PlayerIntent ToIntent(in AIPlayerCommand cmd, in SimPlayer player, bool allowOneShot)
         {
@@ -192,20 +207,39 @@ namespace OpenFifa.Core
             // at the decision rate, and a sprinter following a 0.1 s old direction runs ~0.8 m past his spot.
             SimVec3 to = (cmd.MoveTarget - player.Position).Flat;
             float dist = to.Magnitude;
+            SimVec3 tv = cmd.MoveTargetVelocity.Flat;
+            float tvSpeed = tv.Magnitude;
+            bool moving = tvSpeed > MovingTargetSpeed;
             if (dist > ArriveRadius)
             {
                 SimVec3 dir = to / dist;
                 float throttle = cmd.Sprint ? 1f : SimMath.Clamp((dist - ArriveRadius) / SlowRadius, 0.25f, 1f);
                 bool sprint = cmd.Sprint;
-                // Arrive: brake when the stopping distance at a sure deceleration reaches the spot.
                 float speed = player.Velocity.Flat.Magnitude;
+                float closing = speed;
+                if (moving)
+                {
+                    // Keep pace with a target running away along the approach, then close on top of that.
+                    float recede = SimMath.Max(0f, SimVec3.Dot(tv, dir));
+                    if (recede > AssumedJogSpeed * 0.9f) { sprint = true; throttle = 1f; }
+                    else if (!sprint) throttle = SimMath.Max(throttle, SimMath.Min(1f, recede / AssumedJogSpeed + 0.25f));
+                    closing = SimVec3.Dot(player.Velocity.Flat, dir) - recede;
+                }
+                // Arrive: brake when the stopping distance at a sure deceleration reaches the spot.
                 float allowed = (float)Math.Sqrt(2f * ArriveDeceleration * SimMath.Max(0f, dist - ArriveRadius * 0.5f));
-                if (speed > allowed + 0.25f)
+                if (closing > allowed + 0.25f)
                 {
                     throttle = BrakeThrottle;
                     sprint = false;
                 }
                 intent.Move = dir * throttle;
+                intent.Sprint = sprint;
+            }
+            else if (moving)
+            {
+                // On a moving target: run with it.
+                bool sprint = tvSpeed > AssumedJogSpeed * 0.9f;
+                intent.Move = tv / tvSpeed * SimMath.Clamp01(tvSpeed / (sprint ? AssumedSprintSpeed : AssumedJogSpeed));
                 intent.Sprint = sprint;
             }
 
