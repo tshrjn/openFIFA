@@ -71,6 +71,12 @@ namespace OpenFifa.Core
         private readonly bool[] _refreshed = new bool[MatchSimState.PlayerCount];
         private SimVec3[] _path = new SimVec3[1];
         private SimVec3[] _pathVel = new SimVec3[1];
+        /// <summary>Full ball state at each path tick, so the next tick can tell whether the sim followed the prediction.</summary>
+        private SimBall[] _pathBall = new SimBall[1];
+        /// <summary>Tick the cached path was built on (-1 = none) and the sim it belongs to.</summary>
+        private int _pathTick = -1;
+        private int _pathSteps;
+        private MatchSim _pathSim;
         private int _nextId = 1;
 
         /// <summary>Monotonic sim time of the last update (s).</summary>
@@ -320,6 +326,8 @@ namespace OpenFifa.Core
             {
                 _path = new SimVec3[n + 1];
                 _pathVel = new SimVec3[n + 1];
+                _pathBall = new SimBall[n + 1];
+                _pathTick = -1;
             }
 
             // Keepers with a save attempt to come for this kick (the sim's own rule).
@@ -330,10 +338,23 @@ namespace OpenFifa.Core
             SimVec3 saveBall = SimVec3.Zero;
 
             SimBall b = s.Ball;
-            int steps = 0;
-            _path[0] = b.Position;
-            _pathVel[0] = b.Velocity;
-            for (int k = 1; k <= n; k++)
+            int startK = 1;
+            bool saveFree = !homeSave && !awaySave;
+            if (saveFree && _pathTick == s.Tick - 1 && _pathSim == sim && _pathSteps == n && SameBall(_pathBall[1], s.Ball))
+            {
+                // The sim moved the ball exactly as last tick's free-flight path predicted, so that path from k = 1 on is
+                // this tick's path from k = 0: shift it and integrate only the new final tick. Bit-identical to a rebuild.
+                System.Array.Copy(_path, 1, _path, 0, n);
+                System.Array.Copy(_pathVel, 1, _pathVel, 0, n);
+                System.Array.Copy(_pathBall, 1, _pathBall, 0, n);
+                b = _pathBall[n - 1];
+                startK = n;
+            }
+            int steps = startK - 1;
+            _path[0] = s.Ball.Position;
+            _pathVel[0] = s.Ball.Velocity;
+            _pathBall[0] = s.Ball;
+            for (int k = startK; k <= n; k++)
             {
                 for (int sub = 0; sub < cfg.BallSubsteps; sub++)
                 {
@@ -347,9 +368,15 @@ namespace OpenFifa.Core
 
                 _path[k] = b.Position;
                 _pathVel[k] = b.Velocity;
+                _pathBall[k] = b;
                 steps = k;
                 if (b.InNet != 0 || saver >= 0) break;
             }
+
+            // Keep the path for the next tick only when it is a complete free flight with no keeper save checks.
+            _pathTick = saveFree && saver < 0 && b.InNet == 0 ? s.Tick : -1;
+            _pathSteps = steps;
+            _pathSim = sim;
 
             if (saver >= 0)
             {
@@ -394,6 +421,16 @@ namespace OpenFifa.Core
             if (best >= 0)
                 SetPredicted(sim, best, AnimActionKind.FirstTouch, false, s.Tick + bestK, _path[bestK], _pathVel[bestK]);
         }
+
+        /// <summary>Bit-exact ball state comparison (floats compared by bits, so -0 and NaN never match loosely).</summary>
+        private static bool SameBall(in SimBall a, in SimBall b) =>
+            Same(a.Position, b.Position) && Same(a.Velocity, b.Velocity) && Same(a.Spin, b.Spin) &&
+            a.InNet == b.InNet && a.Grounded == b.Grounded;
+
+        private static bool Same(SimVec3 a, SimVec3 b) =>
+            Bits(a.X) == Bits(b.X) && Bits(a.Y) == Bits(b.Y) && Bits(a.Z) == Bits(b.Z);
+
+        private static int Bits(float f) => System.BitConverter.SingleToInt32Bits(f);
 
         private static bool SaveCandidate(MatchSim sim, int gk)
         {
