@@ -310,6 +310,9 @@ namespace OpenFifa.Gameplay
 
             // Team color
             player.GetComponent<MeshRenderer>().sharedMaterial = CreateColorMaterial(teamColor);
+            // [Kits] Swap the flat colour for the match kit (OpenFifa/Kit shader, names/numbers).
+            // Self-contained hook; if kits are unavailable the flat colour above stays. See MatchKitBinder.
+            MatchKitBinder.Attach(player, team == TeamIdentifier.TeamA, index);
 
             // Physics — add explicitly before PlayerController (which also requires it)
             var rb = player.AddComponent<Rigidbody>();
