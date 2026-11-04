@@ -241,5 +241,74 @@ namespace OpenFifa.Tests.Editor.LocalMultiplayer
             Assert.IsFalse(s.Sim.State.Players[id].SentOff);
             Assert.AreEqual(0L, otherSeats & (1L << id), "never onto the partner's player");
         }
+
+        private static float Excursion(SinglePlayerMatchSession s, int id)
+        {
+            var p = s.Sim.State.Players[id].Position;
+            var pitch = s.Sim.Config.Pitch;
+            return System.Math.Max(System.Math.Abs(p.X) - pitch.HalfWidth, System.Math.Abs(p.Z) - pitch.HalfLength);
+        }
+
+        [Test]
+        public void Seats_NoInputFor10Seconds_StayWithinTheFieldPlus2m()
+        {
+            var m = new LocalMatch(Options(), Seats(2, 0), _ => new LocalGamepadInput());
+            var s = m.Session;
+            for (int i = 0; i < 60 * 10; i++)
+            {
+                s.StepOnce(null);
+                for (int k = 0; k < 2; k++)
+                {
+                    int id = s.HumanSlots[k].ControlledId;
+                    Assert.LessOrEqual(Excursion(s, id), 2f, $"seat {k} player {id} at {s.Sim.State.Players[id].Position}, tick {s.Sim.Tick}");
+                }
+            }
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public void Seats_PlayStopped_SeatPlayersWalkBackOnAndRespectKickOffHalves(int seats)
+        {
+            // Bots chase the ball out of play; while play is stopped the session walks them back on (the sim alone
+            // lets them stand 4 m into the run-off). Applies to the single-player seat too (seats = 1).
+            var m = new LocalMatch(new SinglePlayerMatchOptions
+            {
+                Level = TeamAIDifficultyLevel.Professional, Seed = 1, Config = new MatchSimConfig { HalfDurationSeconds = 360f },
+            }, Seats(seats, 0), _ => new ScriptedGamepadBot());
+            var s = m.Session;
+            float worst = 0f;
+            int kickOffTicks = 0;
+            for (int i = 0; i < 60 * 200 && !s.IsFinished; i++)
+            {
+                s.StepOnce(null);
+                var st = s.Sim.State;
+                if (st.Phase == SimMatchPhase.InPlay) continue;
+                for (int k = 0; k < seats; k++)
+                {
+                    int id = s.HumanSlots[k].ControlledId;
+                    worst = System.Math.Max(worst, Excursion(s, id));
+                    if (st.Phase == SimMatchPhase.AwaitingRestart && st.PendingRestart == RestartType.KickOff && id != st.RestartTakerId)
+                    {
+                        kickOffTicks++;
+                        float own = st.Players[id].Position.Z * s.Sim.AttackSign(MatchSim.TeamOf(id));
+                        Assert.LessOrEqual(own, 0.01f, $"seat {k} in the opponents' half at a kick-off (tick {st.Tick})");
+                    }
+                }
+            }
+            Assert.Less(worst, 2.5f, "a seat player stood deep in the run-off while play was stopped");
+            if (seats > 1) Assert.Greater(kickOffTicks, 0, "no kick-off was checked"); // a lone seat is the taker at its own kick-off
+        }
+
+        [Test]
+        public void PitchToStick_InvertsTheCameraMapping()
+        {
+            for (float yaw = -3f; yaw < 3f; yaw += 0.7f)
+            {
+                var dir = new SimVec3(0.6f, 0f, -0.8f);
+                var back = TeammateCallResolver.StickToPitch(SeatRestartGuard.PitchToStick(dir, yaw), yaw);
+                Assert.AreEqual(dir.X, back.X, 1e-4f);
+                Assert.AreEqual(dir.Z, back.Z, 1e-4f);
+            }
+        }
     }
 }

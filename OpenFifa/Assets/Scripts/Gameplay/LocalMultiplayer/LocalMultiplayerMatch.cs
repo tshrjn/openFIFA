@@ -124,7 +124,7 @@ namespace OpenFifa.Gameplay.LocalMultiplayer
                 _markers[k].gameObject.SetActive(show);
                 if (!show) continue;
                 var body = _match.PlayerTransform(slot.ControlledId);
-                if (body != null) _markers[k].position = body.position + new Vector3(0f, 2.25f, 0f);
+                if (body != null) _markers[k].position = body.position + new Vector3(0f, 2.0f, 0f);
             }
         }
 
