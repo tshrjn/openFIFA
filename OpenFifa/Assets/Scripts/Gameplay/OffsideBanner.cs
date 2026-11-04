@@ -9,7 +9,7 @@ namespace OpenFifa.Gameplay
     /// Original broadcast-style design: dark plate, coloured accent bar, team colour chip.
     /// Slides in from the left using unscaled time (works while the game is frozen).
     /// </summary>
-    public class OffsideBanner : MonoBehaviour
+    public class OffsideBanner : MonoBehaviour, IOffsideBannerView
     {
         private RectTransform _plate;
         private CanvasGroup _group;
@@ -86,6 +86,9 @@ namespace OpenFifa.Gameplay
             detailRect.offsetMax = new Vector2(-24f, 0f);
             _detail = AddText(detailRect, "", 26f, TextAlignmentOptions.Left, new Color(0.85f, 0.88f, 0.95f));
         }
+
+        public void Show(OffsideBannerInfo info) =>
+            Show(info.ShirtNumber, info.PlayerName, info.TeamLabel, info.TeamColor);
 
         /// <summary>Slide in with the offender's details.</summary>
         public void Show(int shirtNumber, string playerName, string teamLabel, Color teamColor)
