@@ -94,11 +94,23 @@ python3 -m venv ~/GameDev/.tts/venv && ~/GameDev/.tts/venv/bin/pip install kokor
 ~/GameDev/.tts/venv/bin/python tools/commentary/render_tts.py --jobs 6
 ```
 
+### Where the clips live
+
+Only `audio/en/index.json` is committed: for each clip its length, render hash and sha256, plus `clipsRelease`, the
+GitHub Release tag that holds exactly those files. The `.ogg` files are git-ignored and ship as a release asset
+(`commentary-clips-en-<tag>.tar.zst`, about 28 MB), so re-renders never grow the git history.
+
+- After a render: `python3 tools/commentary/clips.py pack --tag commentary-audio-vN --publish` (tarball, sets
+  `clipsRelease`, creates the release with `gh`), then commit `index.json`. A render that changed any clip clears
+  `clipsRelease` until you pack again.
+- On a build machine: `tools/commentary/fetch_clips.sh` downloads the asset, checks every sha256 against the index
+  and installs it into StreamingAssets. The iPad workflow runs it before the Unity export. Tests and captures do not
+  need the clips: line choice reads only `index.json`, so `commentary.txt` is the same with or without them.
+- `python3 tools/commentary/clips.py verify` checks local clips against the index.
+
 Licence and disclosure: see `THIRD_PARTY_NOTICES.md` (Kokoro is Apache-2.0; the voices are AI-generated and must be
 disclosed as such in store listings). Clip ids transliterate accents (`Ødegaard` -> `name.odegaard.*`) the same way
-in `RosterSchema.Slug` and the manifest tool. The clips are about 30 MB of Ogg; if the repo grows uncomfortable,
-move `StreamingAssets/Commentary/audio/**/*.ogg` to Git LFS (not set up on CodeBox2 yet).
-
+in `RosterSchema.Slug` and the manifest tool. 
 Change a voice by editing `VOICES` in the script and re-rendering. A licensed studio voice or a better TTS can
 replace Kokoro without code changes, as long as it writes the same files and index. Never use a cloned voice of a
 real commentator.

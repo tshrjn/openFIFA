@@ -111,3 +111,7 @@ OpenFifa/.build/
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Commentary clips ship as a GitHub Release asset (tools/commentary/clips.py); only index.json is committed
+OpenFifa/Assets/StreamingAssets/Commentary/audio/**/*.ogg
+OpenFifa/Assets/StreamingAssets/Commentary/audio/**/*.ogg.meta
