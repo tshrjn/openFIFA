@@ -32,6 +32,7 @@ namespace OpenFifa.Gameplay
         private OffsideBannerInfo _bannerInfo;
         private Action _onComplete;
         private float _restoreTimeScale = 1f;
+        private readonly OffsideSkipGate _skipGate = new OffsideSkipGate();
 
         /// <summary>Referee whistle for the offside call (hook audio here).</summary>
         public static event Action OnWhistle;
@@ -129,6 +130,8 @@ namespace OpenFifa.Gameplay
             _onComplete = onComplete;
             _restoreTimeScale = Time.timeScale > 0f ? Time.timeScale : 1f;
             _timeline = new OffsidePresentationTimeline(_config != null ? _config.ToTimingData() : null);
+            _skipGate.GraceSeconds = _config != null ? _config.SkipGraceTime : 0.25f;
+            _skipGate.Begin(SkipControlsDown()); // anything already held is not a skip
 
             OnOffsideCalled?.Invoke(decision);
             Handle(_timeline.Advance(0f));
@@ -147,8 +150,9 @@ namespace OpenFifa.Gameplay
         {
             if (!IsPlaying) return;
 
-            if (_config.Skippable && _timeline.Elapsed >= _config.SkipGraceTime &&
-                (SkipOnAnyInput ? AnyInputPressed() : SkipPressed()))
+            if (_config.Skippable && (SkipOnAnyInput
+                    ? _skipGate.Update(SkipControlsDown(), _timeline.Elapsed)
+                    : _timeline.Elapsed >= _config.SkipGraceTime && SkipPressed()))
             {
                 Skip();
                 return;
@@ -230,32 +234,52 @@ namespace OpenFifa.Gameplay
                    (gamepad.buttonEast.wasPressedThisFrame || gamepad.startButton.wasPressedThisFrame);
         }
 
-        /// <summary>Any keyboard key, gamepad button, mouse click or screen tap pressed this frame.</summary>
-        private static bool AnyInputPressed()
+        /// <summary>
+        /// Skip controls that are down this frame, one bit each (see <see cref="OffsideSkipGate"/>): every gamepad
+        /// button (not the sticks), left/right mouse, any keyboard key, and a one-frame pulse for a touch in phase
+        /// Began. The gate turns these into "new press" edges, so held input never skips.
+        /// </summary>
+        private static ulong SkipControlsDown()
         {
-            var keyboard = Keyboard.current;
-            if (keyboard != null && keyboard.anyKey.wasPressedThisFrame) return true;
-
+            ulong m = 0;
             var gamepad = Gamepad.current;
-            if (gamepad != null &&
-                (Pressed(gamepad.buttonSouth) || Pressed(gamepad.buttonEast) || Pressed(gamepad.buttonWest) ||
-                 Pressed(gamepad.buttonNorth) || Pressed(gamepad.startButton) || Pressed(gamepad.selectButton) ||
-                 Pressed(gamepad.leftShoulder) || Pressed(gamepad.rightShoulder) ||
-                 Pressed(gamepad.leftTrigger) || Pressed(gamepad.rightTrigger) ||
-                 Pressed(gamepad.leftStickButton) || Pressed(gamepad.rightStickButton) ||
-                 Pressed(gamepad.dpad.up) || Pressed(gamepad.dpad.down) ||
-                 Pressed(gamepad.dpad.left) || Pressed(gamepad.dpad.right)))
-                return true;
-
+            if (gamepad != null)
+            {
+                Bit(ref m, 0, gamepad.buttonSouth); Bit(ref m, 1, gamepad.buttonEast);
+                Bit(ref m, 2, gamepad.buttonWest); Bit(ref m, 3, gamepad.buttonNorth);
+                Bit(ref m, 4, gamepad.startButton); Bit(ref m, 5, gamepad.selectButton);
+                Bit(ref m, 6, gamepad.leftShoulder); Bit(ref m, 7, gamepad.rightShoulder);
+                Bit(ref m, 8, gamepad.leftTrigger); Bit(ref m, 9, gamepad.rightTrigger);
+                Bit(ref m, 10, gamepad.leftStickButton); Bit(ref m, 11, gamepad.rightStickButton);
+                Bit(ref m, 12, gamepad.dpad.up); Bit(ref m, 13, gamepad.dpad.down);
+                Bit(ref m, 14, gamepad.dpad.left); Bit(ref m, 15, gamepad.dpad.right);
+            }
             var mouse = Mouse.current;
-            if (mouse != null && (mouse.leftButton.wasPressedThisFrame || mouse.rightButton.wasPressedThisFrame))
-                return true;
-
+            if (mouse != null)
+            {
+                Bit(ref m, 16, mouse.leftButton);
+                Bit(ref m, 17, mouse.rightButton);
+            }
+            var keyboard = Keyboard.current;
+            if (keyboard != null) Bit(ref m, 18, keyboard.anyKey);
             var touch = Touchscreen.current;
-            return touch != null && touch.primaryTouch.press.wasPressedThisFrame;
+            if (touch != null)
+            {
+                var touches = touch.touches;
+                for (int i = 0; i < touches.Count; i++)
+                    if (touches[i].phase.ReadValue() == UnityEngine.InputSystem.TouchPhase.Began)
+                    {
+                        m |= 1UL << 19;
+                        break;
+                    }
+            }
+            return m;
         }
 
-        private static bool Pressed(ButtonControl button) => button != null && button.wasPressedThisFrame;
+        private static void Bit(ref ulong mask, int bit, ButtonControl button)
+        {
+            if (button != null && button.isPressed) mask |= 1UL << bit;
+        }
 
         private void OnDisable()
         {
