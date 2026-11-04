@@ -15,6 +15,12 @@ namespace OpenFifa.Core
         /// <summary>Name shown on HUD and spoken by commentary (usually the surname).</summary>
         public string KnownAs { get; }
         public int ShirtNumber { get; }
+        /// <summary>Same as <see cref="ShirtNumber"/>; the appearance contract calls it "squadNumber".</summary>
+        public int SquadNumber => ShirtNumber;
+        /// <summary>Name printed on the back of the shirt, as printed (e.g. "B.FERNANDES"). Defaults to KnownAs in capitals.</summary>
+        public string ShirtName { get; }
+        /// <summary>Optional look for the appearance pipeline; null when the file has none.</summary>
+        public RosterAppearance Appearance { get; }
         public string Nationality { get; }
         public int Age { get; }
         public int HeightCm { get; }
@@ -34,7 +40,7 @@ namespace OpenFifa.Core
 
         public RosterPlayer(string id, string firstName, string lastName, string knownAs, int shirtNumber,
             string nationality, int age, int heightCm, PreferredFoot preferredFoot, int weakFoot, int skillMoves,
-            RosterPosition[] positions, int[] attributes)
+            RosterPosition[] positions, int[] attributes, string shirtName = null, RosterAppearance appearance = null)
         {
             if (positions == null || positions.Length == 0) throw new ArgumentException("at least one position");
             if (attributes == null || attributes.Length != RosterSchema.AttributeCount)
@@ -44,6 +50,8 @@ namespace OpenFifa.Core
             LastName = lastName ?? string.Empty;
             KnownAs = string.IsNullOrEmpty(knownAs) ? LastName : knownAs;
             ShirtNumber = shirtNumber;
+            ShirtName = string.IsNullOrEmpty(shirtName) ? KnownAs.ToUpperInvariant() : shirtName;
+            Appearance = appearance;
             Nationality = nationality ?? string.Empty;
             Age = age;
             HeightCm = heightCm;

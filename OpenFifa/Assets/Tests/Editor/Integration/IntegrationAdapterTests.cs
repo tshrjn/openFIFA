@@ -390,7 +390,8 @@ namespace OpenFifa.Tests.Editor.Integration
         {
             var problems = new List<string>();
             var leagues = RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems);
-            Assert.AreEqual(1, leagues.Count, string.Join("\n", problems));
+            Assert.AreEqual(0, problems.Count, string.Join("\n", problems));
+            Assert.GreaterOrEqual(leagues.Count, 1);
             var clubs = leagues[0].Clubs;
             var setup = RosterMatchBuilder.BuildSetup(clubs[0], clubs[1], 5, out var home, out var away, out var names, out var ids);
             Assert.IsTrue(setup.Home[0].IsGoalkeeper);
