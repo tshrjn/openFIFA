@@ -118,5 +118,33 @@ namespace OpenFifa.Tests.Editor.Presentation
             Assert.AreEqual(10f, x, 1e-3f);
             Assert.AreEqual(3f, BroadcastFraming.SmoothDamp(3f, 10f, ref v, Smooth, 0f), "dt 0 holds");
         }
+    
+        [Test]
+        public void ResumeSmoothTime_EasesFromSlowStartBackToNormal()
+        {
+            const float Base = 0.3f;
+            float start = BroadcastFraming.ResumeSmoothTime(Base, 0f);
+            Assert.AreEqual(Base / BroadcastFraming.ResumeMinResponse, start, 1e-4f, "gentle start right after the hand-back");
+            float prev = start;
+            for (float t = 0.05f; t < BroadcastFraming.ResumeEaseSeconds; t += 0.05f)
+            {
+                float s = BroadcastFraming.ResumeSmoothTime(Base, t);
+                Assert.LessOrEqual(s, prev + 1e-5f, $"smoothing must only tighten as the ease runs (t={t})");
+                prev = s;
+            }
+            Assert.AreEqual(Base, BroadcastFraming.ResumeSmoothTime(Base, BroadcastFraming.ResumeEaseSeconds), 1e-6f);
+            Assert.AreEqual(Base, BroadcastFraming.ResumeSmoothTime(Base, float.MaxValue), 1e-6f, "no hand-back: normal follow");
+        }
+
+        [Test]
+        public void FollowAxis_AfterResumeFromRest_FirstStepIsGentlerThanNormal()
+        {
+            const float Base = 0.3f, Dt = 1f / 60f;
+            float vEased = 0f, vNormal = 0f;
+            float eased = BroadcastFraming.FollowAxis(0f, ref vEased, 4f, 4f, 0f, 9f, BroadcastFraming.ResumeSmoothTime(Base, 0f), Dt);
+            float normal = BroadcastFraming.FollowAxis(0f, ref vNormal, 4f, 4f, 0f, 9f, Base, Dt);
+            Assert.Greater(eased, 0f);
+            Assert.Less(eased, normal, "eased hand-back moves less on its first frame than the normal follow");
+        }
     }
 }

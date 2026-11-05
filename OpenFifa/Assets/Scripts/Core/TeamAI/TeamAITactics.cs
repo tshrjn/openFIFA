@@ -262,22 +262,25 @@ namespace OpenFifa.Core
             switch (style)
             {
                 case TeamAIStyle.Possession:
-                    t.Set(width: 0.65f, depth: 0.65f, press: 0.6f, direct: 0.25f, runs: 0.55f, counter: 0.3f);
+                    t.Set(width: 0.6f, depth: 0.65f, press: 0.65f, direct: 0.25f, runs: 0.8f, counter: 0.3f);
                     break;
                 case TeamAIStyle.HighPress:
                     t.Set(width: 0.55f, depth: 0.85f, press: 0.95f, direct: 0.55f, runs: 0.6f, counter: 0.75f);
                     break;
                 case TeamAIStyle.CounterAttack:
-                    t.Set(width: 0.45f, depth: 0.3f, press: 0.3f, direct: 0.7f, runs: 0.6f, counter: 1f);
+                    t.Set(width: 0.45f, depth: 0.3f, press: 0.3f, direct: 0.5f, runs: 0.5f, counter: 0.8f);
                     break;
                 case TeamAIStyle.LongBall:
-                    t.Set(width: 0.5f, depth: 0.4f, press: 0.4f, direct: 0.95f, runs: 0.55f, counter: 0.6f);
+                    t.Set(width: 0.5f, depth: 0.4f, press: 0.4f, direct: 0.7f, runs: 0.45f, counter: 0.5f);
                     break;
                 case TeamAIStyle.WingPlay:
                     t.Set(width: 0.95f, depth: 0.5f, press: 0.5f, direct: 0.55f, runs: 0.75f, counter: 0.5f);
                     break;
                 case TeamAIStyle.ParkTheBus:
-                    t.Set(width: 0.25f, depth: 0.1f, press: 0.15f, direct: 0.85f, runs: 0.15f, counter: 0.65f);
+                    t.Set(width: 0.4f, depth: 0.1f, press: 0.3f, direct: 0.5f, runs: 0.1f, counter: 0.5f);
+                    // Built-in defensive mentality: the block stays deep in possession too and few players go forward,
+                    // so the side scores and concedes least (the manager's mentality adds on top).
+                    t.Mentality = TeamAIMentality.Defensive;
                     break;
             }
             return t;

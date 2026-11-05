@@ -3,8 +3,9 @@ namespace OpenFifa.Core
     /// <summary>
     /// Result of an offside check. When <see cref="IsOffence"/> is true, an indirect
     /// free kick goes to <see cref="DefendingTeam"/> at (FreeKickX, FreeKickZ).
-    /// Line positions are world X values from the moment the ball was played,
-    /// for the VAR-style overlay.
+    /// Line positions are depths along the pitch-length axis from the moment the ball was played,
+    /// for the VAR-style overlay: world X in the 4v4 scene, world Z for the 11v11 match sim
+    /// (see <see cref="OffsidePitchFrame"/>).
     /// </summary>
     public class OffsideDecision
     {
@@ -18,11 +19,11 @@ namespace OpenFifa.Core
         public int PasserId { get; }
         public float FreeKickX { get; }
         public float FreeKickZ { get; }
-        /// <summary>World X of the offender's foremost body point when the ball was played.</summary>
+        /// <summary>Depth (pitch-length axis) of the offender's foremost body point when the ball was played.</summary>
         public float AttackerLineX { get; }
-        /// <summary>World X of the second-last opponent's body point nearest the goal line.</summary>
+        /// <summary>Depth (pitch-length axis) of the second-last opponent's body point nearest the goal line.</summary>
         public float DefenderLineX { get; }
-        /// <summary>World X of the ball's point nearest the goal line when it was played.</summary>
+        /// <summary>Depth (pitch-length axis) of the ball's point nearest the goal line when it was played.</summary>
         public float BallLineX { get; }
 
         public TeamIdentifier DefendingTeam =>

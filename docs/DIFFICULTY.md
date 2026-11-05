@@ -35,3 +35,29 @@ Every knob moves one way up the ladder (`DifficultyProfile_EveryLevel_UsesLadder
 Per-match means ± standard error. Balance = GD + 0.2 × (AI shots − user shots). Step z = paired difference from
 the level above divided by its standard error. Save % = keeper saves on shots / (saves + goals from shots); a shot stops counting once it is blocked or deflected off any player, an outfielder takes control of it, or it is passed, intercepted, tackled, hits the woodwork or goes out (so a later save is never credited to it). Measured Nov 2026 after the keeper/finishing follow-up; World Class and above are unchanged from the previous retune (their levers did not move).
 Tuned against a scripted bot only; needs human playtesting.
+
+## The ladder with team styles
+
+The AI side's style (`TeamAIStyle`, see docs/TEAM_TACTICS.md) shifts its overall strength. The manager's
+`StyleExecution` scales every style with difficulty, and each style still has to keep the ladder ordered. We
+checked this with the AI on each style: 24 seeds per level, 6-minute halves, the same scripted user. Every style
+passes the ≥ +0.25 GD per match per level rule. The table is total AI goal difference over the 24 matches
+(fidelity-core 0643029 plus PR #34):
+
+| Style | Beginner | Amateur | Semi-Pro | Professional | World Class | Legendary | Ultimate |
+|---|---|---|---|---|---|---|---|
+| Balanced | −68 | −31 | −1 | +20 | +35 | +65 | +94 |
+| Possession | −55 | −15 | +6 | +16 | +47 | +64 | +93 |
+| HighPress | −59 | −17 | +16 | +23 | +85 | +92 | +130 |
+| CounterAttack | −68 | −22 | +1 | +27 | +49 | +71 | +118 |
+| LongBall | −64 | −30 | −8 | +16 | +69 | +85 | +124 |
+| WingPlay | −59 | −11 | −1 | +12 | +43 | +88 | +104 |
+| ParkTheBus | −69 | −32 | −5 | +10 | +23 | +40 | +86 |
+
+Two steps sit just under the stricter +1.0 balance per match rule that `Difficulty_AllSevenLevels` applies to
+default tactics. Both are within seed noise, so we left them:
+
+- Possession, Semi-Pro → Professional: +23.6 over 24 matches.
+- WingPlay, Legendary → Ultimate: +20.6 over 24 matches.
+
+Re-run this check whenever a style preset or `TeamAIManager.ForDifficulty` changes.

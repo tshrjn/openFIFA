@@ -1,3 +1,4 @@
+using OpenFifa.Core;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -9,6 +10,8 @@ namespace OpenFifa.Gameplay
     /// translucent band between them. Soft edges come from an alpha-falloff texture across
     /// the line width plus a fade at both touchlines. URP-friendly: vertex-coloured
     /// transparent unlit material (Particles/Unlit), falling back to Sprites/Default.
+    /// Axis-aware: line depths are positions along the pitch length, mapped to world X/Z by an
+    /// <see cref="OffsidePitchFrame"/> (X for the 4v4 scene, Z for the 11v11 match sim).
     /// </summary>
     public class OffsideLineOverlay : MonoBehaviour
     {
@@ -21,20 +24,25 @@ namespace OpenFifa.Gameplay
         private Material _solidMaterial;
         private Texture2D _softTexture;
 
-        private float _halfWidth = 15f;
+        private OffsidePitchFrame _frame = OffsidePitchFrame.LengthAlongX(15f);
         private float _height = 0.075f;
         private float _lineWidth = 0.09f;
-        private float _attackerX;
-        private float _defenderX;
+        private float _attackerDepth;
+        private float _defenderDepth;
         private Color _attackerColor = Color.red;
         private Color _defenderColor = Color.cyan;
         private Color _bandColor = new Color(1f, 0f, 0f, 0.18f);
 
         public bool IsVisible { get; private set; }
+        public OffsidePitchFrame Frame => _frame;
 
-        public void Initialize(float pitchHalfWidth, OffsidePresentationConfig config)
+        /// <summary>4v4 scene: pitch length along world X.</summary>
+        public void Initialize(float pitchHalfWidth, OffsidePresentationConfig config) =>
+            Initialize(OffsidePitchFrame.LengthAlongX(pitchHalfWidth), config);
+
+        public void Initialize(OffsidePitchFrame frame, OffsidePresentationConfig config)
         {
-            _halfWidth = pitchHalfWidth;
+            _frame = frame;
             if (config != null)
             {
                 _height = config.LineHeight;
@@ -57,11 +65,13 @@ namespace OpenFifa.Gameplay
             Hide();
         }
 
-        /// <summary>Show both lines at world X positions. Call SetReveal to sweep them in.</summary>
-        public void Show(float attackerLineX, float defenderLineX)
+        /// <summary>
+        /// Show both lines at depths along the pitch length (world X or Z per the frame). Call SetReveal to sweep them in.
+        /// </summary>
+        public void Show(float attackerDepth, float defenderDepth)
         {
-            _attackerX = attackerLineX;
-            _defenderX = defenderLineX;
+            _attackerDepth = attackerDepth;
+            _defenderDepth = defenderDepth;
             IsVisible = true;
             SetActive(true);
             SetReveal(0f);
@@ -72,18 +82,16 @@ namespace OpenFifa.Gameplay
         {
             if (!IsVisible) return;
             reveal = Mathf.Clamp01(reveal);
-            float eased = 1f - Mathf.Pow(1f - reveal, 3f);
-            float zStart = -_halfWidth;
-            float zEnd = Mathf.Lerp(-_halfWidth, _halfWidth, Mathf.Max(0.001f, eased));
+            float eased = Mathf.Max(0.001f, 1f - Mathf.Pow(1f - reveal, 3f));
 
-            ApplyLine(_attackerLine, _attackerX, zStart, zEnd, _lineWidth, _attackerColor);
-            ApplyLine(_defenderLine, _defenderX, zStart, zEnd, _lineWidth, _defenderColor);
+            ApplyLine(_attackerLine, _attackerDepth, eased, _lineWidth, _attackerColor);
+            ApplyLine(_defenderLine, _defenderDepth, eased, _lineWidth, _defenderColor);
 
-            float gap = Mathf.Abs(_attackerX - _defenderX);
+            float gap = Mathf.Abs(_attackerDepth - _defenderDepth);
             bool showBand = gap > _lineWidth;
             _gapBand.enabled = showBand;
             if (showBand)
-                ApplyLine(_gapBand, (_attackerX + _defenderX) * 0.5f, zStart, zEnd, gap, _bandColor, solid: true);
+                ApplyLine(_gapBand, (_attackerDepth + _defenderDepth) * 0.5f, eased, gap, _bandColor, solid: true);
         }
 
         public void Hide()
@@ -99,11 +107,20 @@ namespace OpenFifa.Gameplay
             if (_gapBand != null) _gapBand.enabled = active;
         }
 
-        private void ApplyLine(LineRenderer line, float x, float zStart, float zEnd, float width,
+        /// <summary>World endpoints of a line at <paramref name="depth"/> swept to <paramref name="reveal"/> (0..1).</summary>
+        public void GetLineEndpoints(float depth, float reveal, out Vector3 start, out Vector3 end)
+        {
+            _frame.LineEndpoints(depth, reveal, out float sx, out float sz, out float ex, out float ez);
+            start = new Vector3(sx, _height, sz);
+            end = new Vector3(ex, _height, ez);
+        }
+
+        private void ApplyLine(LineRenderer line, float depth, float reveal, float width,
             Color color, bool solid = false)
         {
-            line.SetPosition(0, new Vector3(x, _height, zStart));
-            line.SetPosition(1, new Vector3(x, _height, zEnd));
+            GetLineEndpoints(depth, reveal, out var start, out var end);
+            line.SetPosition(0, start);
+            line.SetPosition(1, end);
             line.widthMultiplier = width;
 
             // Fade in at both touchlines for soft ends.

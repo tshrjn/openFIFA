@@ -101,10 +101,12 @@ namespace OpenFifa.Tests.Editor.TeamAI
             Assert.Less(bus.Depth, 0.5f);
             Assert.Greater(press.Depth, 0.5f);
             Assert.Greater(press.PressingIntensity, poss.PressingIntensity);
-            Assert.Less(bus.PressingIntensity, 0.3f);
-            Assert.Greater(longBall.Directness, 0.9f);
+            Assert.LessOrEqual(bus.PressingIntensity, 0.3f);
+            Assert.AreEqual(TeamAIMentality.Defensive, bus.Mentality, "park the bus sits deep in possession too");
+            Assert.Greater(longBall.Directness, press.Directness, "long ball is the most direct style");
+            Assert.Greater(longBall.Directness, counter.Directness);
             Assert.Less(poss.Directness, 0.3f);
-            Assert.AreEqual(1f, counter.CounterBoost, 1e-6f);
+            Assert.Greater(counter.CounterBoost, 0.5f, "counter breaks hardest after a regain");
             Assert.AreEqual(1, bus.MaxRunners);
             Assert.AreEqual(3, wing.MaxRunners);
             Assert.Greater(wing.Width, 0.9f);
