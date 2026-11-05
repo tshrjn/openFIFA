@@ -16,7 +16,7 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 5;
+        public const uint Version = 6;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
@@ -51,6 +51,7 @@ namespace OpenFifa.Editor
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
+                if (smr.sharedMesh != null && smr.sharedMesh.vertexCount > 0) SmoothNormals(smr.sharedMesh, SmoothAngle);
                 string result = Bake(root.transform, smr, human);
                 if (result == null) continue;
                 if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
@@ -62,6 +63,57 @@ namespace OpenFifa.Editor
                     smr.sharedMaterials = mats;
                 }
             }
+        }
+
+        /// <summary>Normals within this angle of each other are averaged across split vertices (degrees).</summary>
+        public const float SmoothAngle = 75f;
+
+        /// <summary>
+        /// Smooth shading for the low-poly mannequin: vertices that share a position (hard edges and the split
+        /// shells at the neck, shoulders, elbows and knees) get the area-weighted average of the face normals around
+        /// them, for faces within <see cref="SmoothAngle"/> of each other. Positions, UVs and skinning are untouched.
+        /// </summary>
+        public static void SmoothNormals(Mesh mesh, float maxAngle)
+        {
+            var verts = mesh.vertices;
+            int n = verts.Length;
+            if (n == 0) return;
+            var faceSum = new Vector3[n];
+            for (int m = 0; m < mesh.subMeshCount; m++)
+            {
+                if (mesh.GetTopology(m) != MeshTopology.Triangles) continue;
+                var idx = mesh.GetIndices(m);
+                for (int t = 0; t + 2 < idx.Length; t += 3)
+                {
+                    int a = idx[t], b = idx[t + 1], c = idx[t + 2];
+                    var fn = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]); // area weighted
+                    faceSum[a] += fn; faceSum[b] += fn; faceSum[c] += fn;
+                }
+            }
+            var groups = new Dictionary<Vector3Int, List<int>>();
+            for (int i = 0; i < n; i++)
+            {
+                var key = Vector3Int.RoundToInt(verts[i] * 2000f); // 0.5 mm
+                if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<int>(4);
+                list.Add(i);
+            }
+            var old = mesh.normals;
+            var result = new Vector3[n];
+            float cos = Mathf.Cos(maxAngle * Mathf.Deg2Rad);
+            foreach (var list in groups.Values)
+            {
+                foreach (int i in list)
+                {
+                    var ni = faceSum[i].normalized;
+                    var sum = Vector3.zero;
+                    foreach (int j in list)
+                        if (Vector3.Dot(ni, faceSum[j].normalized) >= cos) sum += faceSum[j];
+                    result[i] = sum.sqrMagnitude > 1e-12f ? sum.normalized
+                        : (old != null && old.Length == n ? old[i] : Vector3.up);
+                }
+            }
+            mesh.normals = result;
+            if (mesh.uv != null && mesh.uv.Length == n) mesh.RecalculateTangents();
         }
 
         /// <summary>Bakes one renderer's mesh in place. Returns a summary, or null when skipped.</summary>

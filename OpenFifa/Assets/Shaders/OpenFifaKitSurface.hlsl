@@ -362,7 +362,7 @@ half2 KitCollar(KitSpace k)
 
     if (style == KIT_COLLAR_VNECK)
     {
-        float vDepth = 0.12 - across * 1.6;          // V edge, metres below neck
+        float vDepth = 0.055 - across * 1.1;        // V edge, metres below neck (shallow, like a match shirt)
         float inV = frontFacing * step(below, vDepth);
         skin = inV;
         trim = max(frontFacing * KitBand(below - vDepth, 0.012) * step(across, 0.075), KitBand(below, 0.016));
