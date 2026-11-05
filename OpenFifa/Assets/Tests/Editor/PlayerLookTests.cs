@@ -134,5 +134,56 @@ namespace OpenFifa.Tests.Editor
             Assert.AreEqual("ESTEVAO", KitShirtName.Fold("Estêvão"));
             Assert.AreEqual("", KitShirtName.For(null, null));
         }
+
+        [Test]
+        public void ForPlayer_NoAppearanceBlock_MostlyCleanShavenNeverBeard()
+        {
+            int none = 0, stubble = 0, total = 400;
+            for (int i = 0; i < total; i++)
+            {
+                var f = PlayerLook.ForPlayer("seed-" + i).Facial;
+                Assert.That(f, Is.EqualTo(FacialHair.None).Or.EqualTo(FacialHair.Stubble), "seeded facial hair is only none or stubble");
+                if (f == FacialHair.None) none++; else stubble++;
+            }
+            Assert.That(none / (float)total, Is.InRange(0.7f, 0.9f), "about 80% clean-shaven");
+        }
+
+        [Test]
+        public void ForPlayer_AppearanceWithoutFacialHair_IsCleanShaven()
+        {
+            for (int i = 0; i < 50; i++)
+            {
+                var look = PlayerLook.ForPlayer("seed-" + i, RosterAppearance.FromFields(0.3f, "short", null, null, null, null, null));
+                Assert.AreEqual(FacialHair.None, look.Facial);
+            }
+        }
+
+        [Test]
+        public void ForPlayer_PremierLeaguePack_FullBeardsAtMost30PercentAndRosterValuesHonoured()
+        {
+            var r = RosterLoader.Load(System.IO.File.ReadAllText(RosterTestData.PremierLeaguePath), "premier_league.roster.json");
+            Assert.IsTrue(r.Success, r.Describe());
+            int players = 0, beards = 0;
+            foreach (var club in r.League.Clubs)
+            {
+                foreach (var p in club.Players)
+                {
+                    players++;
+                    var look = PlayerLook.ForPlayer(p.Id, p.Appearance);
+                    if (look.Facial == FacialHair.Beard || look.Facial == FacialHair.Goatee) beards++;
+                    if (p.Appearance != null && p.Appearance.FacialHair != null)
+                    {
+                        Assert.IsTrue(PlayerLook.TryFacialHair(p.Appearance.FacialHair, out var expected), p.Id);
+                        Assert.AreEqual(expected, look.Facial, p.Id + " roster facialHair");
+                    }
+                    else if (p.Appearance != null)
+                    {
+                        Assert.AreEqual(FacialHair.None, look.Facial, p.Id + " appearance without facialHair");
+                    }
+                }
+            }
+            Assert.Greater(players, 400);
+            Assert.LessOrEqual(beards / (float)players, 0.30f, $"{beards}/{players} players with a full beard or goatee");
+        }
     }
 }
