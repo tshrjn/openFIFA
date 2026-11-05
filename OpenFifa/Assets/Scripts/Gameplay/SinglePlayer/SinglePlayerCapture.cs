@@ -442,7 +442,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 camT.LookAt(chest);
                 yield return new WaitForEndOfFrame();
                 Save(Path.Combine(OutputDir, $"kit_front_{tags[n]}.png"));
-                camT.position = face + fwd * 0.75f + p.right * 0.25f;
+                camT.position = face + fwd * 1.05f + p.right * 0.3f;
                 camT.LookAt(face);
                 yield return new WaitForEndOfFrame();
                 Save(Path.Combine(OutputDir, $"kit_face_{tags[n]}.png"));

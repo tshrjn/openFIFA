@@ -29,6 +29,8 @@ namespace OpenFifa.Tests.Editor
         {
             var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(ModelPath);
             if (prefab == null) Assert.Ignore("Mannequin model not in project.");
+            if (SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+                Assert.Ignore("No graphics device (-nographics): shaders are not compiled, so kits fall back to the tint.");
             _model = Object.Instantiate(prefab);
 
             Assert.IsTrue(MatchKitBinder.SetMatchClubs(Club("kingsmere", "#B3122E", "#FFFFFF", "#1C1C24"),
