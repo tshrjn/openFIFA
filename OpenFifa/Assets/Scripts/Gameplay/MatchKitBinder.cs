@@ -44,10 +44,11 @@ namespace OpenFifa.Gameplay
         /// <summary>
         /// Dresses one player model (any renderer hierarchy; skinned mannequins with the baked body map use the
         /// SkinnedBody mapping) in its side's outfield or goalkeeper kit with the given back name and number,
-        /// and a skin tone chosen from the player id. Returns null when kits are unavailable.
+        /// and the player's look: roster <paramref name="appearance"/> fields where given, otherwise chosen from the
+        /// player id. Returns null when kits are unavailable.
         /// </summary>
         public static JerseyRenderer AttachPlayer(GameObject model, bool isHome, bool isKeeper,
-            string surname, int number, string playerId)
+            string surname, int number, string playerId, RosterAppearance appearance = null)
         {
             if (model == null || !EnsureSelection()) return null;
             var kitData = isKeeper
@@ -58,7 +59,7 @@ namespace OpenFifa.Gameplay
             var team = _library.Logic.GetTeam(isHome ? HomeTeamId : AwayTeamId);
             var jersey = model.GetComponent<JerseyRenderer>();
             if (jersey == null) jersey = model.AddComponent<JerseyRenderer>();
-            var look = PlayerLook.ForPlayer(playerId);
+            var look = PlayerLook.ForPlayer(playerId, appearance);
             jersey.SetSkinTone(ToColor(look.Skin));
             jersey.SetBootColours(ToColor(look.BootBase), ToColor(look.BootAccent));
             jersey.SetHead(look.Hair, look.Facial, ToColor(look.HairColour), look.EyeTone);
