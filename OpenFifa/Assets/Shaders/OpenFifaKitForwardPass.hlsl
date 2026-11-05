@@ -197,6 +197,16 @@ void KitForwardFragment(
         half extra = max(wrapD - saturate(ndl), 0.0);
         half3 lightCol = skinLight.color * skinLight.distanceAttenuation * lerp(0.6, 1.0, skinLight.shadowAttenuation);
         color.rgb += surf.albedo * lightCol * extra * half3(1.0, 0.62, 0.5) * surf.skinMask;
+
+        // Soft sebum highlight and sky rim: keep forms (brow, nose, cheekbones) readable on deep skin tones
+        // and in shadow, where the albedo alone crushes to a silhouette.
+        half3 V = inputData.viewDirectionWS;
+        half3 H = normalize(skinLight.direction + V);
+        half spec = pow(saturate(dot(inputData.normalWS, H)), 28.0) * 0.10 * saturate(ndl * 4.0);
+        half fres = pow(1.0 - saturate(dot(inputData.normalWS, V)), 3.0);
+        half3 skinAdd = lightCol * spec * lerp(0.6, 1.0, skinLight.shadowAttenuation)
+                      + inputData.bakedGI * (0.30 * surf.albedo + 0.05 * fres);
+        color.rgb += skinAdd * surf.skinMask;
     }
 
     // --- Sheen: soft grazing highlight of polyester knit -----------------------------------
