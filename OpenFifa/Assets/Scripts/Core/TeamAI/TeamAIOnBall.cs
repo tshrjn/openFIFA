@@ -147,13 +147,17 @@ namespace OpenFifa.Core
             return TeamAIMath.Sigmoid(-1.25f + 1.6f * angle - 0.08f * dist);
         }
 
+        // The static helpers below use the default ball config only; brain code uses its own Model (wet/dry pitch).
         /// <summary>Seconds for an AI ground pass of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float GroundPassTime(float dist) => TeamAIBallModel.Default.GroundPassTime(dist);
 
         /// <summary>Flight time of an AI lob of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float LobPassTime(float dist) => TeamAIBallModel.Default.LobPassTime(dist);
 
         /// <summary>Flight time of a cross of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float CrossTime(float dist) => TeamAIBallModel.Default.CrossTime(dist);
 
         /// <summary>

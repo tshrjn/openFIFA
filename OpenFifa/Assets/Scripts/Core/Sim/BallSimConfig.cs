@@ -149,6 +149,12 @@ namespace OpenFifa.Core
         public PitchSurface Surface = PitchSurface.Normal;
 
         /// <summary>
+        /// The Normal config a surface config was made from (<see cref="WithSurface"/>), so it can be re-surfaced
+        /// (<see cref="MatchSimConfig.ForSurface"/>). Null for a Normal config, or a config whose Surface was set by hand.
+        /// </summary>
+        [System.NonSerialized] public BallSimConfig NormalSource;
+
+        /// <summary>
         /// A copy of this (Normal) config with its ground coefficients adjusted for a pitch condition; air values and any
         /// custom tuning are kept, this config is not changed. Build the match sim AND the AI ball model
         /// (<see cref="TeamAIBallModel"/>) from the returned config so their flight and roll tables agree.
@@ -193,6 +199,7 @@ namespace OpenFifa.Core
             }
 
             c.Surface = surface;
+            c.NormalSource = surface == PitchSurface.Normal ? null : this;
             return c;
         }
 

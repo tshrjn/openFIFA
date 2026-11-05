@@ -27,6 +27,9 @@ namespace OpenFifa.Gameplay
         /// <summary>Painted line width (m). Markings are flat strips lying on the grass (normal up), not camera-facing ribbons.</summary>
         public float LineWidth { get; set; } = 0.12f;
 
+        /// <summary>The turf surface's renderer (set by <see cref="BuildPitch"/>); weather applies its wet look here.</summary>
+        public MeshRenderer SurfaceRenderer { get; private set; }
+
         /// <summary>Height of the line strips above the pitch origin; the surface cube's top is at 0.05.</summary>
         private const float LineY = 0.065f;
 
@@ -70,6 +73,7 @@ namespace OpenFifa.Gameplay
             // runtime-generated URP/Lit material. The cube's BoxCollider stays as the ground.
             float surfaceLength = _config.PitchLength + 2f * runOff, surfaceWidth = _config.PitchWidth + 2f * runOff;
             var renderer = pitch.GetComponent<MeshRenderer>();
+            SurfaceRenderer = renderer;
             var turf = ProceduralTurf
                 ? TurfTextures.GetMaterial(surfaceLength, surfaceWidth, _config.PitchLength, _config.PitchWidth, Turf)
                 : null;

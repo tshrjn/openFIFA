@@ -109,7 +109,7 @@ namespace OpenFifa.Core
         public TeamAIBallModel BallModel
         {
             get => _ballModel;
-            set { _ballModel = value ?? TeamAIBallModel.Default; OnBall.Model = _ballModel; }
+            set { _ballModel = value ?? TeamAIBallModel.Default; OnBall.Model = _ballModel; SetPieces.Model = _ballModel; }
         }
         /// <summary>Formation anchors by slot (0..10), world space.</summary>
         public readonly SimVec3[] Anchors = new SimVec3[TeamAIFormations.SlotCount];
@@ -365,7 +365,7 @@ namespace OpenFifa.Core
                     else
                     {
                         TeamAIGoalkeeper.Decide(world, i, BackLineDepth, hasPossession, ownerIndex < 0 ? Trajectory : null,
-                            _boxDefending ? 1f - 0.35f * BoxGuard : 1f, ref cmd);
+                            _ballModel, _boxDefending ? 1f - 0.35f * BoxGuard : 1f, ref cmd);
                     }
                     continue;
                 }
@@ -643,7 +643,7 @@ namespace OpenFifa.Core
                                        SimVec3.Dot(TeamAIMath.FlatDirection(from, c), firstDir) > 0.64f)) continue;
                     float control = pc.ControlAt(Team, c);
                     float lane = TeamAIOnBall.InterceptionRisk(world, Team, from, c,
-                        TeamAIOnBall.GroundPassTime(radius), false);
+                        _ballModel.GroundPassTime(radius), false);
                     float drift = TeamAIMath.FlatDistance(c, anchor);
                     float score = control + 0.8f * (cDepth - ownerDepth) - 0.7f * lane -
                                   0.02f * Math.Max(0f, drift - 10f);

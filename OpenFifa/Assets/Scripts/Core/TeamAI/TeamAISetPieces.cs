@@ -49,6 +49,9 @@ namespace OpenFifa.Core
     /// </summary>
     public sealed class TeamAISetPieces
     {
+        /// <summary>Ball timing model (sim-matched, so wet or dry pitches time routines right). Set by the brain.</summary>
+        public TeamAIBallModel Model = TeamAIBallModel.Default;
+
         /// <summary>Free kicks closer than this (m, ball to goal centre) get a routine.</summary>
         public const float FreeKickRange = 35f;
         public const float WallSpacing = 0.6f;
@@ -607,8 +610,8 @@ namespace OpenFifa.Core
                         float dist = TeamAIMath.FlatDistance(ball, target);
                         if (dist < 3f) continue;
                         float tBall = action == TeamAIAction.Pass
-                            ? TeamAIBallModel.Default.GroundPassTime(dist)
-                            : TeamAIBallModel.Default.CrossTime(dist);
+                            ? Model.GroundPassTime(dist)
+                            : Model.CrossTime(dist);
                         float control = TeamAIPitchControl.Evaluate(world, owner.Team, target, tBall, ownerIndex);
                         float tight = TeamAIOnBall.NearestOpponentDistance(world, owner.Team, target);
                         float score = baseScore + 0.5f * control - (tight < 1.5f ? 0.15f * (1.5f - tight) : 0f);
@@ -618,7 +621,7 @@ namespace OpenFifa.Core
                         {
                             float power = action == TeamAIAction.Pass
                                 ? Math.Min(TeamAIMath.Clamp(dist / TeamAIOnBall.MaxGroundPass, 0.12f, 1f),
-                                    TeamAIBallModel.Default.GroundPassPower(dist, rec.BallControl))
+                                    Model.GroundPassPower(dist, rec.BallControl))
                                 : TeamAIMath.Clamp(dist / 45f, 0.35f, 1f);
                             best = new TeamAIOption
                             {

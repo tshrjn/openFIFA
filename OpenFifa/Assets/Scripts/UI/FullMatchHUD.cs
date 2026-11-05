@@ -50,6 +50,27 @@ namespace OpenFifa.UI
             ConfigureSafeArea();
         }
 
+        private void OnEnable()
+        {
+            OpenFifa.Gameplay.ExternalDisplayManager.ExternalDisplayChanged += OnExternalDisplayChanged;
+            OpenFifa.Gameplay.ExternalDisplayManager.CanvasRouted += OnCanvasRouted;
+        }
+
+        private void OnDisable()
+        {
+            OpenFifa.Gameplay.ExternalDisplayManager.ExternalDisplayChanged -= OnExternalDisplayChanged;
+            OpenFifa.Gameplay.ExternalDisplayManager.CanvasRouted -= OnCanvasRouted;
+        }
+
+        // The HUD canvas moves between the iPad (notch/home-indicator insets) and a monitor (none).
+        private void OnExternalDisplayChanged(bool external) => ConfigureSafeArea();
+
+        // Also covers a HUD built after the monitor connected and moved on a later routing pass.
+        private void OnCanvasRouted(Canvas canvas, int display)
+        {
+            if (canvas != null && canvas == GetComponentInParent<Canvas>()?.rootCanvas) ConfigureSafeArea();
+        }
+
         private void Start()
         {
             if (_minimapRect != null)
@@ -160,7 +181,13 @@ namespace OpenFifa.UI
 
             // Apply safe area inset to this RectTransform
             var rectTransform = GetComponent<RectTransform>();
-            if (rectTransform != null)
+            if (rectTransform != null && canvas.targetDisplay != 0)
+            {
+                // On an external monitor there are no iPad notch/home-indicator insets: use the full screen.
+                rectTransform.anchorMin = Vector2.zero;
+                rectTransform.anchorMax = Vector2.one;
+            }
+            else if (rectTransform != null)
             {
                 Vector2 anchorMin = safeArea.position;
                 Vector2 anchorMax = safeArea.position + safeArea.size;
