@@ -17,7 +17,7 @@ if [ ! -e "$ROOT/best" ]; then
   echo "baseline set"; exit 0
 fi
 BEST="$(readlink -f "$ROOT/best")"
-"$HERE/judge.sh" "$IT" "$BEST" "$IT/judge"
+"$HERE/judge.sh" "$IT" "$BEST" "$IT/judge" "$DESC"
 python3 - "$IT/judge/verdict.json" "$ROOT/log.tsv" "$NAME" "$SHA" "$DESC" <<'PY'
 import json, sys, time
 v = json.load(open(sys.argv[1])); c = v["cand_mean"]; b = v["best_mean"]

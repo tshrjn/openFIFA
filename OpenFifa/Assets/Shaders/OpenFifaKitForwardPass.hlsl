@@ -202,10 +202,12 @@ void KitForwardFragment(
         // and in shadow, where the albedo alone crushes to a silhouette.
         half3 V = inputData.viewDirectionWS;
         half3 H = normalize(skinLight.direction + V);
-        half spec = pow(saturate(dot(inputData.normalWS, H)), 28.0) * 0.10 * saturate(ndl * 4.0);
+        // Deep tones get more sheen and rim (as on real dark skin under floodlights) so facial planes read.
+        half deep = 1.0 - saturate(dot(_SkinColor.rgb, half3(0.3, 0.5, 0.2)) * 1.6);
+        half spec = pow(saturate(dot(inputData.normalWS, H)), 28.0) * lerp(0.10, 0.22, deep) * saturate(ndl * 4.0);
         half fres = pow(1.0 - saturate(dot(inputData.normalWS, V)), 3.0);
         half3 specLight = skinLight.color * skinLight.distanceAttenuation * skinLight.shadowAttenuation;
-        half3 skinAdd = specLight * spec + inputData.bakedGI * surf.occlusion * (0.30 * surf.albedo + 0.05 * fres);
+        half3 skinAdd = specLight * spec + inputData.bakedGI * surf.occlusion * (0.30 * surf.albedo + lerp(0.05, 0.14, deep) * fres);
         color.rgb += skinAdd * surf.skinMask;
     }
 
