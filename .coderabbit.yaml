@@ -1,0 +1,43 @@
+# CodeRabbit config: https://docs.coderabbit.ai/reference/configuration
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  # Unity serialises scenes, prefabs and assets as huge YAML; reviewing them is noise.
+  path_filters:
+    - "!**/*.meta"
+    - "!**/*.unity"
+    - "!**/*.prefab"
+    - "!**/*.asset"
+    - "!**/*.mat"
+    - "!**/*.anim"
+    - "!**/*.controller"
+    - "!**/*.fbx"
+    - "!**/*.png"
+    - "!**/*.wav"
+    - "!**/*.ogg"
+    - "!OpenFifa/Library/**"
+    - "!OpenFifa/Assets/TextMesh Pro/**"
+    - "!test-results/**"
+    - "!screenshots/**"
+    - "!build/**"
+  path_instructions:
+    - path: "OpenFifa/Assets/Scripts/**/*.cs"
+      instructions: >-
+        Unity C# gameplay code for a football game that ships to iPad. Flag per-frame
+        allocations in Update/FixedUpdate/LateUpdate (LINQ, boxing, new arrays, string
+        concatenation), physics work outside FixedUpdate, and missing null checks on
+        serialized references. Prefer determinism in simulation code.
+    - path: ".github/workflows/**"
+      instructions: >-
+        GitHub Actions for Unity builds via GameCI. macOS runners are the slow, scarce
+        resource; flag work that could run on ubuntu-latest instead, and any secret that
+        could leak into logs.
+chat:
+  auto_reply: true
