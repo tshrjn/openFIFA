@@ -8,6 +8,11 @@ pr_commands = [
     "/improve",
 ]
 
+[pr_description]
+# Post /describe output as a comment instead of rewriting the PR body,
+# so the attribution header at the top of each PR description survives.
+publish_description_as_comment = true
+
 [ignore]
 # Unity serialised assets and binaries are noise for review.
 glob = [
