@@ -493,20 +493,22 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     // Face features (front only): soft, anatomical shading instead of sticker shapes.
     half f = onHead * front * (1.0 - hair);
     float eyeY = 0.226;
-    half eyes = 0.0, iris = 0.0, pupil = 0.0, lidLine = 0.0, lowerLid = 0.0, socket = 0.0, bag = 0.0;
+    half eyes = 0.0, iris = 0.0, pupil = 0.0, glint = 0.0, lidLine = 0.0, lowerLid = 0.0, socket = 0.0, bag = 0.0;
     [unroll] for (int side = -1; side <= 1; side += 2)
     {
         float2 c = float2(side * 0.031, eyeY);
         // Almond eye: narrower, upper lid covers the top of the iris.
-        float2 q = (p - c) / float2(0.0115, 0.0046);
+        float2 q = (p - c) / float2(0.0120, 0.0056);   // a little more open: whites show around the iris
         q.y -= 0.25 * q.x * q.x * sign(q.y);
         half e = 1.0 - smoothstep(0.85, 1.0, length(q));
         eyes = max(eyes, e);
         iris = max(iris, 1.0 - smoothstep(0.0031, 0.0038, length(p - c - float2(0.0, -0.0006))));   // sclera corners show
         pupil = max(pupil, 1.0 - smoothstep(0.0016, 0.0022, length(p - c - float2(0.0, -0.0006))));
-        float2 lq = (p - c - float2(0.0, 0.0030)) / float2(0.0135, 0.0030);
+        float2 lq = (p - c - float2(0.0, 0.0038)) / float2(0.0140, 0.0030);
         lidLine = max(lidLine, (1.0 - smoothstep(0.6, 1.0, length(lq))) * step(c.y + 0.0012, p.y));
-        lowerLid = max(lowerLid, (1.0 - smoothstep(0.5, 1.0, length((p - c - float2(0.0, -0.0062)) / float2(0.012, 0.0028)))));
+        lowerLid = max(lowerLid, (1.0 - smoothstep(0.5, 1.0, length((p - c - float2(0.0, -0.0070)) / float2(0.012, 0.0028)))));
+        // Catchlight: the floodlights' reflection, up and to one side of the pupil.
+        glint = max(glint, 1.0 - smoothstep(0.0005, 0.0009, length(p - c - float2(0.0013, 0.0009))));
         socket = max(socket, 1.0 - smoothstep(0.5, 1.0, length((p - c - float2(side * -0.002, 0.004)) / float2(0.019, 0.012))));
         bag = max(bag, 1.0 - smoothstep(0.4, 1.0, length((p - c - float2(0.0, -0.011)) / float2(0.013, 0.005))));
     }
@@ -518,6 +520,7 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     albedo = lerp(albedo, sclera, f * eyes);
     albedo = lerp(albedo, irisCol, f * eyes * iris);
     albedo = lerp(albedo, half3(0.02, 0.02, 0.02), f * eyes * pupil);
+    albedo = lerp(albedo, half3(0.95, 0.95, 0.93), f * eyes * glint * 0.9);
     albedo = lerp(albedo, skinCol * 0.28, f * lidLine * 0.85 * lerp(0.35, 1.0, lightness));                          // lash line / upper lid
     albedo = lerp(albedo, skinCol * 0.70, f * lowerLid * 0.35 * (1.0 - eyes));
 
