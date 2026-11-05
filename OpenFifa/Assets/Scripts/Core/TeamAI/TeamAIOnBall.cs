@@ -103,11 +103,28 @@ namespace OpenFifa.Core
 
         /// <summary>Extra score for a cross (0 = neutral); wing-play sides set it from their width.</summary>
         public float CrossBias;
+        /// <summary>
+        /// 0..1 final-third chance quality (patient sides, see <see cref="ChanceQualityFor"/>): in the final third the
+        /// threat at the receiver counts up to 60% more, cut-backs from the byline earn a bonus, and low-xG shots are
+        /// passed up for a better chance. 0 = neutral.
+        /// </summary>
+        public float ChanceQuality;
 
-        /// <summary>Multiplier on forward progress for a directness (1 at 0.5; 0.6 .. 1.4).</summary>
-        public static float DirectProgress(float directness) => 0.6f + 0.8f * TeamAIMath.Clamp01(directness);
-        /// <summary>Multiplier on interception risk for a directness (1 at 0.5; 1.35 .. 0.65).</summary>
-        public static float DirectRisk(float directness) => 1.35f - 0.7f * TeamAIMath.Clamp01(directness);
+        /// <summary>Chance quality of a side from its directness: 0 at 0.5 and above, 1 at 0.25 and below.</summary>
+        public static float ChanceQualityFor(float directness) => TeamAIMath.Clamp01((0.5f - directness) * 4f);
+
+        /// <summary>Ball depth (0..1 from own goal) from which directness below neutral no longer holds passes back.</summary>
+        public const float FinalThirdDepth = 0.62f;
+        /// <summary>Ball depth up to which a patient side's low directness holds (its own build-up).</summary>
+        public const float PatientBuildUpDepth = 0.4f;
+
+        /// <summary>
+        /// Multiplier on forward progress for a directness (1 at 0.5; 0.75 .. 1.25). The wider 0.6 .. 1.4 range made
+        /// direct sides (long ball, counter, even park-the-bus) the strongest attacks in the game.
+        /// </summary>
+        public static float DirectProgress(float directness) => 0.75f + 0.5f * TeamAIMath.Clamp01(directness);
+        /// <summary>Multiplier on interception risk for a directness (1 at 0.5; 1.2 .. 0.8).</summary>
+        public static float DirectRisk(float directness) => 1.2f - 0.4f * TeamAIMath.Clamp01(directness);
 
         private int _calledReceiver = -1;
         private bool _calledThrough;
@@ -519,10 +536,27 @@ namespace OpenFifa.Core
             float prog = progression > 0f ? ForwardProgressionWeight * progression : ProgressionWeight * progression;
             // Ambition scales with difficulty: a strong side looks for the forward ball and accepts some lane risk to
             // play it; a weak one recycles sideways.
-            float riskWeight = RiskWeight * DirectRisk(Directness);
-            if (progression > 0f) prog *= Ambition(diff.Theta) * DirectProgress(Directness);
-            float score = control * (0.35f + ThreatWeight * threat) + prog - riskWeight * risk - 0.6f * block - distPenalty;
-            if (lofted) score -= 0.06f + 0.1f * (0.5f - TeamAIMath.Clamp01(Directness)); // harder to control; direct sides accept it
+            // A patient side (directness below neutral) is patient in its own half only: through midfield it plays
+            // like anyone else, and in the final third it plays for the chance it has worked, above neutral
+            // (0.25 -> 0.8). Holding back everywhere made the possession style the least dangerous in the game.
+            float directness = Directness;
+            if (directness < 0.5f)
+            {
+                if (ownerDepth > FinalThirdDepth) directness = 0.5f + 1.2f * (0.5f - directness);
+                else if (ownerDepth > PatientBuildUpDepth) directness = 0.5f;
+            }
+            float riskWeight = RiskWeight * DirectRisk(directness);
+            if (progression > 0f) prog *= Ambition(diff.Theta) * DirectProgress(directness);
+            float threatWeight = ThreatWeight;
+            if (ChanceQuality > 0f && ownerDepth > FinalThirdDepth)
+            {
+                threatWeight *= 1f + 0.6f * ChanceQuality;
+                // Cut-back: from near the byline, back to a team-mate arriving around the penalty spot.
+                if (ownerDepth > 0.88f && progression < 0f && targetDepth > 0.82f && TeamAIMath.Abs(target.X) < 9f)
+                    prog += 0.2f * ChanceQuality;
+            }
+            float score = control * (0.35f + threatWeight * threat) + prog - riskWeight * risk - 0.6f * block - distPenalty;
+            if (lofted) score -= 0.06f + 0.1f * (0.5f - TeamAIMath.Clamp01(directness)); // harder to control; direct sides accept it
             // A lofted ball backwards or square gives the ball away for nothing; going back to the keeper is a reset.
             if (lofted && progression < 0.05f && action != TeamAIAction.Cross) score -= 0.25f;
             if (world.Players[recIndex].Role == TeamAIRole.GK && ownerDepth > 0.2f) score -= 0.12f;
@@ -594,6 +628,8 @@ namespace OpenFifa.Core
 
             float composure = ShotComposure(diff.Theta);
             float score = xg * (0.6f + 0.6f * owner.Shooting) * (1f - block) * ShotWeight * composure;
+            // A patient side passes up a long-range or tight-angle shot (xG under 0.3) for a better chance.
+            if (ChanceQuality > 0f && xg < 0.3f) score *= 1f - 0.4f * ChanceQuality * (1f - xg / 0.3f);
             score += rng.NextSigned() * diff.DecisionNoise;
 
             // Aim at the side with the bigger gap to the keeper; a nervous side aims closer to him.

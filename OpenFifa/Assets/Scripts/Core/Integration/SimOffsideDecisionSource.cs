@@ -10,7 +10,7 @@ namespace OpenFifa.Core
     /// Home maps to <see cref="TeamIdentifier.TeamA"/>, Away to <see cref="TeamIdentifier.TeamB"/>.
     /// Axis note: the sim's pitch length runs along world Z, so the decision's "line X" values
     /// (AttackerLineX, DefenderLineX, BallLineX) carry world Z positions here; FreeKickX/Z are the plain world X/Z
-    /// of the offside position. A presentation built for the X-length pitch must map that axis.
+    /// of the offside position. The presentation maps that axis with <see cref="OffsidePitchFrame.ForSimPitch"/>.
     /// </summary>
     public sealed class SimOffsideDecisionSource : IOffsideDecisionSource
     {

@@ -16,6 +16,8 @@ CBUFFER_START(UnityPerMaterial)
     half4 _SocksColor;
     half4 _SkinColor;
     half4 _BootColor;
+    half4 _GloveColor;
+    half4 _BootAccentColor;
 
     // Pattern
     float _PatternType;      // OpenFifa.Core.JerseyPattern
@@ -23,11 +25,18 @@ CBUFFER_START(UnityPerMaterial)
     float _CollarStyle;      // OpenFifa.Core.CollarStyle
 
     // Mapping
-    float _MappingMode;      // 0 = object space (capsule / full-body proxy), 1 = mesh UV (jersey mesh)
+    float _MappingMode;      // 0 = object space (capsule / full-body proxy), 1 = mesh UV (jersey mesh), 2 = skinned body map
     float _FacingAngle;      // object mode: kit front direction around object Y, radians
     float4 _BodyLines;       // object mode, object-space Y: x neckline, y shirt hem, z shorts hem, w boot top
     float4 _BackPrintRect;   // object mode: centre x/y, width, height in metres. UV mode: uv min xy, size zw
     float4 _FrontPrintRect;  // same convention as _BackPrintRect, for the front panel
+    float4 _BodyLimbLimits;  // skinned mode: x sleeve end armT, y glove start armT, z shorts hem legT, w sock top legT
+    float4 _BodyTorsoLines;  // skinned mode: x waist Y (kit space), y boot top legT, z torso half width, w half depth
+    float _BodyEdgeSoftness; // skinned mode: extra edge blur in limb-parameter / metre units
+    half _SkinWrap;
+    half4 _HairColor;
+    float4 _HeadStyle;       // x hair style (0 bald, 1 buzz, 2 short), y facial hair (0 none, 1 stubble, 2 beard, 3 goatee), z hairline offset, w eye tone
+    float4 _HeadParams;      // kit-space head centre y, centre z, half width, half depth          // wrap-diffuse amount on skin (soft subsurface-like terminator)
 
     // Name / number print
     half4 _NumberColor;

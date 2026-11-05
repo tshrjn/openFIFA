@@ -17,7 +17,7 @@ namespace OpenFifa.Core
         /// <summary>Owning team id (see <see cref="KitTeamData.Id"/>).</summary>
         public string TeamId = "";
 
-        /// <summary>"Home", "Away" or "Third" (<see cref="KitVariant"/>).</summary>
+        /// <summary>"Home", "Away", "Third" or "Goalkeeper" (<see cref="KitVariant"/>).</summary>
         public string Variant = "Home";
 
         /// <summary>Shirt base colour, "#RRGGBB" or "#RRGGBBAA".</summary>
@@ -64,6 +64,12 @@ namespace OpenFifa.Core
 
         /// <summary>Fabric sheen strength 0-1 (soft grazing-angle highlight of polyester knit).</summary>
         public float FabricSheen = 0.5f;
+
+        /// <summary>"Short" (to mid upper arm) or "Long" (to the wrist). Goalkeepers usually wear "Long".</summary>
+        public string Sleeves = "Short";
+
+        /// <summary>Optional "#RRGGBB" glove colour (goalkeepers). Empty = bare hands.</summary>
+        public string GloveColor = "";
 
         /// <summary>Optional licensed textures. Empty = fully procedural.</summary>
         public LicensedKitTextureSet Licensed = new LicensedKitTextureSet();

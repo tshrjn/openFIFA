@@ -19,5 +19,11 @@ namespace OpenFifa.Core
 
         /// <summary>True when every away variant clashed and the fallback was used.</summary>
         public bool ClashUnresolved;
+
+        /// <summary>Home goalkeeper kit (null until <see cref="KitLibraryLogic.ResolveGoalkeeperKits"/> ran).</summary>
+        public KitDefinitionData HomeKeeperKit;
+
+        /// <summary>Away goalkeeper kit (null until <see cref="KitLibraryLogic.ResolveGoalkeeperKits"/> ran).</summary>
+        public KitDefinitionData AwayKeeperKit;
     }
 }

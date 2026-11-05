@@ -14,6 +14,9 @@ namespace OpenFifa.Gameplay
     {
         private static readonly Dictionary<string, Texture2D> CrestCache = new Dictionary<string, Texture2D>();
 
+        // One rasterization buffer shared by every player (prints are written on the main thread, one at a time).
+        private static byte[] _sharedScratch;
+
         /// <summary>Creates an empty print atlas texture (RGBA32, mipmapped, linear).</summary>
         public static Texture2D CreatePrintTexture(int width, int height)
         {
@@ -30,7 +33,7 @@ namespace OpenFifa.Gameplay
 
         /// <summary>
         /// Rasterizes <paramref name="layout"/> into <paramref name="texture"/> (sizes must match).
-        /// <paramref name="scratch"/> is reused between calls to avoid garbage.
+        /// <paramref name="scratch"/> is reused between calls to avoid garbage. The texture stays CPU-readable.
         /// </summary>
         public static void Write(Texture2D texture, KitPrintLayout layout, ref byte[] scratch)
         {
@@ -40,6 +43,20 @@ namespace OpenFifa.Gameplay
             KitPrintRasterizer.RasterizeInto(layout, scratch);
             texture.SetPixelData(scratch, 0);
             texture.Apply(true, false);
+        }
+
+        /// <summary>
+        /// Rasterizes <paramref name="layout"/> with a shared scratch buffer and uploads it, releasing the CPU copy
+        /// (the texture becomes non-readable; create a new one to write different text).
+        /// </summary>
+        public static void WriteAndRelease(Texture2D texture, KitPrintLayout layout)
+        {
+            int size = layout.Width * layout.Height * 4;
+            if (_sharedScratch == null || _sharedScratch.Length < size) _sharedScratch = new byte[size];
+
+            KitPrintRasterizer.RasterizeInto(layout, _sharedScratch);
+            texture.SetPixelData(_sharedScratch, 0);
+            texture.Apply(true, true);
         }
 
         /// <summary>

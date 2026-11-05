@@ -23,6 +23,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// 5. logs every commentary line spoken in the window to commentary.txt ("mm:ss.s | event | speaker | text"; name
     ///    calls are tagged "[call]", and a line cut off by a bigger moment gets a second "[cut]" entry);
     /// 6. writes capture.txt (run parameters, the clubs and every league's club ids for -spHome/-spAway) and quits.
+    /// With <c>-spForceOffside</c> the clip is centred on an offside instead of the first goal: the probe finds the
+    /// first sim offside call (trying the next seeds, as Rematch would pick them, when this seed's match has none) and
+    /// the recorded match fast-forwards so the call lands <see cref="OffsideLeadSeconds"/> into the clip. The sim is
+    /// untouched (same deterministic match, just a different start point and possibly seed). It also saves
+    /// still_offside_flag.png, still_offside_lines.png and still_offside_banner.png from the presentation and logs the
+    /// call in capture.txt. Without the flag nothing changes.
     /// Stitch the frames with ffmpeg (capture.sh does).
     ///
     /// The user's seat is always driven by the deterministic <see cref="ScriptedGamepadBot"/> (or the team AI with
@@ -37,6 +43,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public string OutputDir;
         public float Seconds = 30f;
         public int Fps = 30;
+        /// <summary>-spKitStills: after the clip, close-ups of kits (back, front) and faces (kit_*.png).</summary>
+        public bool KitStills;
 
         /// <summary>Frames per sequence and their spacing (s): 11 frames at 10 fps, the moment at frame 6.</summary>
         public const int SequenceFrames = 11;
@@ -44,6 +52,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public const int MaxSequences = 3;
         /// <summary>Chest-up close-up: vertical field of view (deg), distance (m) and how far below the head top it aims.</summary>
         public const float CloseFov = 24f, CloseDistance = 2.2f, CloseAimBelowHead = 0.42f;
+        /// <summary>-spForceOffside: seconds of play before the offside call, and how many seeds to try for one.</summary>
+        public const float OffsideLeadSeconds = 3f;
+        public const int OffsideSeedTries = 12;
 
         private SinglePlayerMatchController _c;
         private int _frame;
@@ -65,6 +76,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 if (args[i] == "-spCapture") OutputDir = args[i + 1];
                 else if (args[i] == "-spCaptureSeconds") float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Seconds);
                 else if (args[i] == "-spCaptureFps") int.TryParse(args[i + 1], out Fps);
+                if (args[i] == "-spKitStills" || args[i + 1] == "-spKitStills") KitStills = true;
             }
             _c = GetComponent<SinglePlayerMatchController>();
             if (string.IsNullOrEmpty(OutputDir))
@@ -97,17 +109,43 @@ namespace OpenFifa.Gameplay.SinglePlayer
             probe.HumanSlots[0].Input = _c.CreateHumanInput();
             var highlights = new CaptureHighlights();
             var tactics = new MatchTacticsStats(Math.Max(1, probe.Sim.Config.TickRate / 2));
-            int goalTick = -1;
+            int goalTick = -1, offsideTick = -1;
             while (!probe.IsFinished)
             {
                 var ev = probe.StepOnce(null);
                 highlights.Observe(probe.Sim, ev);
                 tactics.Observe(probe.Sim, ev);
                 for (int i = 0; i < ev.Count; i++)
+                {
                     if (goalTick < 0 && ev[i].Type == MatchEventType.Goal && probe.Sim.Tick > 10 * probe.Sim.Config.TickRate) goalTick = probe.Sim.Tick;
+                    if (offsideTick < 0 && ev[i].Type == MatchEventType.Offside) offsideTick = probe.Sim.Tick;
+                }
             }
             Debug.Log("[capture] first goal at tick " + goalTick + ", " + highlights.All.Count + " ball moments");
             WriteTactics(tactics, probe);
+            ulong requestedSeed = _c.Seed;
+            if (_c.ForceOffsideCapture)
+            {
+                // This seed's match may have no offside: try the following seeds (stopping each at its first call).
+                for (int k = 0; offsideTick < 0 && k < OffsideSeedTries; k++)
+                {
+                    _c.Seed = SinglePlayerMatchController.NextSeed(_c.Seed);
+                    probeOptions = _c.BuildOptions(_c.Level, out _, out _);
+                    var p2 = new SinglePlayerMatchSession(probeOptions);
+                    p2.HumanSlots[0].Input = _c.CreateHumanInput();
+                    while (offsideTick < 0 && !p2.IsFinished)
+                    {
+                        var ev = p2.StepOnce(null);
+                        for (int i = 0; i < ev.Count; i++)
+                            if (ev[i].Type == MatchEventType.Offside) { offsideTick = p2.Sim.Tick; break; }
+                    }
+                    if (k % 3 == 2) yield return null;
+                }
+                Debug.Log("[capture] -spForceOffside: first offside at tick " + offsideTick + " with seed " + _c.Seed +
+                          (_c.Seed != requestedSeed ? " (seed " + requestedSeed + " had none)" : ""));
+                // Ball moments and tactics.txt came from the requested seed's match: no sequences from another match.
+                if (_c.Seed != requestedSeed) highlights = new CaptureHighlights();
+            }
 
             _c.StartMatch(_c.Level);
             // The probe stepped with the yaw it was built with; keep the recorded match on exactly that value.
@@ -115,6 +153,17 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _c.PinCameraYaw = true;
             int tickRate = _c.Session.Sim.Config.TickRate;
             int startTick = goalTick > 0 ? Math.Max(0, goalTick - (int)(Seconds * 0.66f * tickRate)) : 0;
+            if (_c.ForceOffsideCapture && offsideTick >= 0)
+                startTick = Math.Max(0, offsideTick - (int)(OffsideLeadSeconds * tickRate));
+            var offsideLog = new StringBuilder();
+            bool flagStill = false, linesStill = false, bannerStill = false;
+            void LogOffside(OffsideDecision d) =>
+                offsideLog.Append("offside tick=").Append(_c.Session.Sim.Tick).Append(" team=").Append(d.OffenderTeam)
+                    .Append(" simId=").Append(d.OffenderId).Append(" name=").Append(_c.Names[Mathf.Clamp(d.OffenderId, 0, _c.Names.Length - 1)])
+                    .Append(" attackerZ=").Append(d.AttackerLineX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))
+                    .Append(" defenderZ=").Append(d.DefenderLineX.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))
+                    .Append(" frame=").Append(_frame).Append('\n');
+            _c.OffsideSource.OnOffence += LogOffside;
             if (startTick > 0) _c.FastForwardTo(startTick);
             yield return null;
 
@@ -133,6 +182,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var modes = new[] { SinglePlayerCamera.Mode.Broadcast, SinglePlayerCamera.Mode.Sideline, SinglePlayerCamera.Mode.CloseUp, SinglePlayerCamera.Mode.TopDown, SinglePlayerCamera.Mode.Broadcast };
             bool goalStillDone = false;
             var hud = GetComponent<SinglePlayerHud>();
+            var pendingStills = new bool[stillAt.Length];
+            bool closeDone = false;
 
             for (_frame = 1; _frame <= total; _frame++)
             {
@@ -142,10 +193,35 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 LogCommentary();
                 CopySequenceFrame(framePath);
 
-                if (_frame == closeAt)
+                if (!closeDone && _frame >= closeAt && !(_c.Offside != null && _c.Offside.IsPlaying))
                 {
+                    closeDone = true;
                     yield return CloseUpStill(true, "still_closeup_face.png");
                     yield return CloseUpStill(false, "still_closeup_back.png");
+                }
+
+                var offside = _c.Offside;
+                bool offsidePlaying = offside != null && offside.IsPlaying;
+                if (offsidePlaying)
+                {
+                    // Frames already show the presentation; keep named copies of its three beats.
+                    var timing = offside.Timeline.Timing;
+                    float e = offside.Elapsed;
+                    if (!flagStill && e >= timing.FlagRaiseAt + 0.2f)
+                    {
+                        flagStill = true;
+                        File.Copy(framePath, Path.Combine(OutputDir, "still_offside_flag.png"), true);
+                    }
+                    if (!linesStill && e >= timing.LinesShow + timing.LineRevealDuration + 0.15f && offside.Lines.IsVisible)
+                    {
+                        linesStill = true;
+                        File.Copy(framePath, Path.Combine(OutputDir, "still_offside_lines.png"), true);
+                    }
+                    if (!bannerStill && e >= timing.LinesHide + 0.1f)
+                    {
+                        bannerStill = true;
+                        File.Copy(framePath, Path.Combine(OutputDir, "still_offside_banner.png"), true);
+                    }
                 }
 
                 if (!goalStillDone && _c.Session.Sim.Phase == SimMatchPhase.Stoppage && _c.Session.Sim.State.Ball.InNet != 0)
@@ -157,7 +233,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 }
                 for (int k = 0; k < stillAt.Length; k++)
                 {
-                    if (_frame != stillAt[k]) continue;
+                    if (_frame == stillAt[k]) pendingStills[k] = true;
+                    // Mode stills hold the sim and move the camera: wait until an offside sequence is over.
+                    if (!pendingStills[k] || offsidePlaying) continue;
+                    pendingStills[k] = false;
                     if (k == stillAt.Length - 1 && hud != null) hud.ForceTouchOverlay = true;
                     yield return ModeStill(modes[k], stillName[k]);
                     if (hud != null) hud.ForceTouchOverlay = false;
@@ -169,6 +248,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 _c.BroadcastCamera.GoalSide = 1;
                 yield return ModeStill(SinglePlayerCamera.Mode.GoalArea, "still_goal_area.png");
             }
+            if (KitStills) yield return KitCloseUps();
+            _c.OffsideSource.OnOffence -= LogOffside;
             var r = _c.Session.Result;
             File.WriteAllText(Path.Combine(OutputDir, "commentary.txt"), _commentary.ToString());
             WriteSequences(probeOptions.Config.HalfDurationSeconds);
@@ -178,6 +259,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 $"home={ClubLine(_c.HomeClub)} away={ClubLine(_c.AwayClub)} league={(_c.Leagues.Count > 0 ? _c.Leagues[Mathf.Clamp(_c.LeagueIndex, 0, _c.Leagues.Count - 1)].Id : "none")} " +
                 $"seat={(_c.AiVsAi ? "team AI" : "scripted bot")} controlled={_c.Session.ControlledId}\n" +
                 $"commentaryLines={_commentaryLines} sequences={_sequences.Count} window={windowStart}..{windowEnd}\n" +
+                (_c.ForceOffsideCapture
+                    ? $"forceOffside: requestedSeed={requestedSeed} probeOffsideTick={offsideTick} stills={(flagStill ? "flag " : "")}{(linesStill ? "lines " : "")}{(bannerStill ? "banner" : "")}\n"
+                    : "") +
+                offsideLog +
                 "Clubs for -spHome/-spAway (optionally -spLeague <id>; both clubs from one league):\n" +
                 RosterSelection.Describe(_c.Leagues));
             Debug.Log("[capture] done");
@@ -318,6 +403,54 @@ namespace OpenFifa.Gameplay.SinglePlayer
             unityCam.fieldOfView = oldFov;
             cam.CameraMode = old;
             cam.Snap();
+            _c.Frozen = false;
+        }
+
+        /// <summary>
+        /// Kit review stills: for a home outfielder, an away outfielder and a goalkeeper, the camera is placed behind
+        /// (name + number), in front (crest, front number) and close to the face, with the match frozen.
+        /// </summary>
+        private IEnumerator KitCloseUps()
+        {
+            var cam = _c.BroadcastCamera;
+            var camT = cam.transform;
+            var hud = GetComponent<SinglePlayerHud>();
+            bool hudWas = hud != null && hud.enabled;
+            if (hud != null) hud.enabled = false;
+            cam.enabled = false;
+            _c.Frozen = true;
+            var oldPos = camT.position;
+            var oldRot = camT.rotation;
+            var unityCam = cam.GetComponent<Camera>();
+            float oldFov = unityCam != null ? unityCam.fieldOfView : 0f;
+            int per = MatchSetup.PlayersPerTeam;
+            int[] ids = { 9, per + 7, 0, 4, per + 3, per };
+            string[] tags = { "home9", "away7", "homegk", "home4", "away3", "awaygk" };
+            for (int n = 0; n < ids.Length; n++)
+            {
+                var p = _c.PlayerTransform(ids[n]);
+                if (p == null || !p.gameObject.activeInHierarchy) continue;
+                var fwd = p.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+                var chest = p.position + Vector3.up * 1.25f;
+                var face = p.position + Vector3.up * 1.62f;
+                if (unityCam != null) unityCam.fieldOfView = 30f;
+                camT.position = chest - fwd * 2.6f + Vector3.up * 0.15f;
+                camT.LookAt(chest);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_back_{tags[n]}.png"));
+                camT.position = chest + fwd * 2.6f + Vector3.up * 0.15f;
+                camT.LookAt(chest);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_front_{tags[n]}.png"));
+                camT.position = face + fwd * 0.75f + p.right * 0.25f;
+                camT.LookAt(face);
+                yield return new WaitForEndOfFrame();
+                Save(Path.Combine(OutputDir, $"kit_face_{tags[n]}.png"));
+            }
+            if (unityCam != null) unityCam.fieldOfView = oldFov;
+            camT.SetPositionAndRotation(oldPos, oldRot);
+            cam.enabled = true;
+            if (hud != null) hud.enabled = hudWas;
             _c.Frozen = false;
         }
 

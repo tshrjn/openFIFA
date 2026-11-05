@@ -17,6 +17,12 @@ namespace OpenFifa.Gameplay
         public static readonly int TertiaryColor = Shader.PropertyToID("_TertiaryColor");
         public static readonly int ShortsColor = Shader.PropertyToID("_ShortsColor");
         public static readonly int SocksColor = Shader.PropertyToID("_SocksColor");
+        public static readonly int SkinColor = Shader.PropertyToID("_SkinColor");
+        public static readonly int BootColor = Shader.PropertyToID("_BootColor");
+        public static readonly int GloveColor = Shader.PropertyToID("_GloveColor");
+        public static readonly int BootAccentColor = Shader.PropertyToID("_BootAccentColor");
+        public static readonly int HairColor = Shader.PropertyToID("_HairColor");
+        public static readonly int HeadStyle = Shader.PropertyToID("_HeadStyle");
         public static readonly int PatternType = Shader.PropertyToID("_PatternType");
         public static readonly int PatternScale = Shader.PropertyToID("_PatternScale");
         public static readonly int CollarStyle = Shader.PropertyToID("_CollarStyle");
@@ -25,6 +31,8 @@ namespace OpenFifa.Gameplay
         public static readonly int FacingAngle = Shader.PropertyToID("_FacingAngle");
         public static readonly int BackPrintRect = Shader.PropertyToID("_BackPrintRect");
         public static readonly int FrontPrintRect = Shader.PropertyToID("_FrontPrintRect");
+        public static readonly int BodyLimbLimits = Shader.PropertyToID("_BodyLimbLimits");
+        public static readonly int BodyTorsoLines = Shader.PropertyToID("_BodyTorsoLines");
 
         public static readonly int NameNumberTex = Shader.PropertyToID("_NameNumberTex");
         public static readonly int UseNameNumber = Shader.PropertyToID("_UseNameNumber");

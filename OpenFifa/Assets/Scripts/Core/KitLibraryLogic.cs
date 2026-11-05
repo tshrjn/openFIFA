@@ -175,6 +175,7 @@ namespace OpenFifa.Core
             var manager = new KitVariantManager();
             foreach (KitVariant variant in Enum.GetValues(typeof(KitVariant)))
             {
+                if (variant == KitVariant.Goalkeeper) continue;
                 var kit = GetKit(teamId, variant);
                 if (kit != null)
                     manager.SetKit(variant, KitDefinitionConverter.ToJerseyDesign(kit));
@@ -230,6 +231,107 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
+        /// Like <see cref="ResolveMatchKits(string, string)"/>, but prefers a light-versus-dark pairing: when the
+        /// shirts' luminance differs by less than <paramref name="minLuminanceGap"/>, the away side switches to the
+        /// first non-clashing variant (Home, Away, Third) that reaches the gap, or else the one with the largest gap.
+        /// </summary>
+        public MatchKitSelection ResolveMatchKitsContrasting(string homeTeamId, string awayTeamId, float minLuminanceGap = 0.3f)
+        {
+            var result = ResolveMatchKits(homeTeamId, awayTeamId);
+            if (result.HomeKit == null || result.AwayKit == null) return result;
+
+            var homePrimary = KitDefinitionConverter.ToJerseyDesign(result.HomeKit).PrimaryColor;
+            float homeLum = JerseyComparer.GetLuminance(homePrimary);
+            float Gap(KitDefinitionData k) =>
+                Math.Abs(JerseyComparer.GetLuminance(KitDefinitionConverter.ToJerseyDesign(k).PrimaryColor) - homeLum);
+            if (Gap(result.AwayKit) >= minLuminanceGap) return result;
+
+            KitDefinitionData best = result.AwayKit;
+            KitVariant bestVariant = result.AwayVariant;
+            float bestGap = Gap(best);
+            foreach (var variant in new[] { KitVariant.Home, KitVariant.Away, KitVariant.Third })
+            {
+                var kit = GetKit(awayTeamId, variant);
+                if (kit == null) continue;
+                var primary = KitDefinitionConverter.ToJerseyDesign(kit).PrimaryColor;
+                if (JerseyComparer.ColorDistance(primary, homePrimary) <= JerseyComparer.DefaultClashThreshold) continue;
+                float gap = Gap(kit);
+                if (gap >= minLuminanceGap)
+                {
+                    best = kit;
+                    bestVariant = variant;
+                    break;
+                }
+                if (gap > bestGap + 1e-4f)
+                {
+                    best = kit;
+                    bestVariant = variant;
+                    bestGap = gap;
+                }
+            }
+            result.AwayKit = best;
+            result.AwayVariant = bestVariant;
+            return result;
+        }
+
+        /// <summary>Minimum primary-colour distance between a goalkeeper and every other kit on the pitch.</summary>
+        public const float KeeperClashThreshold = 0.45f;
+
+        /// <summary>
+        /// Picks goalkeeper kits that stand apart from both outfield kits and from each other: the team's own
+        /// Goalkeeper kit when it does, otherwise the first colour of <see cref="ClubKitFactory.KeeperPalette"/>
+        /// (starting at a team-specific offset) that does. Alternatives are copies of the team's keeper kit with
+        /// only the colours changed (id suffixed "-alt"). Fills <see cref="MatchKitSelection.HomeKeeperKit"/> and
+        /// <see cref="MatchKitSelection.AwayKeeperKit"/>.
+        /// </summary>
+        public void ResolveGoalkeeperKits(MatchKitSelection selection, string homeTeamId, string awayTeamId)
+        {
+            if (selection == null) return;
+            var taken = new List<SimpleColor>();
+            if (selection.HomeKit != null) taken.Add(KitDefinitionConverter.ToJerseyDesign(selection.HomeKit).PrimaryColor);
+            if (selection.AwayKit != null) taken.Add(KitDefinitionConverter.ToJerseyDesign(selection.AwayKit).PrimaryColor);
+
+            selection.HomeKeeperKit = PickKeeperKit(homeTeamId, taken);
+            if (selection.HomeKeeperKit != null)
+                taken.Add(KitDefinitionConverter.ToJerseyDesign(selection.HomeKeeperKit).PrimaryColor);
+            selection.AwayKeeperKit = PickKeeperKit(awayTeamId, taken);
+        }
+
+        private KitDefinitionData PickKeeperKit(string teamId, List<SimpleColor> taken)
+        {
+            var own = GetKit(teamId, KitVariant.Goalkeeper)
+                      ?? ClubKitFactory.BuildKeeperKit(teamId ?? "team", ClubKitFactory.KeeperPalette[0], 0u);
+            if (IsDistinct(KitDefinitionConverter.ToJerseyDesign(own).PrimaryColor, taken)) return own;
+
+            var palette = ClubKitFactory.KeeperPalette;
+            uint start = ClubKitFactory.StableHash(teamId) % (uint)palette.Length;
+            for (int i = 0; i < palette.Length; i++)
+            {
+                string hex = palette[(start + i) % palette.Length];
+                if (!IsDistinct(KitColorUtility.ParseOrDefault(hex, SimpleColor.Black), taken)) continue;
+                var recoloured = ClubKitFactory.BuildKeeperKit(own.TeamId, hex, (uint)i);
+                var alt = ClubKitFactory.Clone(own);
+                alt.Id = own.Id + "-alt" + i;
+                alt.PrimaryColor = recoloured.PrimaryColor;
+                alt.SecondaryColor = recoloured.SecondaryColor;
+                alt.TertiaryColor = recoloured.TertiaryColor;
+                alt.ShortsColor = recoloured.ShortsColor;
+                alt.SocksColor = recoloured.SocksColor;
+                alt.NumberColor = recoloured.NumberColor;
+                alt.NumberOutlineColor = recoloured.NumberOutlineColor;
+                return alt;
+            }
+            return own;
+        }
+
+        private static bool IsDistinct(SimpleColor c, List<SimpleColor> taken)
+        {
+            foreach (var t in taken)
+                if (JerseyComparer.ColorDistance(c, t) <= KeeperClashThreshold) return false;
+            return true;
+        }
+
+        /// <summary>
         /// Name and number for a formation slot: the team roster entry when present,
         /// otherwise an empty name and number slot+1.
         /// </summary>
@@ -248,6 +350,7 @@ namespace OpenFifa.Core
         {
             foreach (KitVariant v in Enum.GetValues(typeof(KitVariant)))
             {
+                if (v == KitVariant.Goalkeeper) continue;
                 var kit = GetKit(teamId, v);
                 if (kit != null)
                 {
