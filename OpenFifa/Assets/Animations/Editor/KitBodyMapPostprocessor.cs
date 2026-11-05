@@ -58,13 +58,14 @@ namespace OpenFifa.Editor
                 // Head sculpt: calibrated on the UAL mannequin only. Before the bake (new head vertices get the body
                 // map), head normals again after it (the bake's seam weld would blur the sculpted shading).
                 bool sculptHead = assetPath.StartsWith(QuaterniusImportPostprocessor.AnimationsRoot, StringComparison.Ordinal);
+                bool sculpted = false;
                 if (sculptHead)
                 {
-                    string sculpt = HeadSculpt.Apply(smr);
+                    string sculpt = HeadSculpt.Apply(smr, out sculpted);
                     if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {sculpt}");
                 }
                 string result = Bake(root.transform, smr, human);
-                if (sculptHead && result != null)
+                if (sculpted && result != null && !result.StartsWith("skipped", StringComparison.Ordinal))
                 {
                     int n = HeadSculpt.RecomputeHeadNormals(smr);
                     if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: head normals recomputed after the bake: {n}");

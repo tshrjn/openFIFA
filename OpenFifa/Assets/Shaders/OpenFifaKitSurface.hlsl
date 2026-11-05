@@ -472,21 +472,25 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     half3 hairPaint = hairStyle >= 2 ? hairShade : buzz;
     albedo = lerp(albedo, hairPaint, hair * hairAmount);
 
-    // Facial hair: soft edges that follow the jaw and cheeks, density varies with grain (no hard mask).
-    half beardCheek = smoothstep(0.205, 0.172, kp.y - 0.25 * ax);            // long fade up the cheek
-    half beardJaw = smoothstep(0.108, 0.128, kp.y);                           // just under the jaw line
-    half jaw = onHead * smoothstep(-0.05, 0.30, nz) * beardCheek * beardJaw;   // stops in front of the ears
+    // Facial hair: only the jaw line, chin and upper lip (never the cheeks), with a broken edge and a per-hair
+    // density map; stubble is a light dusting of dots, a beard a denser fill.
+    float edgeNoise = (KitValueNoise(kp * float3(260.0, 260.0, 260.0)) - 0.5) * 0.007;
+    half dots = smoothstep(0.42, 0.78, KitValueNoise(kp * float3(1500.0, 1500.0, 1500.0)));
+    // Lower face below the mouth line, rising along the jaw towards the sideburns at the sides.
+    float jawLine = kp.y + edgeNoise - 0.75 * max(ax - 0.028, 0.0);
+    half lowerFace = smoothstep(0.170, 0.150, jawLine) * smoothstep(0.106, 0.124, kp.y);
+    half sideOk = smoothstep(-0.05, 0.30, nz);                                 // stops in front of the ears
     half lips = KitEllipse(p, float2(0.0, 0.161), float2(0.019, 0.0058));
     half lipZone = smoothstep(0.75, 1.0, length((p - float2(0.0, 0.161)) / float2(0.024, 0.009)));
-    half beardZone = jaw * lipZone;
-    half moustache = onHead * front * smoothstep(0.030, 0.020, ax) * smoothstep(0.1635, 0.1665, kp.y) * smoothstep(0.177, 0.172, kp.y);
-    half goatee = onHead * front * smoothstep(1.0, 0.55, length((p - float2(0.0, 0.140)) / float2(0.019, 0.024))) * lipZone;
+    half beardZone = onHead * sideOk * lowerFace * lipZone;
+    half moustache = onHead * front * smoothstep(0.028, 0.020, ax + edgeNoise) * smoothstep(0.1635, 0.1665, kp.y)
+                   * smoothstep(0.176, 0.171, kp.y + edgeNoise * 0.5);
+    half goatee = onHead * front * smoothstep(1.0, 0.6, length((p - float2(0.0, 0.140)) / float2(0.017, 0.022)) + edgeNoise * 40.0) * lipZone;
     half facialMask = 0.0;
     half facialAmount = 1.0;
-    half density = 0.55 + 0.45 * grain;
-    if (facial == 1) { facialMask = beardZone; facialAmount = 0.22 + 0.22 * grain; }
-    else if (facial == 2) { facialMask = saturate(beardZone + 0.8 * moustache); facialAmount = 0.5 * density + 0.12; }
-    else if (facial == 3) { facialMask = saturate(goatee + 0.7 * moustache); facialAmount = 0.5 * density + 0.12; }
+    if (facial == 1) { facialMask = beardZone; facialAmount = 0.30 * dots; }                       // stubble
+    else if (facial == 2) { facialMask = saturate(beardZone + 0.8 * moustache); facialAmount = lerp(0.35, 0.75, dots); }
+    else if (facial == 3) { facialMask = saturate(goatee + 0.7 * moustache); facialAmount = lerp(0.35, 0.75, dots); }
     // Short trimmed hair over skin: blend toward a skin-tinted hair colour so the skin shows through.
     albedo = lerp(albedo, lerp(hairShade, skinCol * 0.55, 0.25), facialMask * facialAmount * (1.0 - hair));
 
