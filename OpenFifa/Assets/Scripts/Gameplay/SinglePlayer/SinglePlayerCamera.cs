@@ -61,6 +61,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private bool _snapped;
         private Vector3 _lastBall;
         private float _ballVz, _carryVx, _carryVz, _lead, _leadVel, _attackLead, _attackLeadVel, _attackSign;
+        private float _sinceResume = float.MaxValue;
 
         /// <summary>Camera yaw in radians, same convention as the sim (0 = +Z, +pi/2 = +X).</summary>
         public float YawRadians => Mathf.Atan2(transform.forward.x, transform.forward.z);
@@ -68,6 +69,20 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void LateUpdate() => UpdateNow(Time.unscaledDeltaTime, false);
 
         public void Snap() => UpdateNow(0f, true);
+
+        /// <summary>
+        /// Hand-back from a presentation cut (offside camera cut): keep the framed point (no re-snap), but restart the
+        /// follow from rest — spring velocity and carried ball speed zeroed, ball-speed estimate restarted from the
+        /// ball's current position — and ease the follow back in over <see cref="BroadcastFraming.ResumeEaseSeconds"/>,
+        /// so play resuming after the freeze does not jerk the framing.
+        /// </summary>
+        public void ResumeFollow()
+        {
+            _vel = Vector3.zero;
+            _carryVx = _carryVz = 0f;
+            if (Ball != null) _lastBall = Ball.position;
+            _sinceResume = 0f;
+        }
 
         public void UpdateNow(float dt, bool snap)
         {
@@ -117,10 +132,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
             else
             {
                 // Smooth follow plus the hard dead-zone edge; while the edge holds the framing it moves at the ball's
-                // speed, and keeps that speed when the edge lets go (no dead stop after a long ball).
-                _focus.z = BroadcastFraming.FollowAxis(_focus.z, ref _vel.z, target.z, ball.z, _carryVz, MaxBallOffset, FollowDamping, dt);
+                // speed, and keeps that speed when the edge lets go (no dead stop after a long ball). Right after a
+                // presentation cut hands back (ResumeFollow) the smoothing starts slower and eases back in.
+                float damping = BroadcastFraming.ResumeSmoothTime(FollowDamping, _sinceResume);
+                if (_sinceResume < float.MaxValue) _sinceResume += dt;
+                _focus.z = BroadcastFraming.FollowAxis(_focus.z, ref _vel.z, target.z, ball.z, _carryVz, MaxBallOffset, damping, dt);
                 _focus.x = BroadcastFraming.FollowAxis(_focus.x, ref _vel.x, target.x, Mathf.Clamp(ball.x, -HalfWidth, HalfWidth), _carryVx,
-                    MaxBallOffset * 0.7f, FollowDamping, dt);
+                    MaxBallOffset * 0.7f, damping, dt);
                 _focus.y = 0f;
             }
 

@@ -91,6 +91,26 @@ namespace OpenFifa.Core
             return held;
         }
 
+        /// <summary>Seconds the follow eases back in after a presentation cut hands the camera back.</summary>
+        public const float ResumeEaseSeconds = 0.4f;
+        /// <summary>Follow responsiveness right at the hand-back, as a fraction of normal (eases up to 1).</summary>
+        public const float ResumeMinResponse = 0.25f;
+
+        /// <summary>
+        /// Follow smoothing time <paramref name="sinceResume"/> seconds after a hand-back (e.g. the offside camera
+        /// cut ends): starts at <paramref name="baseSmoothTime"/> / <see cref="ResumeMinResponse"/> (a gentle start
+        /// from rest) and eases (smoothstep) back to <paramref name="baseSmoothTime"/> over
+        /// <paramref name="easeSeconds"/>. The hard dead-zone edge still applies, so the ball stays in frame.
+        /// </summary>
+        public static float ResumeSmoothTime(float baseSmoothTime, float sinceResume, float easeSeconds = ResumeEaseSeconds)
+        {
+            if (easeSeconds <= 0f || sinceResume >= easeSeconds) return baseSmoothTime;
+            float t = sinceResume <= 0f ? 0f : sinceResume / easeSeconds;
+            float s = t * t * (3f - 2f * t);
+            float response = ResumeMinResponse + (1f - ResumeMinResponse) * s;
+            return baseSmoothTime / response;
+        }
+
         /// <summary>On-screen size in pixels of an object <paramref name="sizeMetres"/> tall at a distance (perspective).</summary>
         public static float Pixels(float sizeMetres, float distance, float verticalFovDegrees, float screenHeight)
         {

@@ -422,5 +422,162 @@ namespace OpenFifa.Tests.Editor.TeamAI
             neutral.DecideNow(w, 0.1f);
             Assert.AreEqual(0f, neutral.Brains[0].PressSqueeze, "neutral pressing intensity: unchanged behaviour");
         }
+
+        // ------------------------------------------------------------------ style strength follows intent
+
+        private static int AIGoalsFor(TeamAIStyle style, TeamAIDifficultyLevel level, int seeds)
+        {
+            int goals = 0;
+            for (int seed = 1; seed <= seeds; seed++)
+            {
+                var setup = MatchSetup.CreateDefault((ulong)seed);
+                var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+                {
+                    Level = level, Seed = (ulong)seed, Config = new MatchSimConfig { HalfDurationSeconds = 360f },
+                    AwayTactics = TeamAITactics.FromStyle(style, SimFormationMapper.BestFit(setup.AwayFormation))
+                });
+                var bot = new ScriptedGamepadBot();
+                while (!s.IsFinished) s.StepOnce(bot);
+                goals += s.Result.AIGoals;
+            }
+            return goals;
+        }
+
+        /// <summary>
+        /// A defensive style must not be the strongest attack. At Ultimate against the scripted user (16 seeds of
+        /// 6-minute halves): park the bus scores least, high press most and clearly more than balanced. Measured over
+        /// 48 seeds: ParkTheBus 145, Possession 196, Balanced 203, HighPress 274 (before the calibration ParkTheBus
+        /// scored 178 to Balanced's 105 over 24 seeds, the most of any style).
+        /// </summary>
+        [Test]
+        [Category("Slow")]
+        [Timeout(3600000)]
+        public void StyleGoalsFor_FollowIntent_ParkTheBusLeast_HighPressMost()
+        {
+            const int seeds = 16;
+            var level = TeamAIDifficultyLevel.Ultimate;
+            int bus = AIGoalsFor(TeamAIStyle.ParkTheBus, level, seeds);
+            int bal = AIGoalsFor(TeamAIStyle.Balanced, level, seeds);
+            int poss = AIGoalsFor(TeamAIStyle.Possession, level, seeds);
+            int press = AIGoalsFor(TeamAIStyle.HighPress, level, seeds);
+            System.Console.WriteLine($"AI goals at Ultimate over {seeds}: ParkTheBus {bus}, Balanced {bal}, Possession {poss}, HighPress {press}");
+            Assert.Less(bus, bal, "park the bus should score less than a balanced side");
+            Assert.Less(bus, poss, "park the bus should score less than a possession side");
+            Assert.Greater(press, bal, "a high press should score more than a balanced side");
+            Assert.Greater(press, bus * 1.4f, "a high press should score far more than park the bus");
+        }
+
+        // ------------------------------------------------------------------ box defending
+
+        [Test]
+        public void BoxGuard_DeepSidesOnly()
+        {
+            var w = TeamAITestWorlds.FullMatch(new TeamAITactics(), new TeamAITactics());
+            var dir = new TeamAIDirector(Pitch, TeamAITactics.FromStyle(TeamAIStyle.ParkTheBus), new TeamAITactics(), 0.7f, 0.7f, 3);
+            dir.DecideNow(w, 0.1f);
+            Assert.AreEqual(1f, dir.Brains[0].BoxGuard, 1e-5f, "park the bus (deep + defensive mentality)");
+            Assert.AreEqual(0f, dir.Brains[1].BoxGuard, "neutral depth: no box defending");
+        }
+
+        [Test]
+        public void ParkTheBus_PutsBodiesBetweenTheBallAndGoal()
+        {
+            int Screeners(TeamAITactics home)
+            {
+                var w = TeamAITestWorlds.FullMatch(home, new TeamAITactics());
+                // An away attacker carries the ball 24 m out, slightly left of centre.
+                int carrier = 20;
+                w.Players[carrier].Position = new SimVec3(-6f, 0f, Z(0.23f));
+                TeamAITestWorlds.GiveBall(w, carrier);
+                var dir = new TeamAIDirector(Pitch, home, new TeamAITactics(), 0.7f, 0.7f, 5);
+                w.Time = 5f;
+                var cmds = dir.Commands;
+                for (int k = 0; k < 3; k++) { dir.DecideNow(w, 0.1f); w.Time += 0.1f; }
+                var ball = TeamAIMath.Flat(w.Ball.Position);
+                var goal = TeamAIMath.OwnGoal(1, Pitch);
+                int n = 0;
+                for (int i = 0; i < 11; i++)
+                {
+                    if (cmds[i].Intent != TeamAIIntent.CoverShadow) continue;
+                    var t = cmds[i].MoveTarget;
+                    float along = TeamAIMath.SegmentParam(ball, goal, t);
+                    if (along > 0f && along < 0.6f && TeamAIMath.DistanceToLine(ball, goal, t) < 4f) n++;
+                }
+                return n;
+            }
+            Assert.GreaterOrEqual(Screeners(TeamAITactics.FromStyle(TeamAIStyle.ParkTheBus)), 2, "deep block screens the shot lane");
+            Assert.AreEqual(0, Screeners(new TeamAITactics()), "a neutral side does not");
+        }
+
+        // ------------------------------------------------------------------ chance quality
+
+        [Test]
+        public void ChanceQuality_PatientSidesPassUpLowXgShots()
+        {
+            Assert.AreEqual(1f, TeamAIOnBall.ChanceQualityFor(0.25f), 1e-6f);
+            Assert.AreEqual(0f, TeamAIOnBall.ChanceQualityFor(0.5f));
+            Assert.AreEqual(0f, TeamAIOnBall.ChanceQualityFor(0.9f));
+
+            float ShotScore(float cq)
+            {
+                var w = TeamAITestWorlds.Empty();
+                TeamAITestWorlds.Add(w, 0, TeamAIRole.GK, 0, 0f, Z(0.02f));
+                int carrier = TeamAITestWorlds.Add(w, 0, TeamAIRole.CM, 6, 0f, Z(0.74f)); // ~27 m out: low xG
+                TeamAITestWorlds.Add(w, 1, TeamAIRole.GK, 0, 0f, Z(0.99f));
+                TeamAITestWorlds.GiveBall(w, carrier);
+                var ob = new TeamAIOnBall { ChanceQuality = cq };
+                var cmd = AIPlayerCommand.Idle(w.Players[carrier].Id, w.Players[carrier].Position);
+                var ctx = new TeamAIOnBallContext { OffsideDepth = 0.98f, MatchPhase = TeamAIMatchPhase.InPlay };
+                ob.Decide(w, carrier, TeamAIPhase.FinalThird, new TeamAIDifficulty(1f), new TeamAIRandom(7), ctx, ref cmd);
+                return ob.LastShot.Score;
+            }
+            float neutral = ShotScore(0f), patient = ShotScore(1f);
+            Assert.Greater(neutral, 0f);
+            Assert.Less(patient, neutral * 0.9f, "a patient side values a long shot less");
+        }
+
+        // ------------------------------------------------------------------ AI vs AI: park the bus concedes least
+
+        /// <summary>
+        /// Against an AI opponent (balanced 4-3-3, Professional, 16 seeds of 6-minute halves) park the bus allows the
+        /// fewest shots and scores the fewest goals. Measured: ParkTheBus 2 goals for, 3.0 shots against per match;
+        /// Balanced 4 / 3.6, Possession 11 / 4.9, HighPress 14 / 4.4.
+        /// </summary>
+        [Test]
+        [Category("Slow")]
+        [Timeout(3600000)]
+        public void ParkTheBus_AgainstAnAISide_FewestShotsAgainst_FewestGoalsFor()
+        {
+            (int gf, int shotsAgainst) Play(TeamAIStyle style)
+            {
+                int gf = 0, sa = 0;
+                for (int seed = 1; seed <= 16; seed++)
+                {
+                    var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+                    {
+                        Level = TeamAIDifficultyLevel.Professional, Seed = (ulong)seed,
+                        Config = new MatchSimConfig { HalfDurationSeconds = 360f },
+                        HomeTactics = TeamAITactics.FromStyle(style), AwayTactics = new TeamAITactics()
+                    });
+                    s.HumanSlots[0].Input = null;
+                    s.Director.Brains[1].Manager.Enabled = false;
+                    while (!s.IsFinished)
+                    {
+                        var ev = s.StepOnce(null);
+                        for (int i = 0; i < ev.Count; i++)
+                            if (ev[i].Type == MatchEventType.Shot && ev[i].Team == SimTeam.Away) sa++;
+                    }
+                    gf += s.Result.HomeScore;
+                }
+                return (gf, sa);
+            }
+            var bus = Play(TeamAIStyle.ParkTheBus);
+            var bal = Play(TeamAIStyle.Balanced);
+            var press = Play(TeamAIStyle.HighPress);
+            System.Console.WriteLine($"AI vs AI over 16: ParkTheBus {bus.gf} GF / {bus.shotsAgainst} SA, Balanced {bal.gf} / {bal.shotsAgainst}, HighPress {press.gf} / {press.shotsAgainst}");
+            Assert.Less(bus.shotsAgainst, bal.shotsAgainst, "park the bus should allow fewer shots than a balanced side");
+            Assert.Less(bus.gf, bal.gf + 1, "park the bus should not outscore a balanced side");
+            Assert.Less(bus.gf, press.gf, "park the bus should score less than a high press");
+        }
     }
 }
