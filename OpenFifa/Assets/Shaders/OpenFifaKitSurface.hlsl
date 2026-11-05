@@ -462,43 +462,85 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     half3 hairPaint = hairStyle >= 2 ? hairShade : buzz;
     albedo = lerp(albedo, hairPaint, hair * hairAmount);
 
-    // Facial hair.
-    half jaw = onHead * smoothstep(-0.25, 0.1, nz) * step(kp.y, 0.176 + 0.35 * ax) * step(0.112, kp.y);
-    half lips = KitEllipse(p, float2(0.0, 0.161), float2(0.022, 0.0065));
-    half beardZone = jaw * (1.0 - lips);
-    half moustache = onHead * front * step(abs(kp.x), 0.03) * step(0.167, kp.y) * step(kp.y, 0.178);
-    half goatee = onHead * front * KitEllipse(p, float2(0.0, 0.135), float2(0.022, 0.028)) * (1.0 - lips);
+    // Facial hair: soft edges that follow the jaw and cheeks, density varies with grain (no hard mask).
+    half beardCheek = smoothstep(0.200, 0.185, kp.y - 0.25 * ax);            // fades out up the cheek
+    half beardJaw = smoothstep(0.100, 0.118, kp.y);                           // under the jaw into the neck
+    half jaw = onHead * smoothstep(-0.30, 0.05, nz) * beardCheek * beardJaw;
+    half lips = KitEllipse(p, float2(0.0, 0.161), float2(0.019, 0.0058));
+    half lipZone = smoothstep(0.75, 1.0, length((p - float2(0.0, 0.161)) / float2(0.024, 0.009)));
+    half beardZone = jaw * lipZone;
+    half moustache = onHead * front * smoothstep(0.034, 0.024, ax) * smoothstep(0.163, 0.167, kp.y) * smoothstep(0.182, 0.176, kp.y);
+    half goatee = onHead * front * smoothstep(1.0, 0.7, length((p - float2(0.0, 0.137)) / float2(0.024, 0.030))) * lipZone;
     half facialMask = 0.0;
     half facialAmount = 1.0;
-    if (facial == 1) { facialMask = beardZone; facialAmount = 0.3 + 0.25 * grain; }
-    else if (facial == 2) { facialMask = saturate(beardZone + moustache); facialAmount = 0.85; }
-    else if (facial == 3) { facialMask = saturate(goatee + moustache); facialAmount = 0.85; }
-    albedo = lerp(albedo, hairShade, facialMask * facialAmount * (1.0 - hair));
+    half density = 0.55 + 0.45 * grain;
+    if (facial == 1) { facialMask = beardZone; facialAmount = 0.22 + 0.22 * grain; }
+    else if (facial == 2) { facialMask = saturate(beardZone + moustache); facialAmount = 0.8 * density + 0.15; }
+    else if (facial == 3) { facialMask = saturate(goatee + moustache); facialAmount = 0.8 * density + 0.15; }
+    albedo = lerp(albedo, hairShade * 0.9, facialMask * facialAmount * (1.0 - hair));
 
-    // Face features (front only).
+    // Face features (front only): soft, anatomical shading instead of sticker shapes.
     half f = onHead * front * (1.0 - hair);
     float eyeY = 0.226;
-    half eyes = 0.0, iris = 0.0;
+    half eyes = 0.0, iris = 0.0, pupil = 0.0, lidLine = 0.0, lowerLid = 0.0, socket = 0.0, bag = 0.0;
     [unroll] for (int side = -1; side <= 1; side += 2)
     {
         float2 c = float2(side * 0.031, eyeY);
-        eyes = max(eyes, KitEllipse(p, c, float2(0.0125, 0.0062)));
-        iris = max(iris, KitEllipse(p, c + float2(0.0, -0.0004), float2(0.0055, 0.0055)));
+        // Almond eye: narrower, upper lid covers the top of the iris.
+        float2 q = (p - c) / float2(0.0115, 0.0046);
+        q.y -= 0.25 * q.x * q.x * sign(q.y);
+        half e = 1.0 - smoothstep(0.85, 1.0, length(q));
+        eyes = max(eyes, e);
+        iris = max(iris, 1.0 - smoothstep(0.0042, 0.0050, length(p - c - float2(0.0, -0.0006))));
+        pupil = max(pupil, 1.0 - smoothstep(0.0016, 0.0022, length(p - c - float2(0.0, -0.0006))));
+        float2 lq = (p - c - float2(0.0, 0.0030)) / float2(0.0135, 0.0030);
+        lidLine = max(lidLine, (1.0 - smoothstep(0.6, 1.0, length(lq))) * step(c.y + 0.0012, p.y));
+        lowerLid = max(lowerLid, (1.0 - smoothstep(0.5, 1.0, length((p - c - float2(0.0, -0.0062)) / float2(0.012, 0.0028)))));
+        socket = max(socket, 1.0 - smoothstep(0.5, 1.0, length((p - c - float2(side * -0.002, 0.004)) / float2(0.019, 0.012))));
+        bag = max(bag, 1.0 - smoothstep(0.4, 1.0, length((p - c - float2(0.0, -0.011)) / float2(0.013, 0.005))));
     }
-    half3 irisCol = lerp(half3(0.16, 0.1, 0.06), half3(0.25, 0.35, 0.42), _HeadStyle.w);
-    albedo = lerp(albedo, skinCol * 0.6, f * KitEllipse(p, float2(0.031 * sign(kp.x), eyeY + 0.001), float2(0.016, 0.009)) * 0.35); // socket shade
-    albedo = lerp(albedo, half3(0.86, 0.84, 0.8), f * eyes);
+    half3 irisCol = lerp(half3(0.13, 0.08, 0.05), half3(0.22, 0.31, 0.37), _HeadStyle.w);
+    albedo *= 1.0 - f * (0.22 * socket + 0.08 * bag);                                  // brow ridge / socket shade
+    half3 sclera = lerp(half3(0.72, 0.66, 0.60), skinCol, 0.15);
+    albedo = lerp(albedo, sclera, f * eyes);
     albedo = lerp(albedo, irisCol, f * eyes * iris);
-    float browY = 0.244 + 0.004 * saturate((ax - 0.02) / 0.03);
-    half brows = f * step(0.012, ax) * step(ax, 0.05) * (1.0 - smoothstep(0.0026, 0.0042, abs(kp.y - browY)));
-    albedo = lerp(albedo, hairCol * 0.9, brows);
-    half nostrils = f * max(KitEllipse(p, float2(0.009, 0.189), float2(0.0045, 0.0028)), KitEllipse(p, float2(-0.009, 0.189), float2(0.0045, 0.0028)));
-    albedo = lerp(albedo, skinCol * 0.55, nostrils * 0.7);
-    half noseShade = f * step(ax, 0.012) * step(0.19, kp.y) * step(kp.y, 0.225) * 0.12;
-    albedo *= 1.0 - noseShade;
-    half3 lipCol = skinCol * half3(0.82, 0.6, 0.58);
-    albedo = lerp(albedo, lipCol, f * lips * (1.0 - facialMask * 0.6));
-    albedo = lerp(albedo, skinCol * 0.35, f * step(abs(kp.x), 0.021) * (1.0 - smoothstep(0.0008, 0.0016, abs(kp.y - 0.1615))));
+    albedo = lerp(albedo, half3(0.02, 0.02, 0.02), f * eyes * pupil);
+    albedo = lerp(albedo, skinCol * 0.28, f * lidLine * 0.85);                          // lash line / upper lid
+    albedo = lerp(albedo, skinCol * 0.70, f * lowerLid * 0.35 * (1.0 - eyes));
+
+    // Brows: thick at the inner end, tapering outwards, soft edges and hair grain.
+    float bx = saturate((ax - 0.012) / 0.040);
+    float browY = 0.2425 + 0.006 * bx - 0.004 * bx * bx;
+    float browHalf = lerp(0.0036, 0.0016, bx);
+    half brows = f * smoothstep(0.009, 0.014, ax) * smoothstep(0.054, 0.046, ax)
+               * (1.0 - smoothstep(browHalf * 0.6, browHalf, abs(kp.y - browY)));
+    albedo = lerp(albedo, hairCol * 0.85, brows * (0.65 + 0.35 * strands));
+
+    // Nose: shaded sides, lit bridge, soft alae instead of dot nostrils.
+    half noseZone = f * smoothstep(0.235, 0.22, kp.y) * smoothstep(0.183, 0.19, kp.y);
+    half noseSide = noseZone * smoothstep(0.004, 0.010, ax) * smoothstep(0.019, 0.013, ax);
+    albedo *= 1.0 - 0.16 * noseSide;
+    albedo = lerp(albedo, albedo * 1.08, noseZone * smoothstep(0.004, 0.0, ax) * 0.8);
+    half nostrils = f * max(KitEllipse(p, float2(0.0085, 0.1885), float2(0.0042, 0.0022)), KitEllipse(p, float2(-0.0085, 0.1885), float2(0.0042, 0.0022)));
+    albedo = lerp(albedo, skinCol * 0.45, nostrils * 0.45);
+    half philtrum = f * smoothstep(0.006, 0.002, ax) * smoothstep(0.163, 0.168, kp.y) * smoothstep(0.186, 0.180, kp.y);
+    albedo *= 1.0 - 0.06 * philtrum;
+
+    // Cheeks and nose warmth (stronger on lighter skin), contour under the cheekbones.
+    half lightness = saturate(dot(skinCol, half3(0.3, 0.5, 0.2)) * 1.6);
+    half cheeks = f * (1.0 - smoothstep(0.4, 1.0, length((float2(ax, kp.y) - float2(0.040, 0.198)) / float2(0.022, 0.018))));
+    albedo = lerp(albedo, albedo * half3(1.06, 0.90, 0.88), (cheeks + 0.6 * noseZone) * 0.5 * lightness);
+    half contour = f * (1.0 - smoothstep(0.4, 1.0, length((float2(ax, kp.y) - float2(0.052, 0.178)) / float2(0.014, 0.022))));
+    albedo *= 1.0 - 0.07 * contour;
+
+    // Lips: soft-edged, darker upper lip, a fine mouth line.
+    half upperLip = lips * step(0.1615, kp.y);
+    half3 lipCol = skinCol * lerp(half3(0.85, 0.66, 0.64), half3(0.78, 0.6, 0.58), upperLip);
+    half lipSoft = 1.0 - smoothstep(0.6, 1.0, length((p - float2(0.0, 0.161)) / float2(0.019, 0.0058)));
+    albedo = lerp(albedo, lipCol, f * lipSoft * (1.0 - facialMask * 0.6));
+    albedo = lerp(albedo, skinCol * 0.4, f * smoothstep(0.019, 0.013, ax) * (1.0 - smoothstep(0.0004, 0.0012, abs(kp.y - 0.1615))) * 0.8);
+    albedo *= 1.0 - f * 0.08 * (1.0 - smoothstep(0.4, 1.0, length((p - float2(0.0, 0.150)) / float2(0.016, 0.005))));  // under-lip shadow
+
     // Ears: a darker rim on the head sides.
     half ears = onHead * smoothstep(0.075, 0.085, ax) * step(0.19, kp.y) * step(kp.y, 0.245) * smoothstep(0.35, 0.0, abs(nz - 0.0)) * (1.0 - hair);
     albedo = lerp(albedo, skinCol * 0.82, ears * 0.6);
