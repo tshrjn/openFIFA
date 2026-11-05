@@ -9,7 +9,7 @@ namespace OpenFifa.Core
     {
         public static readonly string[] Palette =
         {
-            "#F1C9A5", "#E0AC88", "#C68863", "#A86E4B", "#8A5537", "#6B3F28", "#4E2C1C",
+            "#F1C9A5", "#E0AC88", "#C68863", "#A86E4B", "#8A5537", "#6E4330", "#553222",
         };
 
         /// <summary>Palette index nearest to a roster skin tone (0 lightest .. 1 darkest).</summary>

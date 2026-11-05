@@ -16,11 +16,11 @@ namespace OpenFifa.Gameplay
     public static class HairCapBuilder
     {
         /// <summary>Head-bone-space position of the kit-space point (0, 0.201, -0.012) (head centre incl. neck).</summary>
-        private static readonly Vector3 HeadCentreBone = new Vector3(0f, 0.1194f, -0.0068f);
-        private const float HeadCentreKitY = 0.201f;
-        private const float HeadCentreKitZ = -0.012f;
-        private static readonly Vector3 KitUpInBone = new Vector3(0f, 0.999f, 0.037f);
-        private static readonly Vector3 KitFrontInBone = new Vector3(0f, -0.037f, 0.999f);
+        private static readonly Vector3 HeadCentreBone = new Vector3(MannequinHeadSpace.CentreBoneX, MannequinHeadSpace.CentreBoneY, MannequinHeadSpace.CentreBoneZ);
+        private const float HeadCentreKitY = MannequinHeadSpace.CentreKitY;
+        private const float HeadCentreKitZ = MannequinHeadSpace.CentreKitZ;
+        private static readonly Vector3 KitUpInBone = new Vector3(0f, MannequinHeadSpace.UpBoneY, MannequinHeadSpace.UpBoneZ);
+        private static readonly Vector3 KitFrontInBone = new Vector3(0f, MannequinHeadSpace.FrontBoneY, MannequinHeadSpace.FrontBoneZ);
 
         /// <summary>Cranium ellipsoid in kit space (centre y/z, radii x/y/z), metres.</summary>
         private static readonly Vector3 CraniumCentre = new Vector3(0f, 0.240f, -0.012f);
@@ -119,7 +119,7 @@ namespace OpenFifa.Gameplay
         /// <summary>Hairline height (kit space) at a point, matching KitPaintHead in OpenFifaKitSurface.hlsl.</summary>
         public static float Hairline(float x, float z)
         {
-            float nz = (z - HeadCentreKitZ) / 0.118f;
+            float nz = MannequinHeadSpace.Frontness(z);
             float hl = Mathf.Lerp(0.150f, 0.288f, Smooth(-0.55f, 0.75f, nz));
             float ax = Mathf.Abs(x);
             return Mathf.Min(hl, Mathf.Lerp(0.288f, 0.252f, Smooth(0.055f, 0.08f, ax) * Smooth(0.8f, 0.2f, nz)));
