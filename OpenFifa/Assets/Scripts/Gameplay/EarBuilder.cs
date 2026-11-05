@@ -88,7 +88,7 @@ namespace OpenFifa.Gameplay
                     // Rim stands off the head, more at the back/top; the lobe and front stay close.
                     float back = Mathf.Clamp01(0.5f - 0.5f * Mathf.Cos(t) + 0.3f * Mathf.Sin(t));
                     float off = (0.004f + 0.014f * back) * u * u;
-                    float bowl = -0.004f * (1f - u) * (1f - u);
+                    float bowl = 0.002f * (1f - u);                  // flat plate, no recess (a recess renders as a dark hole)
                     var k = centre + new Vector3(side * (off + bowl + 0.003f * Mathf.Sin(u * Mathf.PI)), y, z - 0.004f * u);
                     verts.Add(HairCapBuilder.KitToBonePoint(k));
                     var n = new Vector3(side * 1f, -0.25f * y / 0.03f, -0.4f * z / 0.017f * u).normalized;
