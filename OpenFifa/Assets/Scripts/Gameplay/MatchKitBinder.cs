@@ -66,6 +66,8 @@ namespace OpenFifa.Gameplay
             if (!jersey.IsApplied) return null;
             if (jersey.MappingMode == KitMappingMode.SkinnedBody)
                 HairCapBuilder.Attach(model, look.Hair, ToColor(look.HairColour));
+            if (jersey.MappingMode == KitMappingMode.SkinnedBody)
+                EarBuilder.Attach(model, ToColor(look.Skin));
             return jersey;
         }
 
