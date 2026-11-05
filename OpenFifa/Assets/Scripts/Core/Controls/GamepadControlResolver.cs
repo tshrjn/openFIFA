@@ -1,6 +1,10 @@
 namespace OpenFifa.Core
 {
-    /// <summary>One sampled gamepad state. Triggers are analog 0..1 and also count as held above 0.5.</summary>
+    /// <summary>
+    /// One sampled gamepad state. Triggers are analog 0..1; the resolver counts one as held from
+    /// <see cref="GamepadControlResolver.TriggerPressThreshold"/> until it drops below
+    /// <see cref="GamepadControlResolver.TriggerReleaseThreshold"/> (hysteresis).
+    /// </summary>
     public struct GamepadFrame
     {
         public GamepadButton Buttons;
@@ -23,7 +27,8 @@ namespace OpenFifa.Core
     /// Turns gamepad frames into <see cref="ControlIntent"/>s using a <see cref="ControlPreset"/>.
     /// Call <see cref="Tick"/> once per sim tick with the current frame and context. Behaviour:
     /// - Kick buttons charge while held; on release the action is resolved from the shoulder modifiers held at
-    ///   any point during the hold, then queued in a <see cref="ControlKickBuffer"/> and fired on the first
+    ///   any point during the hold (LT counts only when pressed after the kick press, during the charge, because
+    ///   LT held beforehand is Shield), then queued in a <see cref="ControlKickBuffer"/> and fired on the first
     ///   tick the player can strike (inside the buffer window).
     /// - Pressing shoot again while a plain shot is still queued (within the double-tap window) makes it a low shot.
     /// - Defence: shoot button = tackle, lob button = slide, pass button held = contain, RB held = teammate
@@ -42,6 +47,12 @@ namespace OpenFifa.Core
             GamepadButton.DpadUp, GamepadButton.DpadDown, GamepadButton.DpadLeft, GamepadButton.DpadRight,
         };
 
+        /// <summary>An analog trigger counts as pressed above this...</summary>
+        public const float TriggerPressThreshold = 0.55f;
+        /// <summary>...and stays held until it falls below this, so a trigger resting near one value does not chatter
+        /// between Shield/jockey/knuckleball (LT) or sprint (RT) on and off.</summary>
+        public const float TriggerReleaseThreshold = 0.35f;
+
         private readonly ChargeMeter _meter = new ChargeMeter();
         private readonly ControlKickBuffer _buffer = new ControlKickBuffer();
 
@@ -51,6 +62,7 @@ namespace OpenFifa.Core
         private bool _latchLeft;
         private bool _latchRight;
         private bool _latchTrigger;
+        private bool _chargeStartedThisTick;
         private float _lastShootRelease = float.NegativeInfinity;
         private bool _swallowShootRelease;
         private bool _flickArmed = true;
@@ -68,12 +80,16 @@ namespace OpenFifa.Core
 
         public bool IsCharging => _meter.IsCharging;
 
+        /// <summary>Trigger hysteresis: a trigger that was held stays held down to the release threshold.</summary>
+        public static bool TriggerHeld(float value, bool wasHeld) =>
+            value > (wasHeld ? TriggerReleaseThreshold : TriggerPressThreshold);
+
         public ControlIntent Tick(in GamepadFrame frame, in ControlContext ctx)
         {
             var s = Settings;
             GamepadButton held = frame.Buttons;
-            if (frame.LeftTrigger > 0.5f) held |= GamepadButton.LeftTrigger;
-            if (frame.RightTrigger > 0.5f) held |= GamepadButton.RightTrigger;
+            if (TriggerHeld(frame.LeftTrigger, (_prev & GamepadButton.LeftTrigger) != 0)) held |= GamepadButton.LeftTrigger;
+            if (TriggerHeld(frame.RightTrigger, (_prev & GamepadButton.RightTrigger) != 0)) held |= GamepadButton.RightTrigger;
             GamepadButton pressed = held & ~_prev;
             GamepadButton released = _prev & ~held;
             _prev = held;
@@ -102,6 +118,7 @@ namespace OpenFifa.Core
                 _swallowShootRelease = false;
             }
 
+            _chargeStartedThisTick = false;
             if (attack)
             {
                 for (int i = 0; i < FaceButtons.Length; i++)
@@ -124,7 +141,10 @@ namespace OpenFifa.Core
                         _chargeButton = b;
                         _latchLeft = lb;
                         _latchRight = rb;
-                        _latchTrigger = lt;
+                        // LT is also Shield, so a trigger already held when the kick starts is the player shielding,
+                        // not asking for a knuckleball: only a fresh LT press after the kick press counts (below).
+                        _latchTrigger = false;
+                        _chargeStartedThisTick = true;
                     }
                 }
 
@@ -132,7 +152,7 @@ namespace OpenFifa.Core
                 {
                     _latchLeft |= lb;
                     _latchRight |= rb;
-                    _latchTrigger |= lt;
+                    if (!_chargeStartedThisTick && (pressed & GamepadButton.LeftTrigger) != 0) _latchTrigger = true;
                     if ((released & _chargeButton) != 0)
                     {
                         float power = _meter.Release(ctx.Time);

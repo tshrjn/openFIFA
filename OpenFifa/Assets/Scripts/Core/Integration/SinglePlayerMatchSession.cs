@@ -127,6 +127,7 @@ namespace OpenFifa.Core
             Profile = SinglePlayerDifficulty.For(Options.Level);
             // The pitch condition goes into the ball config before the sim AND the AI ball model are built from it,
             // so the AI's flight and roll predictions match the ball it plays. Options.Config itself is not changed.
+            // The match's surface (Options.Surface, else from Options.Weather) wins over a surface already in Options.Config.
             var cfg = (Options.Config ?? new MatchSimConfig()).ForSurface(Options.EffectiveSurface);
             var setup = PrepareSetup(Options.Setup ?? MatchSetup.CreateDefault(Options.Seed), Options.Seed, Options.HumanTeam, Profile);
 
@@ -151,7 +152,7 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Copies the setup and applies the level's goalkeeper adjustments (1-99 clamped).
+        /// Copies the setup and applies the level's goalkeeper, AI outfield and AI finishing adjustments (1-99 clamped).
         /// The caller's setup is not modified.
         /// </summary>
         public static MatchSetup PrepareSetup(MatchSetup src, ulong seed, SimTeam humanTeam, in SinglePlayerDifficultyProfile profile)
@@ -176,6 +177,9 @@ namespace OpenFifa.Core
             if (profile.OpponentOutfieldDelta != 0)
                 for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
                     if (!ai[i].IsGoalkeeper) Outfield(ai[i], profile.OpponentOutfieldDelta);
+            if (profile.OpponentFinishingDelta != 0)
+                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+                    if (!ai[i].IsGoalkeeper) Finishing(ai[i], profile.OpponentFinishingDelta);
             return s;
         }
 
@@ -191,6 +195,14 @@ namespace OpenFifa.Core
             a.Curve = Clamp99(a.Curve + d); a.Heading = Clamp99(a.Heading + d); a.Composure = Clamp99(a.Composure + d);
             a.StandingTackle = Clamp99(a.StandingTackle + d); a.SlidingTackle = Clamp99(a.SlidingTackle + d);
             a.Aggression = Clamp99(a.Aggression + d);
+        }
+
+        /// <summary>Shifts the ratings that set shot accuracy (KickSolver: Finishing, LongShots, Composure) by delta.</summary>
+        private static void Finishing(SimPlayerAttributes a, int d)
+        {
+            a.Finishing = Clamp99(a.Finishing + d);
+            a.LongShots = Clamp99(a.LongShots + d);
+            a.Composure = Clamp99(a.Composure + d);
         }
 
         private static void Keeper(SimPlayerAttributes gk, int delta)

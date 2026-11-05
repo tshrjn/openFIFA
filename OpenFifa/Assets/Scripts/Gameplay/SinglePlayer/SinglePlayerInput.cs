@@ -147,8 +147,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Edge(pad.buttonNorth, GamepadButton.North, ref pressed, ref released);
             Edge(pad.leftShoulder, GamepadButton.LeftShoulder, ref pressed, ref released);
             Edge(pad.rightShoulder, GamepadButton.RightShoulder, ref pressed, ref released);
-            Edge(pad.leftTrigger, GamepadButton.LeftTrigger, ref pressed, ref released);
-            Edge(pad.rightTrigger, GamepadButton.RightTrigger, ref pressed, ref released);
+            // Analog triggers: no Input System edges (its press point is 0.5); the edge queue infers them from the
+            // sampled values with the resolver's 0.55 / 0.35 hysteresis, so both agree on held.
             Edge(pad.dpad.up, GamepadButton.DpadUp, ref pressed, ref released);
             Edge(pad.dpad.down, GamepadButton.DpadDown, ref pressed, ref released);
             Edge(pad.dpad.left, GamepadButton.DpadLeft, ref pressed, ref released);

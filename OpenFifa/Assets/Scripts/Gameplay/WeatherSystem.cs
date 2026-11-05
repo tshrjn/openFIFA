@@ -5,7 +5,8 @@ namespace OpenFifa.Gameplay
 {
     /// <summary>
     /// Master weather controller. Manages rain, snow, fog, and wind particle systems
-    /// based on WeatherLogic state. Updates pitch material properties via MaterialPropertyBlock.
+    /// based on WeatherLogic state. Updates the pitch's wet look (URP/Lit _BaseColor and _Smoothness) via a
+    /// MaterialPropertyBlock.
     /// </summary>
     public class WeatherSystem : MonoBehaviour
     {
@@ -27,13 +28,55 @@ namespace OpenFifa.Gameplay
         [SerializeField] private int _maxRainParticles = 2000;
         [SerializeField] private int _maxSnowParticles = 1500;
 
+        /// <summary>
+        /// Optional camera to keep the precipitation in front of (broadcast view). Null = emitters stay where they
+        /// are under this object.
+        /// </summary>
+        public Transform FollowCamera;
+        /// <summary>
+        /// Metres from the camera's ground point to the far touchline along its (flat) forward; the precipitation box
+        /// (<see cref="PrecipitationVolume"/>) reaches just past it.
+        /// </summary>
+        public float FarReach = 100f;
+        /// <summary>
+        /// Camera-to-far-touchline distance (m) the fog density is solved for (<see cref="BroadcastFog.Density"/>);
+        /// 0 = use the preset's exp² density unchanged (close camera).
+        /// </summary>
+        public float FogReferenceDistance;
+        /// <summary>Multiplier on the preset's droplet/flake rate (a wide broadcast view needs denser rain to read).</summary>
+        public float EmissionScale = 1f;
+
         private WeatherLogic _logic;
         private MaterialPropertyBlock _pitchPropertyBlock;
+        private bool _broadcast;
+        private PrecipitationBox _box;
+        private Color _pitchBaseColor = Color.white;
+        private float _pitchSmoothness = 1f;
 
-        // Shader property IDs cached for performance
-        private static readonly int WetnessPropertyId = Shader.PropertyToID("_Wetness");
-        private static readonly int SnowCoveragePropertyId = Shader.PropertyToID("_SnowCoverage");
-        private static readonly int MudLevelPropertyId = Shader.PropertyToID("_MudLevel");
+        private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
+        private static readonly int SmoothnessId = Shader.PropertyToID("_Smoothness");
+        private const float MaxRainLifetime = 3f, MaxSnowLifetime = 12f, RainGravityModifier = 1.5f, SnowGravityModifier = 0.1f;
+
+        /// <summary>
+        /// Turf renderer (URP/Lit) that gets the wet look. Its material's _BaseColor and _Smoothness are the dry
+        /// values; the look is applied on top through a property block, so the shared material is not changed.
+        /// </summary>
+        public Renderer PitchRenderer
+        {
+            get => _pitchRenderer;
+            set
+            {
+                if (_pitchRenderer != null && _pitchRenderer != value) _pitchRenderer.SetPropertyBlock(null);
+                _pitchRenderer = value;
+                var m = value != null ? value.sharedMaterial : null;
+                _pitchBaseColor = m != null && m.HasProperty(BaseColorId) ? m.GetColor(BaseColorId) : Color.white;
+                _pitchSmoothness = m != null && m.HasProperty(SmoothnessId) ? m.GetFloat(SmoothnessId) : 1f;
+                UpdatePitchMaterial();
+            }
+        }
+
+        /// <summary>The wet look currently applied to <see cref="PitchRenderer"/>.</summary>
+        public PitchWetnessLook PitchLook { get; private set; }
 
         /// <summary>The underlying weather logic (pure C#).</summary>
         public WeatherLogic Logic => _logic;
@@ -59,8 +102,82 @@ namespace OpenFifa.Gameplay
 
             EnsureRainParticleSystem();
             EnsureSnowParticleSystem();
+            if (_pitchRenderer != null) PitchRenderer = _pitchRenderer; // capture the dry colour/smoothness
             ApplyInitialState();
         }
+
+        /// <summary>
+        /// Sets the particle material and look for a far broadcast camera: stretched rain streaks, larger flakes, the
+        /// emitter box from <see cref="PrecipitationVolume"/> (kept clear of the camera, across the whole visible pitch)
+        /// and the quality tier's particle budget. Call after the component has woken (e.g. right after AddComponent).
+        /// </summary>
+        public void ConfigureForBroadcast(Material particleMaterial, int maxRainParticles, int maxSnowParticles)
+        {
+            _broadcast = true;
+            _maxRainParticles = Mathf.Max(100, maxRainParticles);
+            _maxSnowParticles = Mathf.Max(100, maxSnowParticles);
+            if (_rainParticleSystem != null)
+            {
+                var rr = _rainParticleSystem.GetComponent<ParticleSystemRenderer>();
+                if (particleMaterial != null) rr.sharedMaterial = particleMaterial;
+                rr.renderMode = ParticleSystemRenderMode.Stretch;
+                rr.velocityScale = 0.04f;
+                rr.lengthScale = 1f;
+                var main = _rainParticleSystem.main;
+                main.startSize = 0.05f;
+                main.maxParticles = _maxRainParticles;
+                var collision = _rainParticleSystem.collision;
+                collision.enabled = false; // no colliders on the procedural pitch; saves the per-particle raycasts
+                var subs = _rainParticleSystem.subEmitters;
+                subs.enabled = false;
+            }
+            if (_snowParticleSystem != null)
+            {
+                var sr = _snowParticleSystem.GetComponent<ParticleSystemRenderer>();
+                if (particleMaterial != null) sr.sharedMaterial = particleMaterial;
+                var main = _snowParticleSystem.main;
+                main.startSize = new ParticleSystem.MinMaxCurve(0.08f, 0.16f);
+                main.maxParticles = _maxSnowParticles;
+            }
+            FollowBroadcastCamera();
+            ApplyInitialState();
+        }
+
+        private void LateUpdate()
+        {
+            FollowBroadcastCamera();
+        }
+
+        /// <summary>
+        /// Yaws this object with the camera and sits it on the ground under the <see cref="PrecipitationVolume"/> box;
+        /// the emitters sit at the box's height and take its size.
+        /// </summary>
+        private void FollowBroadcastCamera()
+        {
+            if (FollowCamera == null || _logic == null) return;
+            Vector3 fwd = FollowCamera.forward;
+            fwd.y = 0f;
+            if (fwd.sqrMagnitude < 1e-4f) fwd = Vector3.forward;
+            fwd.Normalize();
+            var p = _logic.GetCurrentParticleParams();
+            Vector3 cam = FollowCamera.position;
+            _box = PrecipitationVolume.Compute(cam.x, cam.y, cam.z, fwd.x, fwd.z, FarReach, p.RainAngle);
+            transform.SetPositionAndRotation(new Vector3(_box.CenterX, 0f, _box.CenterZ), Quaternion.LookRotation(fwd, Vector3.up));
+            PlaceEmitter(_rainParticleSystem);
+            PlaceEmitter(_snowParticleSystem);
+        }
+
+        private void PlaceEmitter(ParticleSystem ps)
+        {
+            if (ps == null) return;
+            ps.transform.localPosition = new Vector3(0f, _box.EmitterHeight, 0f);
+            ps.transform.localRotation = Quaternion.identity;
+            var shape = ps.shape;
+            shape.scale = new Vector3(_box.Width, _box.Depth, 1f); // local Y (depth) becomes the forward axis once pitched down
+        }
+
+        /// <summary>The current emitter box (broadcast mode).</summary>
+        public PrecipitationBox Box => _box;
 
         private void Update()
         {
@@ -110,6 +227,9 @@ namespace OpenFifa.Gameplay
         public void SetWeatherImmediate(WeatherType weather)
         {
             _logic.SetImmediate(weather);
+            // Kicking off in rain: the pitch has already been rained on.
+            if (weather == WeatherType.LightRain || weather == WeatherType.HeavyRain) _logic.PitchCondition.SetWetness(1f);
+            FollowBroadcastCamera();
             ApplyInitialState();
         }
 
@@ -134,7 +254,7 @@ namespace OpenFifa.Gameplay
             main.maxParticles = _maxRainParticles;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.startColor = new Color(0.7f, 0.75f, 0.85f, 0.6f);
-            main.gravityModifier = 1.5f;
+            main.gravityModifier = RainGravityModifier;
             main.playOnAwake = false;
 
             var emission = _rainParticleSystem.emission;
@@ -143,8 +263,8 @@ namespace OpenFifa.Gameplay
 
             var shape = _rainParticleSystem.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(60f, 1f, 40f);
-            shape.rotation = new Vector3(0f, 0f, 0f);
+            shape.scale = new Vector3(60f, 40f, 1f); // local Y becomes world Z once pitched down
+            shape.rotation = new Vector3(90f, 0f, 0f); // emit downwards (a Box emits along its local +Z)
 
             // Collision for splash effect
             var collision = _rainParticleSystem.collision;
@@ -227,7 +347,7 @@ namespace OpenFifa.Gameplay
             main.maxParticles = _maxSnowParticles;
             main.simulationSpace = ParticleSystemSimulationSpace.World;
             main.startColor = new Color(0.95f, 0.95f, 1f, 0.8f);
-            main.gravityModifier = 0.1f;
+            main.gravityModifier = SnowGravityModifier;
             main.playOnAwake = false;
 
             var emission = _snowParticleSystem.emission;
@@ -236,7 +356,8 @@ namespace OpenFifa.Gameplay
 
             var shape = _snowParticleSystem.shape;
             shape.shapeType = ParticleSystemShapeType.Box;
-            shape.scale = new Vector3(60f, 1f, 40f);
+            shape.scale = new Vector3(60f, 40f, 1f); // local Y becomes world Z once pitched down
+            shape.rotation = new Vector3(90f, 0f, 0f); // emit downwards (a Box emits along its local +Z)
 
             // Noise module for flutter/drift
             var noise = _snowParticleSystem.noise;
@@ -285,14 +406,25 @@ namespace OpenFifa.Gameplay
 
             if (shouldRain)
             {
-                emission.rateOverTime = particleParams.RainDropletCount;
-
                 var main = _rainParticleSystem.main;
                 main.startSpeed = particleParams.RainSpeed;
+                if (_broadcast)
+                {
+                    float life = PrecipitationVolume.FallTime(_box.EmitterHeight, particleParams.RainSpeed, particleParams.RainAngle,
+                        RainGravityModifier * Physics.gravity.magnitude, MaxRainLifetime);
+                    main.startLifetime = life;
+                    emission.rateOverTime = PrecipitationVolume.EmissionRate(particleParams.RainDropletCount, EmissionScale,
+                        _box.Width * _box.Depth, life, _maxRainParticles);
+                }
+                else
+                {
+                    emission.rateOverTime = particleParams.RainDropletCount * EmissionScale;
+                }
 
                 // Apply rain angle from wind
                 var shape = _rainParticleSystem.shape;
-                shape.rotation = new Vector3(particleParams.RainAngle, 0f, 0f);
+                // A Box shape emits along its local +Z: pitch it 90 deg so drops leave downwards, tilted by the wind angle.
+                shape.rotation = new Vector3(90f - particleParams.RainAngle, 0f, 0f);
 
                 if (!_rainParticleSystem.isPlaying)
                     _rainParticleSystem.Play();
@@ -314,10 +446,20 @@ namespace OpenFifa.Gameplay
 
             if (shouldSnow)
             {
-                emission.rateOverTime = particleParams.SnowFlakeCount;
-
                 var main = _snowParticleSystem.main;
                 main.startSpeed = particleParams.SnowSpeed;
+                if (_broadcast)
+                {
+                    float life = PrecipitationVolume.FallTime(_box.EmitterHeight, particleParams.SnowSpeed, 0f,
+                        SnowGravityModifier * Physics.gravity.magnitude, MaxSnowLifetime);
+                    main.startLifetime = life;
+                    emission.rateOverTime = PrecipitationVolume.EmissionRate(particleParams.SnowFlakeCount, EmissionScale,
+                        _box.Width * _box.Depth, life, _maxSnowParticles);
+                }
+                else
+                {
+                    emission.rateOverTime = particleParams.SnowFlakeCount * EmissionScale;
+                }
 
                 // Update noise for drift
                 var noise = _snowParticleSystem.noise;
@@ -335,9 +477,10 @@ namespace OpenFifa.Gameplay
 
         private void UpdateFog(WeatherParticleParams particleParams)
         {
+            float density = BroadcastFog.Density(particleParams.FogDensity, FogReferenceDistance);
             RenderSettings.fog = particleParams.FogDensity > 0.001f;
-            RenderSettings.fogMode = FogMode.ExponentialSquared;
-            RenderSettings.fogDensity = particleParams.FogDensity;
+            RenderSettings.fogMode = FogMode.ExponentialSquared; // the only fog variant kept in builds (GraphicsSettings)
+            RenderSettings.fogDensity = density;
             RenderSettings.fogColor = new Color(
                 particleParams.FogColorR,
                 particleParams.FogColorG,
@@ -360,12 +503,20 @@ namespace OpenFifa.Gameplay
 
         private void UpdatePitchMaterial()
         {
-            if (_pitchRenderer == null) return;
+            if (_pitchRenderer == null || _logic == null) return;
+            if (_pitchPropertyBlock == null) _pitchPropertyBlock = new MaterialPropertyBlock();
+
+            var sm = _logic.StateMachine;
+            float reflectivity = sm.CurrentConfig.PitchEffect.WetReflectivity;
+            if (sm.IsTransitioning && sm.TargetConfig != null)
+                reflectivity = Mathf.Lerp(reflectivity, sm.TargetConfig.PitchEffect.WetReflectivity, sm.TransitionProgress);
+            var look = PitchWetnessLook.For(sm.CurrentWeatherType, reflectivity, _logic.PitchCondition.Wetness);
+            PitchLook = look;
 
             _pitchRenderer.GetPropertyBlock(_pitchPropertyBlock);
-            _pitchPropertyBlock.SetFloat(WetnessPropertyId, _logic.PitchCondition.Wetness);
-            _pitchPropertyBlock.SetFloat(SnowCoveragePropertyId, _logic.PitchCondition.SnowCoverage);
-            _pitchPropertyBlock.SetFloat(MudLevelPropertyId, _logic.PitchCondition.MudLevel);
+            var c = _pitchBaseColor;
+            _pitchPropertyBlock.SetColor(BaseColorId, new Color(c.r * look.AlbedoScale, c.g * look.AlbedoScale, c.b * look.AlbedoScale, c.a));
+            _pitchPropertyBlock.SetFloat(SmoothnessId, _pitchSmoothness * look.SmoothnessMultiplier);
             _pitchRenderer.SetPropertyBlock(_pitchPropertyBlock);
         }
 
@@ -383,6 +534,12 @@ namespace OpenFifa.Gameplay
         {
             // Restore fog to disabled when weather system is turned off
             RenderSettings.fog = false;
+            if (_pitchRenderer != null) _pitchRenderer.SetPropertyBlock(null); // dry look
+        }
+
+        private void OnEnable()
+        {
+            if (_logic != null) ApplyInitialState();
         }
     }
 }

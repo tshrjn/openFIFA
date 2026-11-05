@@ -89,8 +89,13 @@ namespace OpenFifa.Core
         /// follow the precomputed rolling curve, airborne balls fly with drag and bounce. In decision loops prefer a
         /// per-tick <see cref="TeamAIBallTrajectory"/>, which integrates once and is queried cheaply.
         /// </summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static SimVec3 PredictBall(SimVec3 pos, SimVec3 vel, float t) =>
             TeamAIBallModel.Default.Predict(pos, vel, SimVec3.Zero, t);
+
+        /// <summary>As <see cref="PredictBall(SimVec3, SimVec3, float)"/> with a given ball model (null = default).</summary>
+        public static SimVec3 PredictBall(SimVec3 pos, SimVec3 vel, float t, TeamAIBallModel model) =>
+            (model ?? TeamAIBallModel.Default).Predict(pos, vel, SimVec3.Zero, t);
 
         /// <summary>Angle (radians) the goal mouth subtends from a point.</summary>
         public static float GoalAngle(SimVec3 from, SimVec3 goalCentre, float goalWidth)
