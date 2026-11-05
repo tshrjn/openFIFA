@@ -89,8 +89,9 @@ namespace OpenFifa.Core
         private static RosterAppearance BuildAppearance(JsonNode a, int playerHeightCm)
         {
             if (a == null || !a.IsObject) return null;
-            return new RosterAppearance((float)a.GetNumber("skinTone", 0.5), a.GetString("hairStyle"),
-                a.GetString("hairColor"), a.GetString("facialHair"), a.GetInt("heightCm", playerHeightCm),
+            return RosterAppearance.FromFields(a.Has("skinTone") ? (float?)a.GetNumber("skinTone", 0.5) : null,
+                a.GetString("hairStyle"), a.GetString("hairColor"), a.GetString("facialHair"),
+                a.Has("heightCm") ? a.GetInt("heightCm", playerHeightCm) : (playerHeightCm > 0 ? playerHeightCm : (int?)null),
                 a.GetString("build"), a.GetString("bootColor"));
         }
 

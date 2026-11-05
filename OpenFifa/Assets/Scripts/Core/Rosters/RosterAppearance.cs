@@ -25,6 +25,30 @@ namespace OpenFifa.Core
         /// <summary>"#RRGGBB".</summary>
         public string BootColour { get; }
 
+        /// <summary>False when the roster left the field out (the value above is then a default).</summary>
+        public bool HasSkinTone { get; private set; } = true;
+        public bool HasHairColour { get; private set; } = true;
+        public bool HasBootColour { get; private set; } = true;
+        public bool HasHeight { get; private set; } = true;
+        public bool HasBuild { get; private set; } = true;
+
+        /// <summary>
+        /// Builds an appearance recording which fields the roster actually gave (null = left out), so renderers fill
+        /// only the missing ones from their own seeded choice.
+        /// </summary>
+        public static RosterAppearance FromFields(float? skinTone, string hairStyle, string hairColour, string facialHair,
+            int? heightCm, string build, string bootColour)
+        {
+            return new RosterAppearance(skinTone ?? 0.5f, hairStyle, hairColour, facialHair, heightCm ?? 0, build, bootColour)
+            {
+                HasSkinTone = skinTone.HasValue,
+                HasHairColour = !string.IsNullOrEmpty(hairColour),
+                HasBootColour = !string.IsNullOrEmpty(bootColour),
+                HasHeight = heightCm.HasValue && heightCm.Value > 0,
+                HasBuild = !string.IsNullOrEmpty(build),
+            };
+        }
+
         public RosterAppearance(float skinTone, string hairStyle, string hairColour, string facialHair, int heightCm,
             string build, string bootColour)
         {
