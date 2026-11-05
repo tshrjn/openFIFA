@@ -65,7 +65,7 @@ namespace OpenFifa.Editor
                     if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {sculpt}");
                 }
                 string result = Bake(root.transform, smr, human);
-                if (sculpted && result != null && !result.StartsWith("skipped", StringComparison.Ordinal))
+                if (sculpted) // also when the bake skipped: the displaced head still needs its own normals
                 {
                     int n = HeadSculpt.RecomputeHeadNormals(smr);
                     if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: head normals recomputed after the bake: {n}");

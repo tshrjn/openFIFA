@@ -476,9 +476,13 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     // density map; stubble is a light dusting of dots, a beard a denser fill.
     float edgeNoise = (KitValueNoise(kp * float3(260.0, 260.0, 260.0)) - 0.5) * 0.007;
     half dots = smoothstep(0.42, 0.78, KitValueNoise(kp * float3(1500.0, 1500.0, 1500.0)));
+    // Fade the 0.7 mm hair dots to their mean once a pixel covers several cells (no speckle at distance).
+    float dotFootprint = max(fwidth(kp.x), fwidth(kp.y)) * 1500.0;
+    dots = lerp(0.4, dots, saturate(1.0 - dotFootprint * 1.6));
     // Lower face below the mouth line, rising along the jaw towards the sideburns at the sides.
-    float jawLine = kp.y + edgeNoise - 0.75 * max(ax - 0.028, 0.0);
-    half lowerFace = smoothstep(0.170, 0.150, jawLine) * smoothstep(0.106, 0.124, kp.y);
+    float jawLine = kp.y + edgeNoise * 1.7 - 0.75 * max(ax - 0.028, 0.0);
+    // Wide upper edge broken into hairs by the dots, so it never reads as a cut-out line.
+    half lowerFace = saturate(smoothstep(0.172, 0.145, jawLine) * (0.55 + 0.9 * dots)) * smoothstep(0.106, 0.124, kp.y);
     half sideOk = smoothstep(-0.05, 0.30, nz);                                 // stops in front of the ears
     half lips = KitEllipse(p, float2(0.0, 0.161), float2(0.019, 0.0058));
     half lipZone = smoothstep(0.75, 1.0, length((p - float2(0.0, 0.161)) / float2(0.024, 0.009)));
@@ -488,7 +492,7 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     half goatee = onHead * front * smoothstep(1.0, 0.6, length((p - float2(0.0, 0.140)) / float2(0.017, 0.022)) + edgeNoise * 40.0) * lipZone;
     half facialMask = 0.0;
     half facialAmount = 1.0;
-    if (facial == 1) { facialMask = beardZone; facialAmount = 0.30 * dots; }                       // stubble
+    if (facial == 1) { facialMask = saturate(beardZone + 0.6 * moustache); facialAmount = 0.30 * dots; } // stubble
     else if (facial == 2) { facialMask = saturate(beardZone + 0.8 * moustache); facialAmount = lerp(0.35, 0.75, dots); }
     else if (facial == 3) { facialMask = saturate(goatee + 0.7 * moustache); facialAmount = lerp(0.35, 0.75, dots); }
     // Short trimmed hair over skin: blend toward a skin-tinted hair colour so the skin shows through.
