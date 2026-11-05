@@ -410,5 +410,55 @@ namespace OpenFifa.Tests.Editor
             var shot = e.Push(Ev(CommentaryEventType.ShotTaken, analyst.StartTime + 0.6));
             Assert.IsNotNull(Started(shot, CommentaryVoice.PlayByPlay));
         }
+
+        [Test]
+        public void PresentationClock_UsesCaptureFrameTime_WhenCapturing()
+        {
+            // A capture renders slowly (2 s of wall time per frame) but plays back at 30 fps: commentary must follow the video.
+            Assert.AreEqual(1.0 / 30, PresentationClock.FrameSeconds(1f / 30, 2f), 1e-6);
+            Assert.AreEqual(0.016, PresentationClock.FrameSeconds(0f, 0.016f), 1e-6);
+            Assert.AreEqual(0.0, PresentationClock.FrameSeconds(0f, -1f));
+        }
+
+        [Test]
+        public void Session_SixtySecondsOfPlay_BroadcastPacing_OneVoiceAtATime()
+        {
+            // 60 s of AI v AI on the presentation clock, timed from the shipped clip index when present.
+            var bank = Shipped();
+            string path = Path.Combine(RosterTestData.StreamingAssets, "Commentary", "audio", "en", "index.json");
+            ICommentaryClipCatalog catalog = File.Exists(path) ? CommentaryAudioIndex.Parse(File.ReadAllText(path), out _) : null;
+            foreach (ulong seed in new ulong[] { 1, 7, 21 })
+            {
+                var session = new SinglePlayerMatchSession(new SinglePlayerMatchOptions { Seed = seed });
+                var engine = new CommentaryEngine(bank, null, (uint)seed | 1u) { Catalog = catalog };
+                session.AttachCommentaryEngine(engine);
+                var spoken = new List<double[]>(); // start, end (cut lines end at their Stop)
+                var open = new Dictionary<CommentaryUtterance, int>();
+                const double dt = 1.0 / 30.0;
+                double t = 0;
+                int starts = 0;
+                for (int frame = 0; frame < 60 * 30; frame++, t += dt)
+                {
+                    session.Advance(dt, null, t);
+                    foreach (var cue in session.FrameCues)
+                    {
+                        var u = cue.Utterance;
+                        if (cue.Kind == CommentaryCueKind.Start)
+                        {
+                            starts++;
+                            open[u] = spoken.Count;
+                            spoken.Add(new[] { u.StartTime, u.EndTime });
+                        }
+                        else if (open.TryGetValue(u, out int k)) spoken[k][1] = System.Math.Min(spoken[k][1], t);
+                    }
+                }
+                Assert.LessOrEqual(starts, 25, "seed " + seed + ": too many lines for a minute of broadcast");
+                Assert.GreaterOrEqual(starts, 6, "seed " + seed + ": the commentators should not go silent");
+                spoken.Sort((a, b) => a[0].CompareTo(b[0]));
+                for (int i = 1; i < spoken.Count; i++)
+                    Assert.GreaterOrEqual(spoken[i][0] + 1e-6, spoken[i - 1][1],
+                        "seed " + seed + ": two voices at once at t=" + spoken[i][0].ToString("F2"));
+            }
+        }
     }
 }
