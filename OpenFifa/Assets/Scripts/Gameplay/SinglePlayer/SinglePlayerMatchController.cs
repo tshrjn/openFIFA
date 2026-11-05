@@ -914,7 +914,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void Update()
         {
             if (Session == null) return;
-            _realClock += Time.unscaledDeltaTime;
+            // Commentary runs on presentation time: real time live, the fixed frame time in a capture (see PresentationClock).
+            _realClock += PresentationClock.FrameSeconds(Time.captureDeltaTime, Time.unscaledDeltaTime);
             // While the offside sequence plays, every button skips it (OffsidePresentation) instead of pausing.
             bool offsidePlaying = Offside != null && Offside.IsPlaying;
             if (!offsidePlaying && PausePressed() && !Session.IsFinished) Session.TogglePause();
