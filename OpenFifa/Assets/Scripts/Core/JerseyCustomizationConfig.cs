@@ -75,7 +75,9 @@ namespace OpenFifa.Core
     {
         Home = 0,
         Away = 1,
-        Third = 2
+        Third = 2,
+        /// <summary>Goalkeeper kit. Never chosen as an outfield clash alternative.</summary>
+        Goalkeeper = 3
     }
 
     /// <summary>

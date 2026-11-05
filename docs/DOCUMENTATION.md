@@ -42,6 +42,33 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-04 Session — Kits, skin and heads on the single-player mannequins
+
+- **Body map bake** (`Animations/Editor/KitBodyMapPostprocessor.cs`, maths in `Core/KitBodyMapBaker.cs`): on import of the
+  Quaternius models every skinned vertex gets UV2 = (armT, legT, armWeight, legWeight) and UV3 = rest-pose kit-space
+  position (metres about the neck base, +X right, +Y up, +Z front; w = 1 + height above the soles). armT/legT run along
+  the joint chains (0 shoulder/hip, 1 elbow/knee, 2 wrist/ankle, 3 fingertips/toes); limbs come from the humanoid mapping.
+  Because everything is measured in the bind pose, regions, stripes and prints stay glued to the skin while animating.
+  The importer also puts `Resources/Kits/OpenFifaKitBody.mat` (kit shader, neutral training kit) on the baked renderers:
+  without a kit-shader material on the mesh, player builds strip UV2/UV3 (Optimize Mesh Data).
+  `OPENFIFA_KITBODY_DUMP=<dir>` writes CSVs of the bake for offline inspection.
+- **Kit shader mapping 2 (SkinnedBody)**: soft-edged shirt / shorts / socks / boots / skin / gloves weights, short or long
+  sleeves with cuffs, side panels, collar styles, socks with a turned-down cuff, boots with a per-player accent stripe and
+  sole, back/front name and number on the torso only, skin wrap lighting, and a painted head (eyes, brows, nose, lips,
+  ears, hairline hair for buzz/short styles, stubble/beard/goatee). Capsule (0) and mesh-UV (1) mappings are unchanged.
+  All per-player differences are material floats/colours (no keywords): 22 players share one shader variant and stay on
+  the SRP Batcher with one material instance each (+ one shared hair material per hair colour).
+- **Hair caps** (`Gameplay/HairCapBuilder.cs`): curly and tied styles add a procedural shell (< 1k tris, shared mesh per
+  style) parented to the head bone, cut at the same hairline the shader paints. Procedural on purpose: it matches the
+  mannequin rig exactly and stays original (no likenesses). A CC0 head/hair pack (e.g. Quaternius Universal Base
+  Characters) could replace it later.
+- **Kit choice** (`Core/ClubKitFactory.cs`, `KitLibraryLogic.ResolveMatchKitsContrasting/ResolveGoalkeeperKits`): roster
+  clubs without authored kits get original Home/Away/Third/Goalkeeper kits from their colours (saturation toned down to
+  <= 0.72). The away side prefers a light-vs-dark pairing; goalkeepers get patterned long-sleeve kits with gloves in a
+  colour distinct from both outfield kits and the other keeper. `Core/PlayerLook.cs` picks skin tone, hair, facial hair,
+  eye tone and boots per player from the roster id. Single player uses it through `SinglePlayerKitDresser`.
+- Capture: `-spKitStills` adds back / front / face close-ups (kit_*.png) after the clip.
+
 ## 2026-11-04 Session — Broadcast kit rendering (OpenFifa/Kit shader)
 
 **Status**: Completed (not yet verified inside the Unity Editor; see Known Issues)

@@ -12,6 +12,12 @@ namespace OpenFifa.Core
         ObjectSpace = 0,
 
         /// <summary>Mesh UV mapping for a skinned jersey mesh; print panels are UV rects.</summary>
-        MeshUV = 1
+        MeshUV = 1,
+
+        /// <summary>
+        /// Skinned humanoid body (e.g. the Quaternius mannequin) with the kit body map baked into UV2/UV3 at import
+        /// (KitBodyMapPostprocessor): regions, patterns and prints follow the skin while it animates.
+        /// </summary>
+        SkinnedBody = 2
     }
 }
