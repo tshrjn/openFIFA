@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using OpenFifa.Core;
 using UnityEngine;
 
 namespace OpenFifa.Gameplay
@@ -17,11 +18,13 @@ namespace OpenFifa.Gameplay
 
         private Transform _armPivot;
         private Coroutine _animation;
-        private float _touchlineZ;
+        private OffsidePitchFrame _frame = OffsidePitchFrame.LengthAlongX(15f);
+        private float _sideOffset = 1.2f;
+        private bool _farSide;
         private Color _flagColor = new Color(1f, 0.85f, 0.1f);
         private float _raiseDuration = 0.18f;
 
-        /// <summary>Fired when the flag goes up. Arg: world X the official is standing at.</summary>
+        /// <summary>Fired when the flag goes up. Arg: depth along the pitch length the official is standing at.</summary>
         public event Action<float> OnFlagRaised;
 
         /// <summary>Fired when the flag comes down.</summary>
@@ -30,26 +33,41 @@ namespace OpenFifa.Gameplay
         public bool IsRaised { get; private set; }
 
         /// <summary>
-        /// Place the official on the near touchline.
+        /// Place the official on the near touchline (4v4 scene: pitch length along X).
         /// </summary>
-        public void Initialize(float pitchHalfWidth, float sideOffset, Color flagColor, float raiseDuration)
+        public void Initialize(float pitchHalfWidth, float sideOffset, Color flagColor, float raiseDuration) =>
+            Initialize(OffsidePitchFrame.LengthAlongX(pitchHalfWidth), sideOffset, false, flagColor, raiseDuration);
+
+        /// <summary>
+        /// Place the official outside the near (camera) touchline, or the far one when <paramref name="farSide"/>
+        /// (so the broadcast camera sees the flag across the pitch).
+        /// </summary>
+        public void Initialize(OffsidePitchFrame frame, float sideOffset, bool farSide, Color flagColor, float raiseDuration)
         {
-            _touchlineZ = -(pitchHalfWidth + sideOffset);
+            _frame = frame;
+            _sideOffset = sideOffset;
+            _farSide = farSide;
             _flagColor = flagColor;
             _raiseDuration = Mathf.Max(0.01f, raiseDuration);
-            transform.position = new Vector3(0f, 0f, _touchlineZ);
-            transform.rotation = Quaternion.LookRotation(Vector3.forward); // facing the pitch
+            PlaceAt(0f);
+            transform.rotation = Quaternion.Euler(0f, _frame.AssistantFacingYaw(_farSide), 0f); // facing the pitch
 
             if (_buildPlaceholder && _armPivot == null) BuildPlaceholder();
         }
 
-        /// <summary>Move level with the offside line and raise the flag.</summary>
-        public void RaiseFlag(float lineX)
+        /// <summary>Move level with the offside line (depth along the pitch length) and raise the flag.</summary>
+        public void RaiseFlag(float lineDepth)
         {
-            transform.position = new Vector3(lineX, 0f, _touchlineZ);
+            PlaceAt(lineDepth);
             IsRaised = true;
             Animate(_raisedAngle);
-            OnFlagRaised?.Invoke(lineX);
+            OnFlagRaised?.Invoke(lineDepth);
+        }
+
+        private void PlaceAt(float depth)
+        {
+            _frame.AssistantPosition(depth, _sideOffset, _farSide, out float x, out float z);
+            transform.position = new Vector3(x, 0f, z);
         }
 
         public void LowerFlag()

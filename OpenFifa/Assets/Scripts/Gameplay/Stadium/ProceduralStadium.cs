@@ -63,7 +63,7 @@ namespace OpenFifa.Gameplay
         }
 
         /// <summary>Starts the LED goal graphic (also triggered when <see cref="SetExcitement"/> reaches 1).</summary>
-        public void CelebrateGoal() => _goalStart = Time.time;
+        public void CelebrateGoal() => _goalStart = Time.unscaledTime;
 
         /// <summary>Repaints crowd shirts, seats, fascias and LED panels for new club colours.</summary>
         public void SetTeamColours(Color home, Color away)
@@ -75,8 +75,10 @@ namespace OpenFifa.Gameplay
 
         private void Update()
         {
-            _excitement = Mathf.MoveTowards(_excitement, _target, Time.deltaTime * 2.5f);
-            float t = Time.time;
+            // Real time: the crowd and the LED boards keep moving through presentation slow motion / freezes
+            // (e.g. the offside sequence sets Time.timeScale), like a real stadium during a replay.
+            _excitement = Mathf.MoveTowards(_excitement, _target, Time.unscaledDeltaTime * 2.5f);
+            float t = Time.unscaledTime;
             int texH = _crowdTex != null ? _crowdTex.height : 1024;
             for (int g = 0; g < _crowd.Length; g++)
             {

@@ -15,7 +15,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
     ///
     /// Command line (player or batch editor): -spLevel 0..6, -spSeed N, -spHalf seconds, -spAutoStart, -spAiVsAi,
     /// -spHome clubId, -spAway clubId, -spLeague leagueId (ids from the roster JSON; both clubs from one league),
-    /// -spCapture dir (see <see cref="SinglePlayerCapture"/>).
+    /// -spCapture dir (see <see cref="SinglePlayerCapture"/>), -spForceOffside (capture: centre the clip on an offside).
+    ///
+    /// Offside: the sim owns the rule, the stoppage and the indirect free kick. Every frame's sim events go through a
+    /// <see cref="SimOffsideDecisionSource"/>; its decisions only drive <see cref="OffsidePresentation"/> (flag, whistle
+    /// event, slow motion into a freeze, the camera cut with the two lines, the HUD banner). Presentation only: the sim
+    /// still steps the same ticks, just later in real time.
     /// </summary>
     [DefaultExecutionOrder(-50)]
     public sealed class SinglePlayerMatchController : MonoBehaviour
@@ -75,6 +80,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// <summary>Hold the match without showing the pause menu (review captures).</summary>
         public bool Frozen { get; set; }
 
+        /// <summary>Offside presentation (lines, camera cut, flag, HUD banner); null before Awake.</summary>
+        public OffsidePresentation Offside { get; private set; }
+        /// <summary>Bridges the sim's Offside events to <see cref="Offside"/>.</summary>
+        public SimOffsideDecisionSource OffsideSource { get; } = new SimOffsideDecisionSource();
+        /// <summary>The offside presentation is in its freeze-frame (players hold their pose, the sim steps nothing).</summary>
+        public bool OffsideHold { get; private set; }
+        /// <summary>Capture/review: -spForceOffside (see <see cref="SinglePlayerCapture"/>). Inert in normal play.</summary>
+        public bool ForceOffsideCapture { get; set; }
+
         /// <summary>Latest commentary line (play-by-play or analyst) for subtitles.</summary>
         public string Subtitle { get; private set; } = string.Empty;
         public float SubtitleUntil { get; private set; }
@@ -105,6 +119,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             LoadRosters();
             ApplyClubSelection();
             LoadCommentary();
+            SetupOffside();
             // The index is read in every mode: it is the engine's catalog, so a seed's commentary is the same with or
             // without sound. Loading and playback only happen with a real audio output outside captures. Clip timing
             // comes from the index, never from playback (no NotifyFinished), for the same reason.
@@ -161,10 +176,54 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (a == "-spAwayStyle" && next != null) ArgAwayStyle = next;
                 else if (a == "-spNoCommentary") _muteCommentary = true;
                 else if (a == "-spCapture") _captureRun = true;
+                else if (a == "-spForceOffside") ForceOffsideCapture = true;
             }
         }
 
         // ------------------------------------------------------------------ setup
+
+        /// <summary>
+        /// Offside presentation for the sim pitch (length along Z, broadcast camera beyond the +X touchline). The
+        /// camera cut overrides <see cref="SinglePlayerCamera"/> after it each frame and lets go on the cut back, so the
+        /// broadcast framing carries on from live state. The assistant referee stands on the far touchline, in view of
+        /// the broadcast camera. Skippable with any button, key, click or tap.
+        /// </summary>
+        private void SetupOffside()
+        {
+            var go = new GameObject("OffsidePresentation");
+            go.transform.SetParent(transform, false);
+            Offside = go.AddComponent<OffsidePresentation>();
+            var banner = GetComponent<SinglePlayerOffsideBanner>() ?? gameObject.AddComponent<SinglePlayerOffsideBanner>();
+            var config = OffsidePresentationConfig.CreateDefault();
+            banner.SlideDuration = config.BannerSlideDuration;
+            Offside.Initialize(config, OffsidePitchFrame.ForSimPitch(PitchSpec.Standard),
+                BroadcastCamera != null ? BroadcastCamera.GetComponent<Camera>() : Camera.main,
+                suspendCameraDriver: null, assistantOnFarSide: true, bannerView: banner);
+            Offside.SkipOnAnyInput = true;
+            // Cut back: hard cut to the live broadcast framing, whose follow restarts from rest and eases in.
+            if (BroadcastCamera != null) Offside.CameraCut.OnRestored += BroadcastCamera.ResumeFollow;
+            Offside.OnCue += HandleOffsideCue;
+            OffsideSource.OnOffence += PlayOffside;
+        }
+
+        /// <summary>Presentation for one sim offside call. No stoppage or free kick here: the sim already did both.</summary>
+        private void PlayOffside(OffsideDecision decision)
+        {
+            if (Offside == null || Offside.IsPlaying || Session == null) return;
+            var content = OffsideBannerContent.FromSimDecision(decision, Names, ShirtNumbers, HomeShort, AwayShort);
+            var info = OffsideBannerInfo.From(content, HomeColour, AwayColour);
+            Debug.Log($"[{ProductName}] offside: {decision.OffenderTeam} #{content.ShirtNumber} {content.PlayerName} " +
+                      $"(sim id {decision.OffenderId}) attacker z {decision.AttackerLineX:F2}, defender z {decision.DefenderLineX:F2}");
+            Offside.Play(decision, info, null);
+        }
+
+        private void HandleOffsideCue(OffsideCue cue)
+        {
+            // The presentation sets Time.timeScale (slow motion, then 0); this mirrors the freeze onto the players so
+            // they hold their pose like any other held frame. Restored at TimeRestore, or by Complete on a skip.
+            if (cue == OffsideCue.FreezeStart) OffsideHold = true;
+            else if (cue == OffsideCue.TimeRestore || cue == OffsideCue.Complete) OffsideHold = false;
+        }
 
         private void BuildEnvironment()
         {
@@ -641,6 +700,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public void EndMatch()
         {
             if (Session == null) return;
+            if (Offside != null) Offside.Skip(); // never leave time frozen or the camera cut in
+            OffsideHold = false;
             if (_playersRoot != null) Destroy(_playersRoot.gameObject);
             _playersRoot = null;
             Array.Clear(_players, 0, _players.Length);
@@ -763,22 +824,30 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// Drivers get zero speed then, and touches are cancelled.
         /// </summary>
         public bool SimAdvancing =>
-            Session != null && !Frozen && !Session.Paused
+            Session != null && !Frozen && !OffsideHold && !Session.Paused
             && Session.Sim.Phase != SimMatchPhase.HalfTime && Session.Sim.Phase != SimMatchPhase.FullTime;
 
         private void Update()
         {
             if (Session == null) return;
             _realClock += Time.unscaledDeltaTime;
-            if (PausePressed() && !Session.IsFinished) Session.TogglePause();
+            // While the offside sequence plays, every button skips it (OffsidePresentation) instead of pausing.
+            bool offsidePlaying = Offside != null && Offside.IsPlaying;
+            if (!offsidePlaying && PausePressed() && !Session.IsFinished) Session.TogglePause();
             // Touch edges are queued every frame and drained per sim tick (SinglePlayerInput.Read).
             Input?.PollFrame(SimAdvancing);
             if (!Frozen)
             {
-                if (!PinCameraYaw) Session.CameraYaw = BroadcastCamera.YawRadians;
+                // The offside cut moves the camera; the stick keeps the broadcast camera's yaw meanwhile.
+                bool offsideCut = Offside != null && Offside.CameraCut != null && Offside.CameraCut.IsCut;
+                if (!PinCameraYaw && !offsideCut) Session.CameraYaw = BroadcastCamera.YawRadians;
                 BroadcastCamera.AttackDirection = BroadcastFraming.AttackDirection(Session.Sim);
                 _commentary?.SetCrowdIntensity(_excitement);
+                // Time.deltaTime is scaled: the offside slow motion / freeze steps fewer (or no) ticks per frame;
+                // the tick sequence itself is unchanged.
                 Session.Advance(Time.deltaTime, null, _realClock);
+                var frameEvents = Session.FrameEvents;
+                for (int i = 0; i < frameEvents.Count; i++) OffsideSource.Process(frameEvents[i]);
 
                 var cues = Session.FrameCues;
                 if (_commentaryAudio != null)
@@ -812,7 +881,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
             // After Advance, so a whistle this frame already stops the legs; drivers run later (order 100).
             bool advancing = SimAdvancing;
-            bool freezePose = Frozen || Session.Paused;
+            bool freezePose = Frozen || OffsideHold || Session.Paused;
             for (int id = 0; id < _drivers.Length; id++)
             {
                 if (_drivers[id] == null) continue;
@@ -822,7 +891,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             SyncVisuals();
             UpdateBallScale(Time.unscaledDeltaTime);
             RotateBall(advancing ? Time.deltaTime : 0f);
-            if (!Frozen) UpdateCrowd(advancing ? Time.deltaTime : 0f);
+            // Crowd excitement settles in real time (not slowed by the offside slow motion); held frames stop it.
+            if (!Frozen) UpdateCrowd(advancing ? Time.unscaledDeltaTime : 0f);
         }
 
         /// <summary>
