@@ -61,8 +61,8 @@ namespace OpenFifa.Tests.Editor
         {
             var expected = new System.Collections.Generic.Dictionary<string, HairStyle>
             {
-                { "buzz", HairStyle.Buzz }, { "short", HairStyle.Short }, { "curly", HairStyle.Curly }, { "afro", HairStyle.Afro },
-                { "long_tied", HairStyle.Tied }, { "bald", HairStyle.Bald }, { "braids", HairStyle.Braids },
+                { "buzz", HairStyle.Buzz }, { "short", HairStyle.Short }, { "curly", HairStyle.Curly }, { "afro", HairStyle.Curly },
+                { "long_tied", HairStyle.Tied }, { "bald", HairStyle.Bald }, { "braids", HairStyle.Buzz },
             };
             foreach (var token in RosterAppearance.HairStyles)
             {
@@ -76,7 +76,7 @@ namespace OpenFifa.Tests.Editor
         {
             var look = PlayerLook.ForPlayer("x-3", Full());
             Assert.AreEqual(KitColorUtility.ParseOrDefault("#C9A66B", SimpleColor.Black).R, look.HairColour.R, 1e-4f);
-            Assert.AreEqual(FacialHair.Moustache, look.Facial);
+            Assert.AreEqual(FacialHair.Goatee, look.Facial);
             Assert.AreEqual(1f, look.BootBase.R, 1e-4f);
             Assert.Less(JerseyComparer.GetLuminance(look.BootAccent), 0.2f, "white boots get a dark accent");
             foreach (var token in RosterAppearance.FacialHairStyles)

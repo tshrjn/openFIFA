@@ -6,7 +6,6 @@ namespace OpenFifa.Core
         None = 0,
         Stubble = 1,
         Beard = 2,
-        Goatee = 3,
-        Moustache = 4
+        Goatee = 3
     }
 }

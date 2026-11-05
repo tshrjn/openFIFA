@@ -50,7 +50,10 @@ namespace OpenFifa.Core
             return look;
         }
 
-        /// <summary>Roster hair token (RosterAppearance.HairStyles) to a renderable style.</summary>
+        /// <summary>
+        /// Roster hair token (RosterAppearance.HairStyles) to the nearest renderable style. "afro" uses the curly cap
+        /// and "braids" the close-cropped paint until those looks get their own rendering.
+        /// </summary>
         public static bool TryHairStyle(string token, out HairStyle style)
         {
             switch (token)
@@ -58,15 +61,18 @@ namespace OpenFifa.Core
                 case "buzz": style = HairStyle.Buzz; return true;
                 case "short": style = HairStyle.Short; return true;
                 case "curly": style = HairStyle.Curly; return true;
-                case "afro": style = HairStyle.Afro; return true;
+                case "afro": style = HairStyle.Curly; return true;
                 case "long_tied": style = HairStyle.Tied; return true;
                 case "bald": style = HairStyle.Bald; return true;
-                case "braids": style = HairStyle.Braids; return true;
+                case "braids": style = HairStyle.Buzz; return true;
                 default: style = HairStyle.Short; return false;
             }
         }
 
-        /// <summary>Roster facial-hair token (RosterAppearance.FacialHairStyles) to a renderable style.</summary>
+        /// <summary>
+        /// Roster facial-hair token (RosterAppearance.FacialHairStyles) to the nearest renderable style
+        /// ("moustache" uses the goatee paint, which includes a moustache, until it gets its own).
+        /// </summary>
         public static bool TryFacialHair(string token, out FacialHair facial)
         {
             switch (token)
@@ -74,7 +80,7 @@ namespace OpenFifa.Core
                 case "none": facial = FacialHair.None; return true;
                 case "stubble": facial = FacialHair.Stubble; return true;
                 case "beard": facial = FacialHair.Beard; return true;
-                case "moustache": facial = FacialHair.Moustache; return true;
+                case "moustache": facial = FacialHair.Goatee; return true;
                 default: facial = FacialHair.None; return false;
             }
         }

@@ -35,7 +35,7 @@ Shader "OpenFifa/Kit"
 
         [Header(Head (skinned body))]
         _HairColor("Hair", Color) = (0.1, 0.07, 0.05, 1)
-        _HeadStyle("Hair style (0 bald, 1 buzz, 2 short, 3 braids), facial hair (0 none, 1 stubble, 2 beard, 3 goatee, 4 moustache), hairline offset (m), eye tone (0-1)", Vector) = (2, 0, 0, 0.2)
+        _HeadStyle("Hair style (0 bald, 1 buzz, 2 short), facial hair (0-3), hairline offset (m), eye tone (0-1)", Vector) = (2, 0, 0, 0.2)
         _HeadParams("Head centre Y, centre Z, half width, half depth (kit space)", Vector) = (0.201, -0.012, 0.087, 0.118)
 
         [Header(Pattern)]
