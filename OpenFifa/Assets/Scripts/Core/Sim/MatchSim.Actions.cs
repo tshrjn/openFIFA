@@ -296,6 +296,13 @@ namespace OpenFifa.Core
             _s.Ball.Velocity = k.Velocity;
             _s.Ball.Spin = k.Spin;
             _s.Ball.InNet = 0;
+            _s.Ball.ClearKnuckle();
+            if (k.Knuckle)
+            {
+                // Per-strike phase: each knuckle shot wobbles its own way, identically in replays and predictions.
+                _s.Ball.KnuckleSeed = 0.05f + 0.95f * _s.Rng.NextFloat();
+                _s.Ball.KnuckleOrigin = bp;
+            }
             _s.Ball.Grounded = bp.Y <= r + 1e-3f && k.Velocity.Y <= 0.01f;
 
             _s.Owner = -1;
@@ -577,6 +584,7 @@ namespace OpenFifa.Core
                 {
                     _s.Ball.Position = new SimVec3(t.Position.X, _cfg.Ball.Radius, t.Position.Z) + t.FacingDir * 0.4f;
                     _s.Ball.Velocity = t.Velocity.Flat;
+                    _s.Ball.ClearKnuckle();
                     _s.Ball.Spin = BallIntegrator.RollingSpin(_s.Ball.Velocity, _cfg.Ball.Radius, 0f);
                     _s.Ball.Grounded = true;
                     GainPossession(id, false);
@@ -611,6 +619,7 @@ namespace OpenFifa.Core
         {
             _s.Ball.Position = new SimVec3(_s.Ball.Position.X, _cfg.Ball.Radius, _s.Ball.Position.Z);
             _s.Ball.Velocity = flatVelocity.Flat;
+            _s.Ball.ClearKnuckle();
             _s.Ball.Spin = BallIntegrator.RollingSpin(_s.Ball.Velocity, _cfg.Ball.Radius, 0f);
             _s.Ball.Grounded = true;
             _s.Owner = -1;
@@ -641,7 +650,7 @@ namespace OpenFifa.Core
         /// </summary>
         private void SeparatePlayers()
         {
-            float minD = 2f * _cfg.Actions.PlayerBodyRadius;
+            float minD = 2f * _cfg.Actions.PlayerSeparationRadius;
             float minD2 = minD * minD;
             int taker = _s.Phase == SimMatchPhase.AwaitingRestart ? _s.RestartTakerId : -1;
             for (int i = 0; i < MatchSimState.PlayerCount; i++)

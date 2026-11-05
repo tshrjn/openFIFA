@@ -194,7 +194,7 @@ namespace OpenFifa.Editor
                         {
                             result.AddWarning(
                                 $"Material '{mat.name}' uses shader '{mat.shader.name}' " +
-                                "instead of URP Lit. Run 'OpenFifa > Characters > Setup URP Materials'.");
+                                "instead of URP Lit. Run 'OpenFootball > Characters > Setup URP Materials'.");
                         }
                     }
                 }

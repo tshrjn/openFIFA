@@ -312,7 +312,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Validates all animation clips in the project's mocap folder and logs results.
         /// </summary>
-        [MenuItem("OpenFifa/Animation/Validate All Mocap Clips")]
+        [MenuItem("OpenFootball/Animation/Validate All Mocap Clips")]
         public static void ValidateAllMocapClips()
         {
             string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new[] { "Assets/Animations/Mocap" });

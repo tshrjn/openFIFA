@@ -94,6 +94,20 @@ namespace OpenFifa.Core
 
         /// <summary>Ball timing model (sim-matched). Set by the brain; defaults to the default ball config.</summary>
         public TeamAIBallModel Model = TeamAIBallModel.Default;
+        /// <summary>
+        /// Team build-up directness this tick (0..1, see <see cref="TeamAITactics.Directness"/>); the brain sets it.
+        /// 0.5 is neutral. Higher values weigh a pass's forward progress more and its interception risk less, and make
+        /// lofted balls forward more attractive.
+        /// </summary>
+        public float Directness = 0.5f;
+
+        /// <summary>Extra score for a cross (0 = neutral); wing-play sides set it from their width.</summary>
+        public float CrossBias;
+
+        /// <summary>Multiplier on forward progress for a directness (1 at 0.5; 0.6 .. 1.4).</summary>
+        public static float DirectProgress(float directness) => 0.6f + 0.8f * TeamAIMath.Clamp01(directness);
+        /// <summary>Multiplier on interception risk for a directness (1 at 0.5; 1.35 .. 0.65).</summary>
+        public static float DirectRisk(float directness) => 1.35f - 0.7f * TeamAIMath.Clamp01(directness);
 
         private int _calledReceiver = -1;
         private bool _calledThrough;
@@ -116,13 +130,17 @@ namespace OpenFifa.Core
             return TeamAIMath.Sigmoid(-1.25f + 1.6f * angle - 0.08f * dist);
         }
 
+        // The static helpers below use the default ball config only; brain code uses its own Model (wet/dry pitch).
         /// <summary>Seconds for an AI ground pass of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float GroundPassTime(float dist) => TeamAIBallModel.Default.GroundPassTime(dist);
 
         /// <summary>Flight time of an AI lob of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float LobPassTime(float dist) => TeamAIBallModel.Default.LobPassTime(dist);
 
         /// <summary>Flight time of a cross of this length, from the sim's ball integrator (default config).</summary>
+        [System.Obsolete("Use the brain's TeamAIBallModel")]
         public static float CrossTime(float dist) => TeamAIBallModel.Default.CrossTime(dist);
 
         /// <summary>
@@ -501,14 +519,14 @@ namespace OpenFifa.Core
             float prog = progression > 0f ? ForwardProgressionWeight * progression : ProgressionWeight * progression;
             // Ambition scales with difficulty: a strong side looks for the forward ball and accepts some lane risk to
             // play it; a weak one recycles sideways.
-            float riskWeight = RiskWeight;
-            if (progression > 0f) prog *= Ambition(diff.Theta);
+            float riskWeight = RiskWeight * DirectRisk(Directness);
+            if (progression > 0f) prog *= Ambition(diff.Theta) * DirectProgress(Directness);
             float score = control * (0.35f + ThreatWeight * threat) + prog - riskWeight * risk - 0.6f * block - distPenalty;
-            if (lofted) score -= 0.06f;          // lofted balls are harder to control
+            if (lofted) score -= 0.06f + 0.1f * (0.5f - TeamAIMath.Clamp01(Directness)); // harder to control; direct sides accept it
             // A lofted ball backwards or square gives the ball away for nothing; going back to the keeper is a reset.
             if (lofted && progression < 0.05f && action != TeamAIAction.Cross) score -= 0.25f;
             if (world.Players[recIndex].Role == TeamAIRole.GK && ownerDepth > 0.2f) score -= 0.12f;
-            if (action == TeamAIAction.Cross) score += 0.05f;
+            if (action == TeamAIAction.Cross) score += 0.05f + CrossBias;
             score *= technique;
             score += rng.NextSigned() * diff.DecisionNoise;
             if (recIndex == _calledReceiver)
@@ -536,6 +554,13 @@ namespace OpenFifa.Core
                 if (safest) LastSafestPass = opt;
             }
         }
+
+        /// <summary>
+        /// Shot composure for the low end of the ladder: 0.55 at theta 0 rising to 1 at theta 0.5 and above. It scales the
+        /// shot's utility (a weak side passes up half-chances) and how far toward the post it aims (a weak side puts it
+        /// nearer the keeper). Professional and above are unaffected.
+        /// </summary>
+        public static float ShotComposure(float theta) => TeamAIMath.Lerp(0.55f, 1f, TeamAIMath.Clamp01(theta / 0.5f));
 
         private void EvaluateShot(TeamAIWorld world, int ownerIndex, int sign, in TeamAIDifficulty diff, TeamAIRandom rng)
         {
@@ -567,11 +592,12 @@ namespace OpenFifa.Core
             float atFoot = BlockRisk(world, owner.Team, from, TeamAIMath.FlatDirection(from, goal), ShotLaunchDelay);
             if (atFoot > block) block = atFoot;
 
-            float score = xg * (0.6f + 0.6f * owner.Shooting) * (1f - block) * ShotWeight;
+            float composure = ShotComposure(diff.Theta);
+            float score = xg * (0.6f + 0.6f * owner.Shooting) * (1f - block) * ShotWeight * composure;
             score += rng.NextSigned() * diff.DecisionNoise;
 
-            // Aim at the side with the bigger gap to the keeper.
-            float hw = pitch.GoalWidth * 0.5f - 0.45f;
+            // Aim at the side with the bigger gap to the keeper; a nervous side aims closer to him.
+            float hw = (pitch.GoalWidth * 0.5f - 0.45f) * TeamAIMath.Lerp(0.45f, 1f, (composure - 0.55f) / 0.45f);
             float side = (gkX - goal.X) > 0f ? -1f : 1f;
             if (TeamAIMath.Abs(gkX - goal.X) < 0.2f) side = from.X >= goal.X ? -1f : 1f; // far post
             var aim = new SimVec3(goal.X + side * hw, 0f, goal.Z);

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-Phase B transforms OpenFifa from functional prototype (primitive capsules, spheres, planes) to a visual experience approximating EA FC 26 Rush Mode. Organized into three sub-phases by visual impact:
+Phase B transforms OpenFootball from functional prototype (primitive capsules, spheres, planes) to a visual experience approximating EA FC 26 Rush Mode. Organized into three sub-phases by visual impact:
 
 - **B1 (Immediate Visual Impact)**: Pitch grass shader, goal nets, ball model, URP post-processing, stadium lighting
 - **B2 (Stadium and Environment)**: Advertising boards, crowd geometry, arena walls, photographers

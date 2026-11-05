@@ -23,7 +23,7 @@ namespace OpenFifa.Core
     /// before release, the press is dropped.
     ///
     /// Attack: Pass (tap pass, swipe up lob / cross), Shoot (tap shot, swipe up chip, swipe left/right finesse,
-    /// swipe down low shot), Through (tap through ball, swipe up lobbed through), Sprint. Pass, Shoot and Through
+    /// swipe down low shot, swipe down + driven knuckleball), Through (tap through ball, swipe up lobbed through), Sprint. Pass, Shoot and Through
     /// charge power while held. A kick is driven only when Sprint is pressed (a new touch) while that kick button
     /// is already down and has been for at least <see cref="DrivenSprintMinDelaySeconds"/>. Running with Sprint
     /// held and then pressing a kick button gives a normal kick, and pressing Sprint and the kick button together
@@ -109,7 +109,9 @@ namespace OpenFifa.Core
                         case TouchGesture.SwipeUp: return ControlAction.ChipShot;
                         case TouchGesture.SwipeLeft:
                         case TouchGesture.SwipeRight: return ControlAction.FinesseShot;
-                        case TouchGesture.SwipeDown: return ControlAction.LowShot;
+                        // Swipe down + the driven gesture (Sprint tapped during the charge): a hard, straight, spinless
+                        // strike, i.e. a knuckleball. Plain swipe down stays the low shot.
+                        case TouchGesture.SwipeDown: return driven ? ControlAction.KnuckleShot : ControlAction.LowShot;
                         default: return driven ? ControlAction.DrivenShot : ControlAction.Shoot;
                     }
                 case TouchSlot.Through:

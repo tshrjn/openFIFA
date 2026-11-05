@@ -16,8 +16,11 @@ namespace OpenFifa.Core
     /// - Held at the last drain and released since: reported up now; if it was pressed again after that release, it is
     ///   reported held on the next drain (two kicks, not one long hold).
     /// - Otherwise the latest held state. Two complete taps between the same two drains count as one.
-    /// - Sticks and analog triggers are the latest values; a trigger reported held reads above 0.5, one reported up reads
-    ///   at most 0.5 (the resolver's threshold).
+    /// - Sticks and analog triggers are the latest values. A trigger is held from
+    ///   <see cref="GamepadControlResolver.TriggerPressThreshold"/> until it drops below
+    ///   <see cref="GamepadControlResolver.TriggerReleaseThreshold"/> (the resolver's hysteresis); one reported held reads
+    ///   above the press threshold and one reported up below the release threshold, so the resolver agrees whatever its
+    ///   own previous state.
     /// Edges are also inferred from held-state changes between frames, for devices that do not report them.
     /// No allocation.
     /// </summary>
@@ -43,8 +46,8 @@ namespace OpenFifa.Core
         public void PushFrame(in GamepadFrame state, GamepadButton pressedThisFrame, GamepadButton releasedThisFrame)
         {
             GamepadButton held = state.Buttons;
-            if (state.LeftTrigger > 0.5f) held |= GamepadButton.LeftTrigger;
-            if (state.RightTrigger > 0.5f) held |= GamepadButton.RightTrigger;
+            if (GamepadControlResolver.TriggerHeld(state.LeftTrigger, (_held & GamepadButton.LeftTrigger) != 0)) held |= GamepadButton.LeftTrigger;
+            if (GamepadControlResolver.TriggerHeld(state.RightTrigger, (_held & GamepadButton.RightTrigger) != 0)) held |= GamepadButton.RightTrigger;
 
             GamepadButton pressed = pressedThisFrame | (held & ~_held);
             GamepadButton released = releasedThisFrame | (_held & ~held);
@@ -77,8 +80,8 @@ namespace OpenFifa.Core
 
         private static float TriggerValue(float latest, bool down)
         {
-            if (down) return latest > 0.5f ? latest : 1f;
-            return latest > 0.5f ? 0f : latest;
+            if (down) return latest > GamepadControlResolver.TriggerPressThreshold ? latest : 1f;
+            return latest < GamepadControlResolver.TriggerReleaseThreshold ? latest : 0f;
         }
 
         /// <summary>

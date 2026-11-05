@@ -319,7 +319,10 @@ namespace OpenFifa.Tests.Editor.Integration
             {
                 new MatchEvent { Type = MatchEventType.Shot, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0.1f, 30f), Value = 0.2f },
             };
-            Assert.AreEqual(0, c.Convert(ev, 1.0).Count);
+            var struck = c.Convert(ev, 1.0);
+            Assert.AreEqual(1, struck.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, struck[0].Type, "the strike is called before the outcome");
+            Assert.AreEqual("P9", struck[0].PlayerName);
             ev[0] = new MatchEvent { Type = MatchEventType.Save, PlayerId = 11, OtherPlayerId = 9, Team = SimTeam.Away };
             var outp = c.Convert(ev, 1.5);
             Assert.AreEqual(1, outp.Count);
@@ -329,6 +332,22 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreEqual(0, outp[0].Team);
             Assert.AreEqual(0.2f, outp[0].ShotQuality, Eps);
             Assert.AreEqual(22.5f, outp[0].DistanceMetres, 0.01f);
+        }
+
+        [Test]
+        public void Commentary_ShotOutForCorner_IsNotCalledWide()
+        {
+            var sim = NewSim();
+            var c = new SimCommentaryAdapter(sim);
+            var ev = new List<MatchEvent>
+            {
+                new MatchEvent { Type = MatchEventType.Shot, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0.1f, 30f) },
+                new MatchEvent { Type = MatchEventType.Corner, Team = SimTeam.Home },
+            };
+            var outp = c.Convert(ev, 1.0);
+            Assert.AreEqual(2, outp.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, outp[0].Type);
+            Assert.AreEqual(CommentaryEventType.Corner, outp[1].Type, "a deflected shot is a corner, not a miss");
         }
 
         [Test]
@@ -342,9 +361,10 @@ namespace OpenFifa.Tests.Editor.Integration
                 new MatchEvent { Type = MatchEventType.Goal, PlayerId = 9, OtherPlayerId = -1, Team = SimTeam.Home },
             };
             var outp = c.Convert(ev, 2.0);
-            Assert.AreEqual(1, outp.Count);
-            Assert.AreEqual(CommentaryEventType.Goal, outp[0].Type);
-            Assert.AreEqual(GoalSituation.LongRange, outp[0].Situation);
+            Assert.AreEqual(2, outp.Count);
+            Assert.AreEqual(CommentaryEventType.ShotTaken, outp[0].Type);
+            Assert.AreEqual(CommentaryEventType.Goal, outp[1].Type);
+            Assert.AreEqual(GoalSituation.LongRange, outp[1].Situation);
             ev.Clear();
             ev.Add(new MatchEvent { Type = MatchEventType.Goal, PlayerId = 3, Team = SimTeam.Away, Detail = 1 });
             outp = c.Convert(ev, 3.0);
@@ -385,12 +405,48 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreEqual(TeamAIFormation.F352, RosterMatchBuilder.ParseFormation("3-5-2"));
         }
 
+        /// <summary>
+        /// The difficulty rating deltas are hidden: they live only in the session's private copy of the setup, so the
+        /// team sheets, the caller's setup and the roster players (what the HUD, team sheet and commentary show) keep
+        /// the real ratings, while the sim's AI side plays with the shifted ones.
+        /// </summary>
+        [Test]
+        public void RosterSetup_UltimateDeltas_NeverReachTeamSheetsSetupOrRoster()
+        {
+            var problems = new List<string>();
+            var leagues = RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems);
+            var clubs = leagues[0].Clubs;
+            var setup = RosterMatchBuilder.BuildSetup(clubs[0], clubs[1], 5, out var home, out var away, out var names, out var ids);
+            var rosterAway = RosterMatchBuilder.ToSimAttributes(away.Starters[7]);
+            int sheetPace = away.Attributes[7].Pace, setupPace = setup.Away[7].Pace, homePace = setup.Home[7].Pace;
+            int sheetGk = away.Attributes[0].GkReflexes, homeGk = setup.Home[0].GkReflexes;
+            var session = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
+            {
+                Level = TeamAIDifficultyLevel.Ultimate, Setup = setup, Seed = 5, HomeTactics = home.Tactics,
+                AwayTactics = away.Tactics, PlayerNames = names, PlayerIds = ids,
+            });
+            var prof = session.Profile;
+            Assert.Greater(prof.OpponentOutfieldDelta, 0);
+            // Sim: the AI (away) outfielder is shifted, the user's side is not.
+            Assert.AreEqual(System.Math.Min(99, setupPace + prof.OpponentOutfieldDelta), session.Sim.AttributesOf(11 + 7).Pace);
+            Assert.AreEqual(homePace, session.Sim.AttributesOf(7).Pace);
+            // Everything a display reads keeps the real values.
+            Assert.AreEqual(sheetPace, away.Attributes[7].Pace);
+            Assert.AreEqual(setupPace, setup.Away[7].Pace);
+            Assert.AreEqual(sheetGk, away.Attributes[0].GkReflexes);
+            Assert.AreEqual(homeGk, setup.Home[0].GkReflexes);
+            Assert.AreEqual(rosterAway.Pace, RosterMatchBuilder.ToSimAttributes(away.Starters[7]).Pace);
+            Assert.AreEqual(sheetPace, rosterAway.Pace);
+            Assert.AreNotSame(setup.Away[7], session.Sim.AttributesOf(11 + 7));
+        }
+
         [Test]
         public void RosterSetup_BundledLeague_BuildsPlayableMatch()
         {
             var problems = new List<string>();
             var leagues = RosterMatchBuilder.LoadLeagues(RosterTestData.StreamingAssets, null, problems);
-            Assert.AreEqual(1, leagues.Count, string.Join("\n", problems));
+            Assert.AreEqual(0, problems.Count, string.Join("\n", problems));
+            Assert.GreaterOrEqual(leagues.Count, 1);
             var clubs = leagues[0].Clubs;
             var setup = RosterMatchBuilder.BuildSetup(clubs[0], clubs[1], 5, out var home, out var away, out var names, out var ids);
             Assert.IsTrue(setup.Home[0].IsGoalkeeper);

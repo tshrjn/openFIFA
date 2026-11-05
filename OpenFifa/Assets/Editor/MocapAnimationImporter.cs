@@ -255,7 +255,7 @@ namespace OpenFifa.Editor
         /// Generates an AnimatorController with blend trees for locomotion
         /// and states for all mocap clips, using the configured transitions.
         /// </summary>
-        [MenuItem("OpenFifa/Animation/Generate Mocap Animator Controller")]
+        [MenuItem("OpenFootball/Animation/Generate Mocap Animator Controller")]
         public static void GenerateMocapAnimatorController()
         {
             string controllerPath = "Assets/Animations/Controllers/MocapPlayerController.controller";
@@ -367,7 +367,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Reimports all mocap animation files.
         /// </summary>
-        [MenuItem("OpenFifa/Animation/Reimport All Mocap Animations")]
+        [MenuItem("OpenFootball/Animation/Reimport All Mocap Animations")]
         public static void ReimportAllMocapAnimations()
         {
             string[] guids = AssetDatabase.FindAssets("t:AnimationClip", new[] { "Assets/Animations/Mocap" });

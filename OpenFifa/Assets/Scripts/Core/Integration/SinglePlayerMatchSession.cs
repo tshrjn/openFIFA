@@ -50,12 +50,25 @@ namespace OpenFifa.Core
         /// <summary>Null = <see cref="MatchSetup.CreateDefault"/>(Seed). The session copies attributes before changing them.</summary>
         public MatchSetup Setup;
         public MatchSimConfig Config;
+        /// <summary>Match weather. Sets the pitch condition (<see cref="PitchSurfaces.ForWeather"/>) unless <see cref="Surface"/> is set.</summary>
+        public WeatherType Weather = WeatherType.Clear;
+        /// <summary>Explicit pitch condition (e.g. Dry for a firm summer pitch); null = from <see cref="Weather"/>.</summary>
+        public PitchSurface? Surface;
+        public PitchSurface EffectiveSurface => Surface ?? PitchSurfaces.ForWeather(Weather);
         /// <summary>Null = fitted to the setup's kick-off shape.</summary>
         public TeamAITactics HomeTactics;
         public TeamAITactics AwayTactics;
+        /// <summary>
+        /// The AI side has a manager (<see cref="TeamAIManager.ForDifficulty"/>): mentality follows the score and the
+        /// clock, and its style is carried out in proportion to the difficulty. False keeps its tactics exactly as given
+        /// for the whole match.
+        /// </summary>
+        public bool AIManager = true;
         /// <summary>Spoken/HUD names and roster ids per sim id (0-21); optional.</summary>
         public string[] PlayerNames;
         public string[] PlayerIds;
+        /// <summary>Spoken club names { home, away } for commentary "{team}" lines (optional).</summary>
+        public string[] TeamNames;
         /// <summary>Camera yaw (radians) used to map the stick to the pitch.</summary>
         public float CameraYaw;
         /// <summary>Longest frame time the accumulator accepts (s); longer hitches are dropped to avoid a spiral.</summary>
@@ -112,7 +125,10 @@ namespace OpenFifa.Core
             Options = options ?? new SinglePlayerMatchOptions();
             if (Options.HumanTeam == SimTeam.None) throw new ArgumentException("HumanTeam must be Home or Away");
             Profile = SinglePlayerDifficulty.For(Options.Level);
-            var cfg = Options.Config ?? new MatchSimConfig();
+            // The pitch condition goes into the ball config before the sim AND the AI ball model are built from it,
+            // so the AI's flight and roll predictions match the ball it plays. Options.Config itself is not changed.
+            // The match's surface (Options.Surface, else from Options.Weather) wins over a surface already in Options.Config.
+            var cfg = (Options.Config ?? new MatchSimConfig()).ForSurface(Options.EffectiveSurface);
             var setup = PrepareSetup(Options.Setup ?? MatchSetup.CreateDefault(Options.Seed), Options.Seed, Options.HumanTeam, Profile);
 
             Sim = new MatchSim(cfg, setup);
@@ -125,14 +141,18 @@ namespace OpenFifa.Core
             Director.Brains[0].BallModel = ballModel;
             Director.Brains[1].BallModel = ballModel;
             AddHumanSlot(Options.HumanTeam);
+            // The AI side has a manager on the touchline: it changes mentality with the score and the clock. The human's
+            // AI team-mates keep the user's tactics.
+            if (Options.AIManager)
+                Director.Brains[SimTeamAIAdapter.TeamIndex(AITeam)].Manager.ForDifficulty(Profile.Ladder.OpponentTheta);
             Animation = new SimAnimActionTracker();
-            Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds);
+            Commentary = new SimCommentaryAdapter(Sim, Options.PlayerNames, Options.PlayerIds, Options.TeamNames);
             CameraYaw = Options.CameraYaw;
             SavePreviousSnapshot();
         }
 
         /// <summary>
-        /// Copies the setup and applies the level's goalkeeper adjustments (1-99 clamped).
+        /// Copies the setup and applies the level's goalkeeper, AI outfield and AI finishing adjustments (1-99 clamped).
         /// The caller's setup is not modified.
         /// </summary>
         public static MatchSetup PrepareSetup(MatchSetup src, ulong seed, SimTeam humanTeam, in SinglePlayerDifficultyProfile profile)
@@ -154,7 +174,35 @@ namespace OpenFifa.Core
             var ai = humanTeam == SimTeam.Home ? s.Away : s.Home;
             Keeper(ai[0], profile.OpponentKeeperReflexDelta);
             Keeper(human[0], profile.HumanKeeperReflexDelta);
+            if (profile.OpponentOutfieldDelta != 0)
+                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+                    if (!ai[i].IsGoalkeeper) Outfield(ai[i], profile.OpponentOutfieldDelta);
+            if (profile.OpponentFinishingDelta != 0)
+                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+                    if (!ai[i].IsGoalkeeper) Finishing(ai[i], profile.OpponentFinishingDelta);
             return s;
+        }
+
+        /// <summary>Shifts an outfield player's outfield ratings (not the keeper ones, height or foot) by delta.</summary>
+        private static void Outfield(SimPlayerAttributes a, int d)
+        {
+            a.Pace = Clamp99(a.Pace + d); a.Acceleration = Clamp99(a.Acceleration + d); a.Agility = Clamp99(a.Agility + d);
+            a.Balance = Clamp99(a.Balance + d); a.Stamina = Clamp99(a.Stamina + d); a.Strength = Clamp99(a.Strength + d);
+            a.Reactions = Clamp99(a.Reactions + d); a.Dribbling = Clamp99(a.Dribbling + d);
+            a.BallControl = Clamp99(a.BallControl + d); a.ShortPassing = Clamp99(a.ShortPassing + d);
+            a.LongPassing = Clamp99(a.LongPassing + d); a.Crossing = Clamp99(a.Crossing + d); a.Vision = Clamp99(a.Vision + d);
+            a.Finishing = Clamp99(a.Finishing + d); a.ShotPower = Clamp99(a.ShotPower + d); a.LongShots = Clamp99(a.LongShots + d);
+            a.Curve = Clamp99(a.Curve + d); a.Heading = Clamp99(a.Heading + d); a.Composure = Clamp99(a.Composure + d);
+            a.StandingTackle = Clamp99(a.StandingTackle + d); a.SlidingTackle = Clamp99(a.SlidingTackle + d);
+            a.Aggression = Clamp99(a.Aggression + d);
+        }
+
+        /// <summary>Shifts the ratings that set shot accuracy (KickSolver: Finishing, LongShots, Composure) by delta.</summary>
+        private static void Finishing(SimPlayerAttributes a, int d)
+        {
+            a.Finishing = Clamp99(a.Finishing + d);
+            a.LongShots = Clamp99(a.LongShots + d);
+            a.Composure = Clamp99(a.Composure + d);
         }
 
         private static void Keeper(SimPlayerAttributes gk, int delta)
@@ -356,6 +404,8 @@ namespace OpenFifa.Core
                 var slot = HumanSlots[k];
                 var ctx = HumanControlAdapter.BuildContext(Sim, slot.Team, slot.ControlledId);
                 ControlIntent ci = slot.Input != null ? slot.Input.Read(this, slot, ctx) : default;
+                // Play stopped: walk a seat player who wandered into the run-off back on (the team AI only repositions its own).
+                if (slot.Input != null) SeatRestartGuard.Apply(Sim, slot.ControlledId, CameraYaw, ref ci);
                 slot.LastControlIntent = ci;
                 if (k < _slotIntents.Length) _slotIntents[k] = ci;
             }
@@ -369,7 +419,9 @@ namespace OpenFifa.Core
                     _aiKickUntil[id] = -1;
                     continue;
                 }
-                var intent = SimTeamAIAdapter.ToIntent(Director.Commands[id], state.Players[id], decided);
+                var cmd = Director.Commands[id];
+                AI.ApplyRecoveryRun(ref cmd, id); // a defender caught upfield sprints back whatever the phase's tempo
+                var intent = SimTeamAIAdapter.ToIntent(cmd, state.Players[id], decided);
                 // A latched shot is a commitment: a later decision tick that merely prefers to carry (decision noise flips
                 // close calls) does not cancel it; only a new kick replaces it, and losing the ball ends it.
                 bool shotCommitted = _aiKickUntil[id] >= state.Tick && PlayerIntent.IsShotAction(_aiKick[id].Action) &&

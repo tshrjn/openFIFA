@@ -26,6 +26,7 @@ namespace OpenFifa.Tests.Editor.Integration
             (ControlAction.Shoot, IntentAction.Shoot, KickStyle.Default),
             (ControlAction.ChipShot, IntentAction.Shoot, KickStyle.Chip),
             (ControlAction.LowShot, IntentAction.Shoot, KickStyle.Low),
+            (ControlAction.KnuckleShot, IntentAction.Shoot, KickStyle.Knuckle),
             (ControlAction.FinesseShot, IntentAction.FinesseShot, KickStyle.Default),
             (ControlAction.DrivenShot, IntentAction.DrivenShot, KickStyle.Default),
         };

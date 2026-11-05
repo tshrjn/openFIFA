@@ -7,13 +7,18 @@ namespace OpenFifa.Editor
 {
     public static class BuildScript
     {
-        [MenuItem("OpenFifa/Build/iOS")]
+        /// <summary>
+        /// Scenes for a player build: SinglePlayerMatch, then LocalMultiplayerMatch, then the other enabled
+        /// EditorBuildSettings scenes (<see cref="OpenFifa.Core.BuildSceneOrder"/>), so builds boot into the 11v11 flow.
+        /// </summary>
+        public static string[] PlayerScenes() => OpenFifa.Core.BuildSceneOrder.For(
+            EditorBuildSettings.scenes.Where(s => s.enabled).Select(s => s.path),
+            p => System.IO.File.Exists(p));
+
+        [MenuItem("OpenFootball/Build/iOS")]
         public static void BuildIOS()
         {
-            var scenes = EditorBuildSettings.scenes
-                .Where(s => s.enabled)
-                .Select(s => s.path)
-                .ToArray();
+            var scenes = PlayerScenes();
 
             if (scenes.Length == 0)
             {
@@ -43,13 +48,10 @@ namespace OpenFifa.Editor
             }
         }
 
-        [MenuItem("OpenFifa/Build/macOS (Dev)")]
+        [MenuItem("OpenFootball/Build/macOS (Dev)")]
         public static void BuildMacOSDev()
         {
-            var scenes = EditorBuildSettings.scenes
-                .Where(s => s.enabled)
-                .Select(s => s.path)
-                .ToArray();
+            var scenes = PlayerScenes();
 
             if (scenes.Length == 0)
             {
@@ -59,7 +61,7 @@ namespace OpenFifa.Editor
             var options = new BuildPlayerOptions
             {
                 scenes = scenes,
-                locationPathName = "build/macOS/OpenFifa.app",
+                locationPathName = "build/macOS/OpenFootball.app",
                 target = BuildTarget.StandaloneOSX,
                 options = BuildOptions.Development | BuildOptions.AllowDebugging
             };

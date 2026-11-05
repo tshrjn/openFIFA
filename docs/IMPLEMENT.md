@@ -1,4 +1,4 @@
-# OpenFifa: Agent Operational Runbook
+# OpenFootball: Agent Operational Runbook
 
 > How to write code, run tests, and handle failures. Follow this exactly.
 

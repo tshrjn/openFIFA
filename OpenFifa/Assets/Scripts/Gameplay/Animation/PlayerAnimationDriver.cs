@@ -20,6 +20,12 @@ namespace OpenFifa.Gameplay
     /// snapshot with <see cref="AnimSnapshotInterpolator"/>, and the presentation clock used for action timing is the
     /// same interpolated time, so contact frames stay in step with an interpolated ball. Without an alpha the latest
     /// snapshot is shown as-is.
+    ///
+    /// Locomotion presentation: the root follows the sim exactly; the visual root carries (a) the shown facing from
+    /// <see cref="BodyFacingSmoother"/> (human turn rate, faces the run direction on a forward run), (b) the action
+    /// warp and (c) the lean from <see cref="LocomotionLean"/>. <see cref="LocomotionGaitSolver"/> picks the gait from
+    /// the sim velocity and sets the playback rate from the measured clip speeds so the feet match the ground; it shows
+    /// strafe/backpedal only when the SIM moves the player off its facing (jockey, short retreats).
     /// </summary>
     [DefaultExecutionOrder(100)]
     [DisallowMultipleComponent]
@@ -35,15 +41,17 @@ namespace OpenFifa.Gameplay
         [SerializeField] private bool followSimTransform = true;
 
         [Header("Locomotion (blend tree fallback)")]
-        [Tooltip("Natural speeds (m/s) of the moving clips in the locomotion blend tree, ascending.")]
-        [SerializeField] private float[] authoredSpeeds = { 1.4f, 3.4f, 6.5f };
-        [SerializeField] private float minLocoRate = 0.6f;
-        [SerializeField] private float maxLocoRate = 1.4f;
-        [SerializeField] private float parameterDampTime = 0.08f;
+        [Tooltip("Damping (s) of the blend-tree position: gait changes (walk/jog/sprint, start, stop) crossfade over about twice this.")]
+        [SerializeField] private float parameterDampTime = 0.12f;
         [SerializeField] private float accelerationSmoothing = 0.1f;
+        [Tooltip("Below this speed (m/s) the body keeps the sim facing; above it, a forward run faces its velocity.")]
+        [SerializeField] private float faceVelocityAboveSpeed = 0.5f;
+        [Tooltip("Turning on the spot faster than this (deg/s) adds a stepping cycle so the feet move round instead of spinning.")]
+        [SerializeField] private float turnInPlaceStepRate = 150f;
+        [SerializeField] private bool enableLean = true;
 
         [Header("Actions")]
-        [SerializeField] private float actionCrossFade = 0.08f;
+        [SerializeField] private float actionCrossFade = 0.12f;
         [SerializeField] private int actionLayer = 0;
 
         [Header("IK")]
@@ -55,11 +63,17 @@ namespace OpenFifa.Gameplay
         [Tooltip("Look-at weight multiplier during a dribble touch (a glance at the ball, not a full head turn).")]
         [SerializeField, Range(0f, 1f)] private float dribbleTouchLookAtScale = 0.5f;
 
+        [Header("Idle variety")]
+        [Tooltip("Per-player idle phase/rate, weight-shift and ready-stance blends, and a head that follows the ball (IdleVariety).")]
+        [SerializeField] private bool enableIdleVariety = true;
+        [Tooltip("Seed for the idle variety; 0 = derive from the object name and sibling index.")]
+        [SerializeField] private int idleSeed;
+
         [Header("Gait phase (dribble-touch foot)")]
         [Tooltip("Pick the touching foot from the Locomotion state's normalised time (measured cycle) instead of a nominal stride.")]
         [SerializeField] private bool useLocomotionPhase = true;
         [Tooltip("Normalised-time phase (0..1) at which the right foot strikes the ground in the locomotion clips; the left strikes half a cycle later.")]
-        [SerializeField, Range(0f, 1f)] private float rightFootStrikePhase = 0f;
+        [SerializeField, Range(0f, 1f)] private float rightFootStrikePhase = LocomotionGaitTable.RightFootStrikePhase;
         [Tooltip("Fraction of the cycle each foot is on the ground.")]
         [SerializeField, Range(0.05f, 0.49f)] private float stanceFraction = DribbleTouchSolver.DefaultStanceFraction;
         [Tooltip("Touch IK weight multiplier while the touching foot is planted (0 = skip: never drag a grounded foot).")]
@@ -73,6 +87,9 @@ namespace OpenFifa.Gameplay
         private static readonly int ActionRateHash = Animator.StringToHash(AnimStateNames.ParamActionRate);
         private static readonly int MirrorHash = Animator.StringToHash(AnimStateNames.ParamMirror);
         private static readonly int LocomotionHash = Animator.StringToHash(AnimStateNames.Locomotion);
+        private static readonly int IdleVariantHash = Animator.StringToHash(AnimStateNames.ParamIdleVariant);
+        private static readonly int ReadyHash = Animator.StringToHash(AnimStateNames.ParamReady);
+        private static readonly int GuardHash = Animator.StringToHash(AnimStateNames.ParamGuard);
 
         private IPlayerAnimSource _source;
         private readonly AnimSnapshotInterpolator _interpolator = new AnimSnapshotInterpolator();
@@ -81,7 +98,11 @@ namespace OpenFifa.Gameplay
         private float _fixedDtOverride;
         private ILocomotionBackend _backend;
         private AnimationSyncPlanner _planner;
-        private LocomotionRateSolver _rateSolver;
+        private readonly LocomotionGaitSolver _gaitSolver = new LocomotionGaitSolver();
+        private readonly BodyFacingSmoother _facing = new BodyFacingSmoother();
+        private readonly LocomotionLean _lean = new LocomotionLean();
+        private float _simYaw;
+        private Vector3 _lastPos;
 
         private ActionSyncPlan _plan;
         private int _planActionId;
@@ -89,6 +110,7 @@ namespace OpenFifa.Gameplay
         private bool _contactFired;
         private float _simTime;
         private bool _hasLastTouchFoot;
+        private bool _touchSideOverride;
         private ActionSide _lastTouchFoot;
         private float _lastTouchEnd = float.NegativeInfinity;
         private float _tickSeconds;
@@ -96,12 +118,21 @@ namespace OpenFifa.Gameplay
 
         private Vector3 _prevVelocity;
         private Vector3 _acceleration;
-        private float _prevYaw;
         private float _yawRate;
         private bool _hasPrev;
 
         private bool _poseFrozen;
         private float _speedBeforeFreeze = 1f;
+
+        private IdleVariety _idle;
+        private bool _guardParam, _guardChecked;
+        private float _guard = 1f;
+        private bool _idleParams;
+        private bool _idlePhaseApplied;
+        private bool _actionLookAt;
+        private static Transform s_sharedBall;
+        private static float s_nextBallSearch;
+        private Transform _ball;
 
         private readonly Vector3[] _extIkPos = new Vector3[4];
         private readonly float[] _extIkWeight = new float[4];
@@ -161,6 +192,43 @@ namespace OpenFifa.Gameplay
         public Animator Animator => animator;
 
         /// <summary>
+        /// Ball transform for the idle look-at and ready stance. The match controller sets it on every driver. When unset,
+        /// the driver falls back to the scene object named "Ball" (looked up at most once a second, shared by all
+        /// drivers; no tag lookup, which throws when the tag is not defined).
+        /// </summary>
+        public Transform Ball
+        {
+            get => _ball != null ? _ball : FindSharedBall();
+            set => _ball = value;
+        }
+
+        /// <summary>
+        /// Radius (m) the ball is drawn at (the controller scales it up for readability). Contact IK is planned against
+        /// the sim ball; the strike and plant targets are moved onto this ball's surface (<see cref="VisualBallContact"/>).
+        /// Defaults to the sim radius.
+        /// </summary>
+        public float VisualBallRadius
+        {
+            get => _visualBallRadius > 0f ? _visualBallRadius : ballRadius;
+            set => _visualBallRadius = value;
+        }
+        private float _visualBallRadius;
+
+        /// <summary>Idle variety state (diagnostics, tests); null when disabled.</summary>
+        public IdleVariety Idle => _idle;
+
+        private static Transform FindSharedBall()
+        {
+            if (s_sharedBall != null) return s_sharedBall;
+            if (Time.unscaledTime < s_nextBallSearch) return null;
+            s_nextBallSearch = Time.unscaledTime + 1f; // retry at most once a second until the ball exists
+            GameObject go = null;
+            try { go = GameObject.Find("Ball"); } catch (Exception) { /* never let a lookup break the frame */ }
+            s_sharedBall = go != null ? go.transform : null;
+            return s_sharedBall;
+        }
+
+        /// <summary>
         /// The sim is not advancing (paused, frozen, half time, full time): locomotion gets zero speed, so players
         /// stand instead of running on the spot with the last sim velocity. Set by the match controller every frame.
         /// </summary>
@@ -187,7 +255,11 @@ namespace OpenFifa.Gameplay
             if (_source == null) _source = GetComponent<IPlayerAnimSource>();
             _backend = GetComponent<ILocomotionBackend>();
             _planner = new AnimationSyncPlanner { BallRadius = ballRadius };
-            _rateSolver = new LocomotionRateSolver(authoredSpeeds, minLocoRate, maxLocoRate);
+            if (enableIdleVariety)
+            {
+                int seed = idleSeed != 0 ? idleSeed : Animator.StringToHash(name) ^ (transform.GetSiblingIndex() * 7919);
+                _idle = new IdleVariety(seed);
+            }
 
             if (animator != null)
             {
@@ -196,6 +268,14 @@ namespace OpenFifa.Gameplay
                 if (hooks == null) hooks = animator.gameObject.AddComponent<PlayerAnimatorHooks>();
                 hooks.Driver = this;
             }
+        }
+
+        private static bool HasFloatParam(Animator a, int hash)
+        {
+            if (a.runtimeAnimatorController == null) return false;
+            foreach (AnimatorControllerParameter p in a.parameters)
+                if (p.nameHash == hash && p.type == AnimatorControllerParameterType.Float) return true;
+            return false;
         }
 
         private void OnValidate()
@@ -245,24 +325,102 @@ namespace OpenFifa.Gameplay
             if (Halted)
             {
                 _acceleration = Vector3.zero;
-                _yawRate = 0f;
             }
             else if (_hasPrev)
             {
                 Vector3 rawAcc = (vel - _prevVelocity) / dt;
                 float k = accelerationSmoothing > 0f ? 1f - Mathf.Exp(-dt / accelerationSmoothing) : 1f;
                 _acceleration = Vector3.Lerp(_acceleration, rawAcc, k);
-                _yawRate = Mathf.Lerp(_yawRate, AnimMath.DeltaAngle(_prevYaw, yaw) / dt, k);
             }
+            bool teleported = _hasPrev && (pos - _lastPos).sqrMagnitude > 9f; // kick-off reset, restart placement
             _prevVelocity = vel;
-            _prevYaw = yaw;
+            _lastPos = pos;
             _hasPrev = true;
+            _simYaw = yaw;
 
             SampleGait(dt);
             PollAction(pos, vel, yaw);
-            DriveLocomotion(dt, pos, vel, yaw);
+            // Gait first (it decides whether the SIM strafes), then the shown facing, then the Animator.
+            SimVec3 simLocal = AnimMath.WorldToLocal(vel.ToSim(), yaw);
+            _gaitSolver.Solve(simLocal.X, simLocal.Z, _source.IsSprinting, out float gaitStrafe, out float gaitForward);
+            UpdateBodyFacing(dt, vel, yaw, teleported);
+            UpdateIdleVariety(dt, pos, vel);
+            DriveLocomotion(dt, pos, vel, yaw, gaitStrafe, gaitForward);
             UpdateActionPlayback();
             ApplyWarp();
+        }
+
+        /// <summary>Yaw (deg) the body is shown at: the sim facing, turned at a human rate (see BodyFacingSmoother).</summary>
+        public float VisualYaw => _facing.Yaw;
+
+        /// <summary>Current gait mode (diagnostics).</summary>
+        public LocomotionMode GaitMode => _gaitSolver.Mode;
+
+        /// <summary>Playback rate applied to the locomotion state this frame (diagnostics).</summary>
+        public float LocomotionRate { get; private set; } = 1f;
+
+        /// <summary>
+        /// Shown body yaw. A forward run faces its velocity (above <see cref="faceVelocityAboveSpeed"/>); strafing,
+        /// standing and slow moves keep the sim facing (which faces the ball while jockeying); a full-body action hands
+        /// the yaw back to the sim quickly because the sync planner's yaw warp is relative to it.
+        /// </summary>
+        private void UpdateBodyFacing(float dt, Vector3 vel, float simYaw, bool teleported)
+        {
+            float speed = Halted ? 0f : new Vector2(vel.x, vel.z).magnitude;
+            bool actionOwnsYaw = _plan != null && !_plan.Profile.LayeredOnLocomotion;
+            bool backend = _backend != null && _backend.IsActive;
+            if (teleported || backend)
+            {
+                _facing.Snap(simYaw);
+                _lean.Reset();
+                _yawRate = 0f;
+                return;
+            }
+            float target = simYaw;
+            if (!actionOwnsYaw && !Halted && _gaitSolver.Mode == LocomotionMode.Forward && speed > faceVelocityAboveSpeed)
+                target = AnimMath.YawOf(vel.ToSim());
+            _facing.Step(target, speed, dt, actionOwnsYaw ? 3f : 1f);
+            _yawRate = _facing.YawRate;
+
+            if (!enableLean || (actionOwnsYaw && _actionStarted))
+            {
+                _lean.Step(0f, 0f, 0f, dt);
+                return;
+            }
+            Vector3 fwd = speed > 0.1f ? vel / speed : Vector3.zero;
+            _lean.Step(speed, _facing.YawRate, Vector3.Dot(_acceleration, fwd), dt);
+        }
+
+        /// <summary>
+        /// Idle variety: desynchronised idle phase (once), weight-shift and ready-stance blends (when the controller has
+        /// the parameters; rebuild it with FootballAnimationBuilder), and the ball-following head (applied in IK).
+        /// </summary>
+        private void UpdateIdleVariety(float dt, Vector3 pos, Vector3 vel)
+        {
+            if (_idle == null) return;
+            if (!_idlePhaseApplied && animator.isActiveAndEnabled && animator.HasState(0, LocomotionHash))
+            {
+                // Once, with the controller live: an older controller without the idle parameters still gets the phase.
+                _idleParams = HasFloatParam(animator, IdleVariantHash) && HasFloatParam(animator, ReadyHash);
+                animator.Play(LocomotionHash, 0, _idle.PhaseOffset);
+                _idlePhaseApplied = true;
+            }
+            float speed = Halted ? 0f : new Vector2(vel.x, vel.z).magnitude;
+            Transform ball = Ball;
+            float dist = -1f, toBallYaw = _facing.Yaw;
+            if (ball != null)
+            {
+                Vector3 d = ball.position - pos;
+                d.y = 0f;
+                dist = d.magnitude;
+                if (dist > 1e-3f) toBallYaw = AnimMath.YawOf(d.ToSim());
+            }
+            _idle.Step(dt, speed, _facing.Yaw, toBallYaw, dist);
+            if (_idleParams)
+            {
+                animator.SetFloat(IdleVariantHash, _idle.IdleVariant);
+                animator.SetFloat(ReadyHash, _idle.Ready);
+            }
         }
 
         private void ApplyPoseFreeze()
@@ -323,6 +481,7 @@ namespace OpenFifa.Gameplay
         private void StartPlan(in PlayerAnimAction a, bool layered, Vector3 pos, Vector3 vel, float yaw)
         {
             ActionSide side = a.Side;
+            _touchSideOverride = false;
             if (layered)
             {
                 // A dribble without touches in between (another action, or a long gap) starts a new alternation.
@@ -339,6 +498,12 @@ namespace OpenFifa.Gameplay
                     side = DribbleTouchSolver.ChooseFoot(hasSwing, swing, ttc, vel.magnitude,
                         _hasLastTouchFoot, _lastTouchFoot, a.Side, _planner.Stride);
                 }
+                // The ball's side wins over the stride: a ball 0.35 m to the right is touched with the right foot, never
+                // by the left leg crossing in front of a planted right foot.
+                Vector3 rootC = a.HasRootAtContact ? a.RootAtContact : pos + vel * Mathf.Max(0f, ttc);
+                float yawC = a.HasRootAtContact ? SimYawToDegrees(a.YawAtContact) : yaw;
+                SimVec3 ballLocal = DribbleTouchSolver.BallLocal(a.BallAtContact.ToSim(), rootC.ToSim(), yawC);
+                side = DribbleTouchSolver.ChooseTouchFoot(side, ballLocal.X, out _touchSideOverride);
                 _hasLastTouchFoot = true;
                 _lastTouchFoot = side;
             }
@@ -413,7 +578,7 @@ namespace OpenFifa.Gameplay
                 {
                     float w = DribbleTouchSolver.SwingWeight(foot, DribbleTouchSolver.Wrap01(st.normalizedTime),
                         rightFootStrikePhase, stanceFraction);
-                    return Mathf.Lerp(plantedTouchIkScale, 1f, w);
+                    return Mathf.Lerp(PlantedTouchFloor, 1f, w);
                 }
             }
             if (!animator.isHuman) return 1f;
@@ -423,8 +588,13 @@ namespace OpenFifa.Gameplay
             Transform me = foot == ActionSide.Left ? lf : rf, other = foot == ActionSide.Left ? rf : lf;
             bool planted = me.position.y <= other.position.y
                            && me.position.y - transform.position.y <= ContactIkSolver.DefaultAnkleHeight + 0.05f;
-            return planted ? plantedTouchIkScale : 1f;
+            return planted ? PlantedTouchFloor : 1f;
         }
+
+        /// <summary>IK floor for a planted strike foot: none normally; a ball-side foot chosen over the stride still pushes.</summary>
+        private float PlantedTouchFloor => _touchSideOverride
+            ? Mathf.Max(plantedTouchIkScale, DribbleTouchSolver.SideOverridePlantedScale)
+            : plantedTouchIkScale;
 
         private void UpdateActionPlayback()
         {
@@ -491,12 +661,27 @@ namespace OpenFifa.Gameplay
         {
             if (visualRoot == null || visualRoot == transform) return;
             visualRoot.localPosition = Vector3.zero;
-            visualRoot.localRotation = Quaternion.identity;
+            visualRoot.localRotation = BodyRotation(0f);
+        }
+
+        /// <summary>
+        /// Visual-root rotation relative to the sim root: the shown-facing offset (smoothed turn) plus the action yaw
+        /// warp, then the lean (pitch forward, bank right) about the feet.
+        /// </summary>
+        private Quaternion BodyRotation(float warpYaw)
+        {
+            float yawOffset = AnimMath.DeltaAngle(_simYaw, _facing.Yaw) + warpYaw;
+            return Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(_lean.ForwardDeg, 0f, -_lean.RightDeg);
         }
 
         private void ApplyWarp()
         {
-            if (visualRoot == null || visualRoot == transform) return;
+            if (visualRoot == null || visualRoot == transform)
+            {
+                // No separate visual: show the smoothed facing on the root itself.
+                if (followSimTransform) transform.rotation = Quaternion.Euler(0f, _facing.Yaw, 0f);
+                return;
+            }
             if (_plan == null)
             {
                 ResetVisualRoot();
@@ -504,7 +689,7 @@ namespace OpenFifa.Gameplay
             }
             Vector3 worldOffset = _plan.Warp.TranslationAt(_simTime).ToUnity();
             visualRoot.localPosition = transform.InverseTransformVector(worldOffset);
-            visualRoot.localRotation = Quaternion.Euler(0f, _plan.Warp.YawAt(_simTime), 0f);
+            visualRoot.localRotation = BodyRotation(_plan.Warp.YawAt(_simTime));
         }
 
         /// <summary>Called by <see cref="PlayerAnimatorHooks"/> on the clip's contact frame.</summary>
@@ -518,41 +703,59 @@ namespace OpenFifa.Gameplay
 
         // ------------------------------------------------------------------ locomotion
 
-        private void DriveLocomotion(float dt, Vector3 pos, Vector3 vel, float yaw)
+        private void DriveLocomotion(float dt, Vector3 pos, Vector3 vel, float yaw, float gaitStrafe, float gaitForward)
         {
-            float speed = vel.magnitude;
-            float rate = _rateSolver.RateFor(speed);
-            if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
-                rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
-
+            float speed = Halted ? 0f : vel.magnitude;
             Vector3 desired = Halted ? Vector3.zero : _source.DesiredVelocity;
             desired.y = 0f;
-            var frame = new LocomotionFrame(_simTime, dt, pos, vel, _acceleration, desired, yaw, _yawRate,
-                _source.IsSprinting, rate);
 
             if (_backend != null && _backend.IsActive)
             {
+                var frame = new LocomotionFrame(_simTime, dt, pos, vel, _acceleration, desired, yaw, _yawRate,
+                    _source.IsSprinting, 1f);
                 _backend.DriveLocomotion(frame);
                 return;
             }
 
             if (Halted)
             {
-                // Stopped clock: snap to idle instead of damping down from a sprint over several frames.
-                animator.SetFloat(SpeedHash, 0f);
-                animator.SetFloat(ForwardHash, 0f);
-                animator.SetFloat(StrafeHash, 0f);
-                animator.SetFloat(TurnRateHash, 0f);
-                animator.SetFloat(LocoRateHash, 1f);
-                return;
+                // Stopped clock (whistle, half time): settle to idle over a short blend instead of popping upright.
+                gaitStrafe = 0f;
+                gaitForward = 0f;
+            }
+            else if (_gaitSolver.Mode == LocomotionMode.Idle && Mathf.Abs(_facing.YawRate) > turnInPlaceStepRate)
+            {
+                // Turning on the spot: a short stepping cycle (slow walk) so the feet go round with the body.
+                float k = Mathf.Clamp01((Mathf.Abs(_facing.YawRate) - turnInPlaceStepRate) / 300f);
+                gaitForward = Mathf.Max(gaitForward, 0.55f * LocomotionGaitTable.WalkSpeed * k);
             }
 
-            SimVec3 local = AnimMath.WorldToLocal(vel.ToSim(), yaw);
-            animator.SetFloat(SpeedHash, speed, parameterDampTime, dt);
-            animator.SetFloat(ForwardHash, local.Z, parameterDampTime, dt);
-            animator.SetFloat(StrafeHash, local.X, parameterDampTime, dt);
-            animator.SetFloat(TurnRateHash, _yawRate, parameterDampTime, dt);
+            float damp = Halted ? parameterDampTime * 1.5f : parameterDampTime;
+            animator.SetFloat(SpeedHash, speed, damp, dt);
+            animator.SetFloat(ForwardHash, gaitForward, damp, dt);
+            animator.SetFloat(StrafeHash, gaitStrafe, damp, dt);
+            animator.SetFloat(TurnRateHash, Halted ? 0f : _yawRate, damp, dt);
+            if (!_guardChecked && animator.runtimeAnimatorController != null)
+            {
+                _guardParam = HasFloatParam(animator, GuardHash); // controllers built before the side-step clip lack it
+                _guardChecked = true;
+            }
+            if (_guardParam)
+            {
+                // Side-on posture: the defensive jockey only out of possession, an upright side-step otherwise.
+                bool defending = !(_source is IPlayerAnimPossession possession) || possession.OutOfPossession;
+                _guard = StrafePosture.Step(_guard, defending, dt);
+                animator.SetFloat(GuardHash, _guard);
+            }
+
+            // Rate from the blend the tree shows NOW (damped), so the feet match the ground through every transition.
+            float shownF = animator.GetFloat(ForwardHash), shownS = animator.GetFloat(StrafeHash);
+            float shown = Mathf.Sqrt(shownF * shownF + shownS * shownS);
+            float rate = speed < _gaitSolver.IdleSpeed ? (_idle != null ? _idle.IdleRate : 1f) : _gaitSolver.RateFor(speed, shown);
+            if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
+                rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
             animator.SetFloat(LocoRateHash, rate);
+            LocomotionRate = rate;
         }
 
         private ActionSide EstimateNextFootfall() => TryEstimateNextFootfall(out ActionSide next) ? next : ActionSide.Right;
@@ -596,6 +799,7 @@ namespace OpenFifa.Gameplay
                 animator.SetIKRotationWeight((AvatarIKGoal)i, 0f);
             }
             animator.SetLookAtWeight(0f);
+            _actionLookAt = false;
 
             if (enableContactIk && _plan != null && _actionStarted)
             {
@@ -604,14 +808,33 @@ namespace OpenFifa.Gameplay
                 // Dribble touch: short in/out envelope around the contact tick, capped so the run cycle still shows.
                 float ws = ik.StrikeWeightAt(_simTime) * (layered ? dribbleTouchIkWeight : 1f);
                 if (layered && ws > 0f) ws *= StrikeFootSwingScale(ik.StrikeEffector);
-                if (ws > 0f) ApplyEffector(ik.StrikeEffector, ik.StrikeTarget.ToUnity(), ws);
+                // Aim at the ball as drawn (scaled up and resting on the grass), not inside it at the sim ball's surface.
+                SimVec3 simBall = _plan.Request.BallAtContact;
+                float vr = VisualBallRadius;
+                bool foot = ik.StrikeEffector == ContactEffector.LeftFoot || ik.StrikeEffector == ContactEffector.RightFoot;
+                SimVec3 strike = foot ? VisualBallContact.StrikeTarget(ik.StrikeTarget, simBall, ballRadius, vr) : ik.StrikeTarget;
+                if (ws > 0f) ApplyEffector(ik.StrikeEffector, strike.ToUnity(), ws);
                 float wp = ik.PlantWeightAt(_simTime);
-                if (wp > 0f) ApplyEffector(ik.PlantEffector, ik.PlantTarget.ToUnity(), wp);
+                SimVec3 plant = VisualBallContact.PlantTarget(ik.PlantTarget, simBall, ballRadius, vr);
+                if (wp > 0f) ApplyEffector(ik.PlantEffector, plant.ToUnity(), wp);
                 if (_plan.Request.Kind != AnimActionKind.Header && ws > 0f)
                 {
                     animator.SetLookAtWeight(ws * lookAtWeight * (layered ? dribbleTouchLookAtScale : 1f), 0.2f, 0.9f, 0f, 0.5f);
-                    animator.SetLookAtPosition(_plan.Request.BallAtContact.ToUnity());
+                    animator.SetLookAtPosition(VisualBallContact.VisualCentre(simBall, ballRadius, vr).ToUnity());
+                    _actionLookAt = true;
                 }
+            }
+
+            // Idle/slow look-around: the head follows the ball in saccades (IdleVariety), when no action owns the head.
+            if (!_actionLookAt && _idle != null && !Halted && _idle.LookWeight > 0.01f &&
+                (_plan == null || _plan.Profile.LayeredOnLocomotion))
+            {
+                Transform head = animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+                Vector3 eye = head != null ? head.position : transform.position + Vector3.up * 1.6f;
+                SimVec3 f = AnimMath.Forward(_facing.Yaw + _idle.LookYaw);
+                Vector3 target = eye + new Vector3(f.X, -0.12f, f.Z) * 10f;
+                animator.SetLookAtWeight(_idle.LookWeight * lookAtWeight, 0.05f, 0.8f, 0f, 0.6f);
+                animator.SetLookAtPosition(target);
             }
 
             for (int i = 0; i < 4; i++)

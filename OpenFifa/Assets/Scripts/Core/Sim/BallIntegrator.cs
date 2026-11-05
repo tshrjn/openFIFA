@@ -28,9 +28,11 @@ namespace OpenFifa.Core
             SimVec3 v = ball.Velocity;
             SimVec3 w = ball.Spin;
 
-            // Aerodynamic forces: drag opposes velocity, Magnus is S (w x v).
+            // Aerodynamic forces: drag opposes velocity (more of it with spin in the air), Magnus lift along w x v,
+            // and the knuckle wobble of a fast ball with almost no spin.
             float speed = v.Magnitude;
             float cd = DragCoefficient(cfg, speed);
+            if (!ball.Grounded && speed > Epsilon) cd += cfg.DragSpinFactor * SimMath.Min(1f, cfg.Radius * w.Magnitude / speed);
             SimVec3 drag = v * (-0.5f * cfg.AirDensity * cd * cfg.CrossSectionArea * speed);
             SimVec3 force = drag;
 
@@ -45,7 +47,7 @@ namespace OpenFifa.Core
             }
             else
             {
-                force += SimVec3.Cross(w, v) * cfg.MagnusCoefficient;
+                force += MagnusForce(cfg, v, w, speed) + KnuckleForce(cfg, ball, v, w, speed);
                 v += force * (dt / m) + new SimVec3(0f, -cfg.Gravity * dt, 0f);
                 float spinDecay = SimMath.Decay(dt, cfg.AirSpinDecayTime);
                 w *= spinDecay;
@@ -75,6 +77,8 @@ namespace OpenFifa.Core
             }
 
             flags |= CollideGoalFrames(p0, ref p, ref v, ref w, cfg, pitch);
+            // A knuckle shot stops wobbling once it hits the ground or the frame.
+            if (ball.Knuckling && (ball.Grounded || flags != BallStepFlags.None)) ball.ClearKnuckle();
 
             // Net capture: the ball has wholly crossed the goal line inside the mouth.
             float halfGoal = pitch.GoalWidth * 0.5f;
@@ -116,6 +120,74 @@ namespace OpenFifa.Core
             return ball;
         }
 
+        /// <summary>
+        /// Lift coefficient C_L for a spin parameter Sp = r|w|/|v| (0 for no spin). See
+        /// <see cref="BallSimConfig.UseSpinParameterLift"/>.
+        /// </summary>
+        public static float LiftCoefficient(BallSimConfig cfg, float spinParameter)
+        {
+            if (spinParameter <= 0f) return 0f;
+            return cfg.LiftScale * spinParameter / (cfg.LiftSaturation * spinParameter + cfg.LiftLinear);
+        }
+
+        /// <summary>
+        /// Magnus force on a ball moving at <paramref name="v"/> with spin <paramref name="w"/> (in the air).
+        /// <paramref name="speed"/> is |v|.
+        /// </summary>
+        public static SimVec3 MagnusForce(BallSimConfig cfg, SimVec3 v, SimVec3 w, float speed)
+        {
+            SimVec3 wxv = SimVec3.Cross(w, v);
+            if (!cfg.UseSpinParameterLift) return wxv * cfg.MagnusCoefficient;
+            float spin = w.Magnitude;
+            if (spin < Epsilon || speed < Epsilon) return SimVec3.Zero;
+            // |w x v| = spin * speed * sin(angle); the lift acts on the spin component across the flight path.
+            return wxv * EffectiveMagnusCoefficient(cfg, spin, speed);
+        }
+
+        /// <summary>
+        /// The factor S with F = S (w x v) at this spin and speed: the linear coefficient, or
+        /// 0.5 rho A C_L(Sp) |v| / |w| for the spin-parameter model. Used by aim helpers (curl pre-aim).
+        /// </summary>
+        public static float EffectiveMagnusCoefficient(BallSimConfig cfg, float spin, float speed)
+        {
+            if (!cfg.UseSpinParameterLift) return cfg.MagnusCoefficient;
+            if (spin < Epsilon || speed < Epsilon) return 0f;
+            float sp = cfg.Radius * spin / speed;
+            return 0.5f * cfg.AirDensity * cfg.CrossSectionArea * LiftCoefficient(cfg, sp) * speed / spin;
+        }
+
+        /// <summary>
+        /// Knuckleball force for a <see cref="KickStyle.Knuckle"/> strike (<see cref="SimBall.Knuckling"/>): side and
+        /// vertical wobble for a fast ball with (almost) no spin. It is a smooth function of the flat distance flown
+        /// from <see cref="SimBall.KnuckleOrigin"/> and of the per-strike <see cref="SimBall.KnuckleSeed"/>, so it is
+        /// continuous in any direction of play, every strike wobbles its own way, and replays and AI prediction from
+        /// the same state agree. Uses <see cref="SimMath.SinDeterministic"/> so platforms agree bit for bit. Zero below
+        /// <see cref="BallSimConfig.KnuckleMinSpeed"/> or with a spin parameter above
+        /// <see cref="BallSimConfig.KnuckleMaxSpinParameter"/>.
+        /// </summary>
+        public static SimVec3 KnuckleForce(BallSimConfig cfg, in SimBall ball, SimVec3 v, SimVec3 w, float speed)
+        {
+            if (!ball.Knuckling || cfg.KnuckleForceCoefficient <= 0f || speed <= cfg.KnuckleMinSpeed) return SimVec3.Zero;
+            float sp = cfg.Radius * w.Magnitude / speed;
+            if (sp >= cfg.KnuckleMaxSpinParameter) return SimVec3.Zero;
+            float weight = (1f - sp / cfg.KnuckleMaxSpinParameter)
+                           * SimMath.Clamp01((speed - cfg.KnuckleMinSpeed) / SimMath.Max(Epsilon, cfg.KnuckleFullSpeed - cfg.KnuckleMinSpeed));
+
+            float flat = SimMath.Sqrt(v.X * v.X + v.Z * v.Z);
+            if (flat < Epsilon) return SimVec3.Zero;
+            // Side axis (horizontal, right of travel) and an "up" axis across the path.
+            SimVec3 side = new SimVec3(v.Z / flat, 0f, -v.X / flat);
+            SimVec3 up = SimVec3.Cross(v / speed, side);
+            SimVec3 d = (ball.Position - ball.KnuckleOrigin).Flat;
+            float s = d.Magnitude;
+            float k = SimMath.TwoPi / SimMath.Max(1f, cfg.KnuckleWavelength);
+            float seed = ball.KnuckleSeed * SimMath.TwoPi;
+            float s1 = SimMath.SinDeterministic(k * s + seed);
+            float s2 = SimMath.SinDeterministic(0.77f * k * s + 2.7f * seed + 1.9f);
+            float q = 0.5f * cfg.AirDensity * cfg.CrossSectionArea * speed * speed * cfg.KnuckleForceCoefficient * weight;
+            return side * (q * s1) + up * (q * 0.6f * s2);
+        }
+
         public static float DragCoefficient(BallSimConfig cfg, float speed)
         {
             if (speed <= cfg.DragCrisisStartSpeed) return cfg.DragCoefficientLowSpeed;
@@ -154,7 +226,8 @@ namespace OpenFifa.Core
             float flatSpeed = SimMath.Sqrt(v.X * v.X + v.Z * v.Z);
             if (flatSpeed > 0f)
             {
-                float newSpeed = SimMath.Max(0f, flatSpeed - cfg.RollingResistance * cfg.Gravity * dt);
+                float decel = cfg.RollingResistance * cfg.Gravity + cfg.RollingDragPerSpeed * flatSpeed;
+                float newSpeed = SimMath.Max(0f, flatSpeed - decel * dt);
                 v = new SimVec3(v.X, 0f, v.Z) * (newSpeed / flatSpeed);
             }
 

@@ -117,7 +117,7 @@ namespace OpenFifa.Core
                 return 0;
 
             float density = CrowdDensityPerZone[sectionIndex];
-            return (int)(MaxCrowdPerSection * density);
+            return (int)Math.Round(MaxCrowdPerSection * density); // 200 * 0.95f truncates to 189
         }
 
         /// <summary>

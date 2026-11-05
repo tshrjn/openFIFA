@@ -131,6 +131,21 @@ namespace OpenFifa.Core
         public float FirstTouchCleanSpeedRange = 12f;
         public float FirstTouchErrorPerSpeed = 0.18f;
 
+        /// <summary>
+        /// First touch on a ball above the grass (chest, thigh, a bouncing ball): it is cushioned down from where it was
+        /// met rather than snapped to the turf. Downward speed (m/s) of a clean cushion.
+        /// </summary>
+        public float FirstTouchCushionDropSpeed = 0.6f;
+
+        /// <summary>Upward pop (m/s per unit of touch error) of a heavy touch: the ball bobbles up off the foot or body.</summary>
+        public float FirstTouchPopPerError = 1.1f;
+
+        /// <summary>Touch error below which a ground ball is killed flat (no bobble).</summary>
+        public float FirstTouchGroundPopThreshold = 0.8f;
+
+        /// <summary>Backspin (rad/s) a cushioned touch puts on the ball (it checks up rather than running on).</summary>
+        public float FirstTouchCushionBackSpin = 8f;
+
         // ---- Tackles. ----
         public float StandingTackleRange = 1.6f;
         public float SlideTackleRange = 1.4f;
@@ -164,8 +179,14 @@ namespace OpenFifa.Core
         public float GkReleaseProtectSeconds = 0.25f;
 
         // ---- Bodies (ball-vs-player deflection and player-player separation). ----
-        /// <summary>Radius (m) of a player's body capsule; two players are kept 2x this apart.</summary>
+        /// <summary>Radius (m) of a player's body capsule for ball deflection and shielding.</summary>
         public float PlayerBodyRadius = 0.3f;
+
+        /// <summary>
+        /// Personal-space radius (m) for player-player separation: two players are kept 2x this apart. Larger than the
+        /// body capsule because the animated body (arms, stride, lean) reaches ~0.35-0.4 m; at 0.3 m the meshes interpenetrate.
+        /// </summary>
+        public float PlayerSeparationRadius = 0.38f;
 
         /// <summary>Top of an outfield player's body capsule (m): the head.</summary>
         public float PlayerHeadHeight = 1.9f;
@@ -173,6 +194,16 @@ namespace OpenFifa.Core
         /// <summary>Restitution of the ball off a body (bodies are soft) and the tangential speed kept.</summary>
         public float BodyRestitution = 0.35f;
         public float BodyTangentialKeep = 0.75f;
+
+        /// <summary>
+        /// Share of the glancing friction impulse off a body that becomes spin (0 = none, 1 = a rigid contact). A ball
+        /// clipping a shin or shoulder spins away and curls/skids accordingly.
+        /// </summary>
+        public float BodyDeflectionSpinTransfer = 0.6f;
+
+        /// <summary>Knuckle shot (<see cref="KickStyle.Knuckle"/>): pace bonus over a plain shot and the residual spin (rad/s).</summary>
+        public float KnuckleShotSpeedFactor = 1.05f;
+        public float KnuckleShotResidualSpin = 1.5f;
 
         /// <summary>Speed (m/s) at which a caught ball is gathered from the catch point into the hands.</summary>
         public float GkGatherSpeed = 6f;

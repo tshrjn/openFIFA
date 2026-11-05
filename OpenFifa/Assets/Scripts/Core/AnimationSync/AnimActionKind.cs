@@ -54,6 +54,15 @@ namespace OpenFifa.Core
         public const string ParamLocoRate = "LocoRate";
         public const string ParamActionRate = "ActionRate";
         public const string ParamMirror = "Mirror";
+        /// <summary>Idle blend 0..1: Quaternius Idle_Loop to the generated weight-shift idle (see <see cref="IdleVariety"/>).</summary>
+        public const string ParamIdleVariant = "IdleVariant";
+        /// <summary>Idle blend 0..1 toward the generated ready stance (ball close).</summary>
+        public const string ParamReady = "Ready";
+        /// <summary>
+        /// Side-step posture 0..1: an upright side-step (0, attackers re-positioning while facing the ball) to the low
+        /// defensive jockey shuffle (1, out of possession). See <see cref="StrafePosture"/>.
+        /// </summary>
+        public const string ParamGuard = "Guard";
 
         /// <summary>Animation event function name fired on the contact frame of action clips.</summary>
         public const string ContactEvent = "OnActionContact";

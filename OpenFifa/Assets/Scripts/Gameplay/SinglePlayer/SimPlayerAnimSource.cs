@@ -9,7 +9,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// and implements <see cref="IPlayerAnimInterpolation"/> so the driver renders between the previous and the current
     /// snapshot; the controller interpolates the ball the same way so contact frames line up.
     /// </summary>
-    public sealed class SimPlayerAnimSource : IPlayerAnimSource, IPlayerAnimInterpolation
+    public sealed class SimPlayerAnimSource : IPlayerAnimSource, IPlayerAnimInterpolation, IPlayerAnimPossession
     {
         private readonly SinglePlayerMatchSession _session;
         public readonly int PlayerId;
@@ -58,6 +58,19 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 float top = PlayerKinematics.SprintSpeed(a, _session.Sim.Config.Kinematics, p.Stamina);
                 if (!intents[PlayerId].Sprint) top *= _session.Sim.Config.Kinematics.JogFraction;
                 return new Vector3(m.X * top, 0f, m.Z * top);
+            }
+        }
+
+        /// <summary>The other side has the ball, or it is loose and they touched it last (defensive jockey posture).</summary>
+        public bool OutOfPossession
+        {
+            get
+            {
+                var s = _session.Sim.State;
+                int owner = s.Owner;
+                int ownerTeam = owner >= 0 && owner < MatchSimState.PlayerCount ? SimTeamAIAdapter.TeamIndex(MatchSim.TeamOf(owner)) : -1;
+                return StrafePosture.Defending(SimTeamAIAdapter.TeamIndex(MatchSim.TeamOf(PlayerId)), ownerTeam,
+                    SimTeamAIAdapter.TeamIndex(s.LastTouchTeam));
             }
         }
 

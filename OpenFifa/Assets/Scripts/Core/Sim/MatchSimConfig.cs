@@ -37,5 +37,31 @@ namespace OpenFifa.Core
         public float BallDt => 1f / (TickRate * BallSubsteps);
 
         public int SecondsToTicks(float seconds) => (int)(seconds * TickRate + 0.5f);
+
+        /// <summary>
+        /// A config whose ball is set up for <paramref name="surface"/>; the requested surface always wins.
+        /// <list type="bullet">
+        /// <item>Ball already on that surface: this config, unchanged.</item>
+        /// <item>Normal ball: a copy with <see cref="BallSimConfig.WithSurface"/> applied.</item>
+        /// <item>Ball made for another surface by <see cref="BallSimConfig.WithSurface"/>: a copy re-surfaced from the
+        /// Normal config it was made from (<see cref="BallSimConfig.NormalSource"/>), so Wet then Dry gives Dry, not
+        /// Wet, and Normal gives that Normal ball back.</item>
+        /// <item>Ball whose Surface was set by hand (no Normal source): throws <see cref="System.InvalidOperationException"/>
+        /// rather than silently keeping the old surface.</item>
+        /// </list>
+        /// The other sub-configs are shared, and this config is never changed.
+        /// </summary>
+        public MatchSimConfig ForSurface(PitchSurface surface)
+        {
+            if (Ball.Surface == surface) return this;
+            BallSimConfig normal = Ball.Surface == PitchSurface.Normal ? Ball : Ball.NormalSource;
+            if (normal == null || normal.Surface != PitchSurface.Normal)
+                throw new System.InvalidOperationException(
+                    $"ForSurface({surface}): the ball config is {Ball.Surface} and has no Normal source to re-surface from; " +
+                    "build it with BallSimConfig.WithSurface or pass a Normal ball.");
+            var c = (MatchSimConfig)MemberwiseClone();
+            c.Ball = surface == PitchSurface.Normal ? normal : normal.WithSurface(surface);
+            return c;
+        }
     }
 }

@@ -54,7 +54,7 @@ namespace OpenFifa.Tests.Editor
         public void MenuNavigationLogic_GameTitle_IsOpenFifa()
         {
             var logic = new MenuNavigationLogic();
-            Assert.AreEqual("OpenFifa", logic.GameTitle);
+            Assert.AreEqual("OpenFootball", logic.GameTitle);
         }
 
         [Test]

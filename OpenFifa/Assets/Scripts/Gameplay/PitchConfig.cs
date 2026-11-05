@@ -7,7 +7,7 @@ namespace OpenFifa.Gameplay
     /// ScriptableObject wrapper for PitchConfigData.
     /// Exposes tunable values in the Unity Inspector.
     /// </summary>
-    [CreateAssetMenu(fileName = "PitchConfig", menuName = "OpenFifa/Config/Pitch Config")]
+    [CreateAssetMenu(fileName = "PitchConfig", menuName = "OpenFootball/Config/Pitch Config")]
     public class PitchConfig : ScriptableObject
     {
         [Header("Pitch Dimensions")]

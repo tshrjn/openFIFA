@@ -145,7 +145,7 @@ namespace OpenFifa.Core
             h.Add(_s.Ball.Position); h.Add(_s.Ball.Velocity); h.Add(_s.Ball.Spin); h.Add(_s.Ball.InNet); h.Add(_s.Ball.Grounded ? 1 : 0);
             h.Add((long)_s.Rng.State); h.Add((long)_s.Rng.Increment);
             h.Add(_s.Owner); h.Add(_s.KeeperHolding ? 1 : 0); h.Add(_s.LastTouchPlayer); h.Add((int)_s.LastTouchTeam);
-            h.Add((int)_s.PossessionTeam); h.Add(_s.OffsideMask); h.Add(_s.OffsidePasser);
+            h.Add((int)_s.PossessionTeam); h.Add(_s.OffsideMask); h.Add(_s.OffsidePasser); h.Add(_s.OffsideDefenderLineZ); h.Add(_s.OffsideBallLineZ);
             h.Add(_s.PassLive ? 1 : 0); h.Add(_s.PassFrom); h.Add(_s.PassTarget); h.Add((int)_s.PassTeam); h.Add(_s.AssistCandidate);
             h.Add(_s.ShotLive ? 1 : 0); h.Add(_s.Shooter); h.Add(_s.PenaltyKicker); h.Add(_s.PenaltyKickTick);
             h.Add(_s.IndirectRestartLive ? 1 : 0); h.Add(_s.KickSerial); h.Add(_s.HomeSaveSerial); h.Add(_s.AwaySaveSerial);
@@ -166,7 +166,7 @@ namespace OpenFifa.Core
 
         private void Emit(MatchEventType type, int player, int other, SimTeam team, SimVec3 pos,
             float speed = 0f, float value = 0f, int detail = 0, IntentAction action = IntentAction.None,
-            KickStyle style = KickStyle.Default)
+            KickStyle style = KickStyle.Default, float defenderLineZ = 0f, float ballLineZ = 0f)
         {
             _events.Add(new MatchEvent
             {
@@ -183,6 +183,8 @@ namespace OpenFifa.Core
                 Detail = detail,
                 Action = action,
                 Style = style,
+                DefenderLineZ = defenderLineZ,
+                BallLineZ = ballLineZ,
             });
         }
 

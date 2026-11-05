@@ -50,6 +50,9 @@ namespace OpenFifa.Core
     /// </summary>
     public static class TeamAIFormationShape
     {
+        /// <summary>Centre-back lateral factor when the holder drops between them in build-up (1.35 otherwise).</summary>
+        public const float HolderDropSplit = 1.7f;
+
         public static bool InPossession(TeamAIPhase phase) =>
             phase == TeamAIPhase.BuildUp || phase == TeamAIPhase.Progression ||
             phase == TeamAIPhase.FinalThird || phase == TeamAIPhase.SetPieceFor;
@@ -92,6 +95,9 @@ namespace OpenFifa.Core
             // Width is spent where the ball is: shrink the far side a little when shifted.
             float margin = 1.5f;
 
+            bool backThree = TeamAIFormations.CentreBacks(tactics.Formation) >= 3;
+            int holderSlot = SingleHolder(tactics.Formation);
+            bool dropToBuild = phase == TeamAIPhase.BuildUp && tactics.Directness < 0.4f && !backThree && holderSlot >= 0;
             for (int s = 0; s < TeamAIFormations.SlotCount; s++)
             {
                 var slot = TeamAIFormations.GetSlot(tactics.Formation, s);
@@ -109,7 +115,19 @@ namespace OpenFifa.Core
                     // Full-backs push on, wingers hold the touchline, forwards stretch the last line.
                     if (slot.Role == TeamAIRole.FB) blockDepth += phase == TeamAIPhase.BuildUp ? 0.12f : 0.35f;
                     if (slot.Role == TeamAIRole.W) lateral = lateral < 0f ? -1f : 1f;
-                    if (slot.Role == TeamAIRole.CB && phase == TeamAIPhase.BuildUp) lateral *= 1.35f;
+                    // Build-up: the centre-backs split; wider still when the holder drops between them.
+                    if (slot.Role == TeamAIRole.CB && phase == TeamAIPhase.BuildUp) lateral *= dropToBuild ? HolderDropSplit : 1.35f;
+                    if (dropToBuild)
+                    {
+                        // Patient build-up with a back two: the holding midfielder drops between the split centre-backs
+                        // (a back three on the ball) and the full-backs go higher, so there is always a short outlet.
+                        if (slot.Role == TeamAIRole.DM && s == holderSlot) { blockDepth = 0.02f; lateral = 0f; }
+                        else if (slot.Role == TeamAIRole.FB) blockDepth += 0.18f;
+                    }
+                }
+                else
+                {
+                    blockDepth = DefensiveBlockDepth(slot, phase, tactics, backThree);
                 }
 
                 float depth = line + blockDepth * blockLen;
@@ -119,6 +137,48 @@ namespace OpenFifa.Core
                 anchors[s] = TeamAIMath.ClampToPitch(p, pitch, margin);
             }
             return line;
+        }
+
+        /// <summary>The only DM slot of the formation, or -1 when it has none or two.</summary>
+        public static int SingleHolder(TeamAIFormation f)
+        {
+            int found = -1;
+            for (int s = 1; s < TeamAIFormations.SlotCount; s++)
+            {
+                if (TeamAIFormations.GetSlot(f, s).Role != TeamAIRole.DM) continue;
+                if (found >= 0) return -1;
+                found = s;
+            }
+            return found;
+        }
+
+        /// <summary>
+        /// Out-of-possession block depth of a slot. Wide forwards (4-3-3, 3-4-3) track back into the midfield line in a
+        /// mid or low block, so the side defends as a 4-5-1 / 5-4-1; how far depends on how many players the team
+        /// commits forward. With a back three the wing-backs drop into a back five. Pressing phases keep the shape.
+        /// </summary>
+        public static float DefensiveBlockDepth(in TeamAISlot slot, TeamAIPhase phase, TeamAITactics tactics, bool backThree)
+        {
+            float d = slot.BlockDepth;
+            float drop;
+            switch (phase)
+            {
+                case TeamAIPhase.LowBlock:
+                case TeamAIPhase.SetPieceAgainst:
+                    drop = 1f;
+                    break;
+                case TeamAIPhase.MidBlock:
+                case TeamAIPhase.Recovery:
+                    // Half-way in a mid block (0.35 at neutral ForwardRuns): a full drop on every regain/loss turned the
+                    // wide forwards into shuttles (HoldWidth running share up by a quarter in full-sim stats).
+                    drop = 0.5f * TeamAIMath.Clamp01(1.2f - tactics.ForwardRuns);
+                    break;
+                default:
+                    return d;
+            }
+            if (slot.Role == TeamAIRole.W && d > 0.8f) return TeamAIMath.Lerp(d, 0.55f, drop);
+            if (backThree && slot.Role == TeamAIRole.FB && d > 0.05f) return TeamAIMath.Lerp(d, 0.02f, TeamAIMath.Clamp01(0.4f + 0.6f * drop));
+            return d;
         }
     }
 }

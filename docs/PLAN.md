@@ -1,4 +1,4 @@
-# OpenFifa: Development Milestones
+# OpenFootball: Development Milestones
 
 > Source of truth for progress tracking. Updated as stories complete.
 

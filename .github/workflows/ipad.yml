@@ -41,6 +41,11 @@ jobs:
         with:
           lfs: true
 
+      - name: Fetch commentary clips (release asset matching audio/en/index.json)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: tools/commentary/fetch_clips.sh || echo "::warning::commentary clips not installed; the build will show subtitles only"
+
       - name: Free disk space (the Unity iOS image is large)
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL

@@ -34,6 +34,10 @@ namespace OpenFifa.Core
         /// <summary>Kick variant for KickWindup, Pass and Shot events (Default otherwise).</summary>
         public KickStyle Style;
 
+        /// <summary>Offside only: world Z of the second-last defender and of the ball when the pass was played.</summary>
+        public float DefenderLineZ;
+        public float BallLineZ;
+
         public override string ToString() =>
             $"[{Tick}] {Type} p{PlayerId} o{OtherPlayerId} {Team} {Position} v={Value:F2} d={Detail}";
     }

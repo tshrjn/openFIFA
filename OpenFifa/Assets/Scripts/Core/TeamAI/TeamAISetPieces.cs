@@ -49,6 +49,9 @@ namespace OpenFifa.Core
     /// </summary>
     public sealed class TeamAISetPieces
     {
+        /// <summary>Ball timing model (sim-matched, so wet or dry pitches time routines right). Set by the brain.</summary>
+        public TeamAIBallModel Model = TeamAIBallModel.Default;
+
         /// <summary>Free kicks closer than this (m, ball to goal centre) get a routine.</summary>
         public const float FreeKickRange = 35f;
         public const float WallSpacing = 0.6f;
@@ -560,11 +563,15 @@ namespace OpenFifa.Core
             {
                 case TeamAISetPieceKind.PenaltyFor:
                 {
-                    float x = PenaltySide * (hgw - 0.75f);
+                    // A nervous (low-difficulty) taker places it nearer the keeper (TeamAIOnBall.ShotComposure).
+                    float nerve = (TeamAIOnBall.ShotComposure(diff.Theta) - 0.55f) / 0.45f;
+                    float placement = TeamAIMath.Lerp(0.1f, 1f, nerve);
+                    float x = PenaltySide * (hgw - 0.75f) * placement;
                     best = new TeamAIOption
                     {
                         Action = TeamAIAction.Shoot, Intent = TeamAIIntent.Shoot, Target = new SimVec3(x, 0f, _goalZ),
-                        TargetIndex = -1, Score = 1f, Power = PenaltySide == 0 ? 0.6f : 0.78f
+                        TargetIndex = -1, Score = 1f,
+                        Power = (PenaltySide == 0 ? 0.6f : 0.78f) * TeamAIMath.Lerp(0.8f, 1f, nerve)
                     };
                     return true;
                 }
@@ -603,8 +610,8 @@ namespace OpenFifa.Core
                         float dist = TeamAIMath.FlatDistance(ball, target);
                         if (dist < 3f) continue;
                         float tBall = action == TeamAIAction.Pass
-                            ? TeamAIBallModel.Default.GroundPassTime(dist)
-                            : TeamAIBallModel.Default.CrossTime(dist);
+                            ? Model.GroundPassTime(dist)
+                            : Model.CrossTime(dist);
                         float control = TeamAIPitchControl.Evaluate(world, owner.Team, target, tBall, ownerIndex);
                         float tight = TeamAIOnBall.NearestOpponentDistance(world, owner.Team, target);
                         float score = baseScore + 0.5f * control - (tight < 1.5f ? 0.15f * (1.5f - tight) : 0f);
@@ -614,7 +621,7 @@ namespace OpenFifa.Core
                         {
                             float power = action == TeamAIAction.Pass
                                 ? Math.Min(TeamAIMath.Clamp(dist / TeamAIOnBall.MaxGroundPass, 0.12f, 1f),
-                                    TeamAIBallModel.Default.GroundPassPower(dist, rec.BallControl))
+                                    Model.GroundPassPower(dist, rec.BallControl))
                                 : TeamAIMath.Clamp(dist / 45f, 0.35f, 1f);
                             best = new TeamAIOption
                             {

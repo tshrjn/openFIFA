@@ -13,6 +13,11 @@ namespace OpenFifa.Core
         public const float BlendIn = 0.12f;
         /// <summary>Seconds over which the touch IK weight ramps out after the contact tick.</summary>
         public const float BlendOut = 0.12f;
+        /// <summary>
+        /// Largest sideways shift (m) of the shown body toward the ball during a touch (lateral-only warp, eased in and out
+        /// over the touch window). With the leg's own sideways reach this covers balls out to about 0.6-0.7 m.
+        /// </summary>
+        public const float MaxLateralShift = 0.25f;
         /// <summary>Below this speed (m/s) there is no usable gait cycle to read the stride parity from.</summary>
         public const float MinGaitSpeed = 0.8f;
 
@@ -71,6 +76,44 @@ namespace OpenFifa.Core
             }
             if (hasLastTouch) return Other(lastTouchFoot);
             return preferred;
+        }
+
+        // ------------------------------------------------------------------ ball side
+
+        /// <summary>
+        /// Lateral offset (m, body frame at contact) beyond which the ball's side decides the touching foot. The sim
+        /// touches a ball anywhere within 1.3 x its control radius, so in full matches the ball sits a median 0.35 m
+        /// (p90 0.77 m) to the side of the root at the touch. Past the hip (about 0.1 m) the far foot would have to
+        /// cross in front of the planted one, so the near foot takes the touch even if it is not the one in swing.
+        /// </summary>
+        public const float SideThreshold = 0.1f;
+
+        /// <summary>
+        /// Touch-IK multiplier floor for a ball-side foot that is planted at the touch (it pushes the ball with the
+        /// inside of the foot as it lands rather than leaving the ball untouched).
+        /// </summary>
+        public const float SideOverridePlantedScale = 0.6f;
+
+        /// <summary>Ball position at contact in the body frame (X right, Z forward) of the root and yaw (degrees) at contact.</summary>
+        public static SimVec3 BallLocal(SimVec3 ballAtContact, SimVec3 rootAtContact, float yawAtContactDeg) =>
+            AnimMath.WorldToLocal((ballAtContact - rootAtContact).Flat, yawAtContactDeg);
+
+        /// <summary>
+        /// Final touching foot: the ball-side foot when the ball is more than <see cref="SideThreshold"/> to one side,
+        /// otherwise <paramref name="gaitFoot"/> (the stride choice). <paramref name="overridden"/> is true when the side
+        /// replaced the stride choice.
+        /// </summary>
+        public static ActionSide ChooseTouchFoot(ActionSide gaitFoot, float ballLocalX, out bool overridden,
+            float threshold = SideThreshold)
+        {
+            overridden = false;
+            if (ballLocalX > threshold || ballLocalX < -threshold)
+            {
+                ActionSide side = ballLocalX > 0f ? ActionSide.Right : ActionSide.Left;
+                overridden = side != gaitFoot;
+                return side;
+            }
+            return gaitFoot;
         }
 
         // ------------------------------------------------------------------ gait phase (measured, not nominal)

@@ -19,11 +19,14 @@ namespace OpenFifa.Core
         public ControlAction ShotWithRight;
         /// <summary>Shot with both shoulders held.</summary>
         public ControlAction ShotWithBoth;
+        /// <summary>Shot with the left trigger pressed during the charge (overrides the shoulders). Knuckleball in both presets.</summary>
+        public ControlAction ShotWithLeftTrigger = ControlAction.KnuckleShot;
 
         /// <summary>
         /// Default. Follows the FC 26 Classic table in the research note (FIFPlay source):
         /// South pass, West lob/cross, North through, East shoot; LB+shoot chip, RB+shoot finesse,
-        /// LB+RB+shoot power (driven) shot; shoot twice = low shot.
+        /// LB+RB+shoot power (driven) shot; shoot twice = low shot. shoot then LT (pressed during the charge) = knuckleball (a combo the reference
+        /// layout leaves free: LT is shield/jockey and not a shot modifier there).
         /// </summary>
         public static ControlPreset Classic() => new ControlPreset
         {
@@ -39,7 +42,7 @@ namespace OpenFifa.Core
 
         /// <summary>
         /// Alternate: shoot on West and lob/cross on East (the other common console football layout),
-        /// with LB+shoot finesse, RB+shoot driven, LB+RB+shoot chip.
+        /// with LB+shoot finesse, RB+shoot driven, LB+RB+shoot chip; LT+shoot knuckleball as in Classic.
         /// </summary>
         public static ControlPreset Alternate() => new ControlPreset
         {
@@ -74,8 +77,11 @@ namespace OpenFifa.Core
             }
         }
 
-        /// <summary>Resolves an attacking face-button press plus shoulder modifiers into an action.</summary>
-        public ControlAction ResolveAttack(FaceRole role, bool leftShoulder, bool rightShoulder, bool inCrossingZone)
+        /// <summary>
+        /// Resolves an attacking face-button press plus shoulder (and, for shots, left-trigger) modifiers into an action.
+        /// </summary>
+        public ControlAction ResolveAttack(FaceRole role, bool leftShoulder, bool rightShoulder, bool inCrossingZone,
+            bool leftTrigger = false)
         {
             bool both = leftShoulder && rightShoulder;
             switch (role)
@@ -91,6 +97,7 @@ namespace OpenFifa.Core
                     if (both) return ControlAction.DrivenLob;
                     return inCrossingZone ? ControlAction.Cross : ControlAction.Lob;
                 case FaceRole.Shoot:
+                    if (leftTrigger && ShotWithLeftTrigger != ControlAction.None) return ShotWithLeftTrigger;
                     if (both) return ShotWithBoth;
                     if (leftShoulder) return ShotWithLeft;
                     if (rightShoulder) return ShotWithRight;

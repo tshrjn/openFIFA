@@ -1,4 +1,4 @@
-# OpenFifa: Automated Testing Strategy
+# OpenFootball: Automated Testing Strategy
 
 > **Core principle**: Every user story must have acceptance criteria expressible as automated tests. If a criterion can't be tested programmatically, rewrite it until it can — or defer to a human-in-the-loop polish phase.
 

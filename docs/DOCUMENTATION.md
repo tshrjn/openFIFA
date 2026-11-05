@@ -1,4 +1,4 @@
-# OpenFifa Development Log
+# OpenFootball Development Log
 
 > Real-time record of decisions, progress, and issues. **Read this first** at the start of every session.
 
@@ -138,6 +138,7 @@ Possible next steps:
 **Changes**:
 - OpenFifa/Assets/Scripts/Gameplay/MatchOrchestrator.cs — full runtime bootstrapper (pitch, players, ball, goals, camera, HUD, AI)
 - OpenFifa/Assets/Scenes/Match.unity — minimal scene with MatchOrchestrator auto-bootstrap
+- Build scene order: every player build (BuildScript.BuildIOS/BuildMacOSDev, IosBuild exports, the SinglePlayerSceneBootstrap wrappers) uses `BuildSceneOrder.For`: SinglePlayerMatch.unity first (the scene the app boots into), LocalMultiplayerMatch.unity second, then the other enabled EditorBuildSettings scenes (Match.unity). The committed EditorBuildSettings.asset is unchanged; the order is applied at build time.
 - OpenFifa/Assets/Scripts/Core/FormationLayoutData.cs — added CreateRush4v4() factory (4 slots: 2 Def, CM, Fwd)
 - OpenFifa/Assets/Tests/Editor/RushFormationTests.cs — 9 EditMode tests
 - OpenFifa/Assets/Editor/ScreenshotCapture.cs — updated for Rush 4v4 formation
@@ -500,7 +501,7 @@ Possible next steps:
 - MenuNavigationLogic maps buttons to scene names (TeamSelect, Settings, Credits)
 - UIScalerConfig: 1920x1080 reference, matchWidthOrHeight 0.5
 - MainMenuController uses Button.onClick.AddListener for navigation
-- Title displayed as TMP_Text with "OpenFifa"
+- Title displayed as TMP_Text with "OpenFootball"
 
 **Known Issues**: None
 
@@ -1101,3 +1102,19 @@ Possible next steps:
 **Known Issues**: None (empty project)
 
 **Next**: US-001 — Unity project scaffold with macOS/iPad build pipeline and test framework
+
+## Offside (Law 11)
+
+- **Rules** — `Scripts/Core/OffsideLogic.cs` (pure C#, implements `IOffsideDecisionSource`). Snapshot on every touch: team-mates of the toucher whose foremost point (centre + `BodyRadius`, arms ignored) is in the opponents' half (halfway line excluded) and beyond both the ball and the second-last opponent (keeper counts) by more than `LevelTolerance` are flagged. Offence when a flagged player is next to touch the ball, or challenges an opponent within `InterferenceRadius` of the ball. Deliberate opponent play resets; deflections/saves don't. Goal kicks, throw-ins and corners are exempt. Tests: `Tests/Editor/OffsideLogicTests.cs` (`[Category("Offside")]`).
+- **Wiring** — `BallTouchTracker` (on the ball) emits team-aware touches from `BallOwnership` changes and collisions; `OffsideController` (attached by `MatchOrchestrator.Start`) runs the logic, enters `MatchState.Stoppage`, plays the presentation and awards an indirect free kick at the offence position. Any other rules engine can drive it via `OffsideController.UseDecisionSource(IOffsideDecisionSource)`.
+- **Match sim** — the fixed-tick `MatchSim` (single player) has its own point-based offside rule (`Scripts/Core/Sim/OffsideRule.cs`); both paths share one `RestartType` enum (`Scripts/Core/RestartType.cs`, sim numbering) and `OffsideLogic.IsExemptRestart` delegates to `OffsideRule.AppliesToRestart`. `SimOffsideDecisionSource` (`Scripts/Core/Integration/`) turns the sim's `Offside` events (which carry `DefenderLineZ`/`BallLineZ`) into `OffsideDecision`s on `IOffsideDecisionSource`, so the presentation can show sim calls. The sim's pitch length runs along world Z, so its decision "line X" values are Z positions; the overlay needs an axis mapping before it is wired into `SinglePlayerMatchController`. Tests: `Tests/Editor/Integration/SimOffsideDecisionSourceTests.cs`.
+- **Config** — `OffsideConfig` (rules; on for 11v11, `_enabledSmallSided` toggle for Rush, default on) and `OffsidePresentationConfig` (timing, colours, camera, banner). Both optional on `MatchOrchestrator`; runtime defaults are used when empty.
+- **Presentation** — `OffsidePresentation` sequences `OffsidePresentationTimeline` cues (~2.5 s, skippable with Enter / gamepad B or Start): whistle (`OffsidePresentation.OnWhistle`, played by `SoundManager`), `AssistantRefereeFlag` placeholder (events for a future animated official), slow motion into freeze, `OffsideCameraCut`, `OffsideLineOverlay` (lines at the snapshot positions, i.e. when the ball was played) and the `OffsideBanner` lower third.
+- **Known gaps** — not compiled or play-tested yet (no Unity licence on the build box). The line material is built at runtime from `Universal Render Pipeline/Particles/Unlit`; if that shader is stripped from a player build, assign `Line Material Override` in `OffsidePresentationConfig`. The game has no throw-ins/corners/goal kicks yet, so the exemption is only reachable via `BallTouchTracker.SetPendingRestart`.
+
+## Match weather and pitch condition (single player)
+
+- `SinglePlayerMatchOptions.Weather` (`WeatherType`, default `Clear`) picks the pitch condition through `PitchSurfaces.ForWeather` (rain = Wet, snow = Heavy, else Normal); `Options.Surface` overrides it (e.g. `Dry`). The session applies it with `MatchSimConfig.ForSurface` (a copy whose ball is `BallSimConfig.WithSurface(...)`) before building the `MatchSim` and the `TeamAIBallModel`, so the AI predicts with the ball it plays. The caller's config is not changed. The requested surface always wins: `ForSurface` on a config whose ball was already made for another surface re-surfaces it from its Normal source (`BallSimConfig.NormalSource`), and throws if the ball's `Surface` was set by hand with no source.
+- Every AI timing path uses the brain's `BallModel` (open play, `TeamAISetPieces.Model` for routines, the keeper's no-trajectory fallback via `TeamAIMath.PredictBall(..., model)`, and support-spot lane timing). The static `TeamAIOnBall.GroundPassTime/LobPassTime/CrossTime` and 3-argument `TeamAIMath.PredictBall` remain default-ball helpers for tests and tools.
+- `SinglePlayerMatchController`: inspector `Weather` / `SurfaceOverride`, or `-spWeather dry|normal|wet|rain|heavy|clear|lightrain|heavyrain|snow|fog|overcast` (`MatchWeatherOption`). Non-clear weather also drives the visuals: a `WeatherSystem` (rain/snow particles as stretched streaks kept 30 m in front of the broadcast camera, fog, pitch wetness) and a cloudier sky with a softer sun and shadows from `MatchWeatherOption.LookFor` (`WeatherLook`). Clear weather leaves the broadcast look untouched.
+- Tests: `Tests/Editor/Integration/SinglePlayerWeatherTests.cs`.

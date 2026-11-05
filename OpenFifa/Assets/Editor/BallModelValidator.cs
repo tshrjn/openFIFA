@@ -219,7 +219,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Menu item to validate the selected ball model in the scene.
         /// </summary>
-        [MenuItem("OpenFifa/Ball/Validate Selected Ball")]
+        [MenuItem("OpenFootball/Ball/Validate Selected Ball")]
         public static void ValidateSelectedBall()
         {
             var selected = Selection.activeGameObject;
@@ -256,7 +256,7 @@ namespace OpenFifa.Editor
         /// <summary>
         /// Validates the ball model configuration (pure data, no scene objects required).
         /// </summary>
-        [MenuItem("OpenFifa/Ball/Validate Ball Config")]
+        [MenuItem("OpenFootball/Ball/Validate Ball Config")]
         public static void ValidateBallConfig()
         {
             var config = new BallModelConfig();
