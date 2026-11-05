@@ -19,6 +19,9 @@ namespace OpenFifa.Editor
         /// <summary>Minimum head-bone weight for a vertex to count as head.</summary>
         public const float HeadWeightMin = 0.5f;
 
+        /// <summary>Overall strength of the face relief.</summary>
+        public const float ReliefScale = 2.2f;
+
         // Kit space in head-bone space: the Quaternius mannequin's values, as in HairCapBuilder / KitBodyMapPostprocessor.
         private static readonly Vector3 HeadCentreBone = new Vector3(0f, 0.1194f, -0.0068f);
         private const float HeadCentreKitY = 0.201f, HeadCentreKitZ = -0.012f;
@@ -56,7 +59,7 @@ namespace OpenFifa.Editor
             d += 0.0045f * G2(x, y - 0.124f, 0.015f, 0.011f);
             // Under the lower lip a slight recess.
             d -= 0.0015f * G2(x, y - 0.148f, 0.016f, 0.004f);
-            return d * front;
+            return d * front * ReliefScale;
         }
 
         /// <summary>Subdivides and sculpts the head of one skinned mesh in place. Returns a summary.</summary>
