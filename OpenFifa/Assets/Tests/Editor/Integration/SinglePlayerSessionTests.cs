@@ -532,8 +532,8 @@ namespace OpenFifa.Tests.Editor.Integration
         /// Per-match floors for each ladder step (Beginner->Amateur first): baseline mean minus 2 standard errors of the
         /// paired per-seed difference on the ladder seeds, rounded down, never below 0. See docs/DIFFICULTY.md.
         /// </summary>
-        private static readonly float[] StepGdFloor = { 0.84f, 0.65f, 0.25f, 0.38f, 0.85f, 0.03f };
-        private static readonly float[] StepBalanceFloor = { 1.83f, 1.35f, 1.12f, 1.00f, 1.64f, 0.00f };
+        private static readonly float[] StepGdFloor = { 0.84f, 0.65f, 0.25f, 0.38f, 0.85f, 0.84f };
+        private static readonly float[] StepBalanceFloor = { 1.83f, 1.35f, 1.12f, 1.00f, 1.64f, 1.25f };
 
         /// <summary>Smallest number of on-target shots a keeper must face for its save rate to be judged.</summary>
         private const int MinKeeperSample = 40;

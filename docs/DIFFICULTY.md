@@ -24,14 +24,17 @@ Baseline: main at d762568 (after #41, player body contact). Per match, over the 
 | Semi-Pro → Professional | 0.722 ± 0.233 | 0.25 | 1.733 ± 0.306 | 1.12 |
 | Professional → World Class | 0.861 ± 0.237 | 0.38 | 1.653 ± 0.325 | 1.00 |
 | World Class → Legendary | 1.431 ± 0.287 | 0.85 | 2.428 ± 0.390 | 1.64 |
-| Legendary → Ultimate | 0.639 ± 0.300 | 0.03 | 0.842 ± 0.421 | 0.00 |
+| Legendary → Ultimate | 1.458 ± 0.309 | 0.84 | 2.061 ± 0.403 | 1.25 |
 
 Level totals on these seeds (GD / balance): Beginner -172 / -282.8, Amateur -73 / -102.8, Semi-Pro 6 / 38.0,
-Professional 58 / 162.8, World Class 120 / 281.8, Legendary 223 / 456.6, Ultimate 269 / 517.2.
+Professional 58 / 162.8, World Class 120 / 281.8, Legendary 223 / 456.6, Ultimate 328 / 605.0.
 
-Legendary → Ultimate is the thinnest step: 0.64 ± 0.30 GD per match, so its floor only rules out an inversion. That
-was the same before #41 (about +0.9 balance per match on seeds 49..192). Widening it is a difficulty-tuning job, not
-a test change.
+Legendary → Ultimate used to be the thinnest step: 0.64 ± 0.30 GD per match at d762568, with a floor that only
+ruled out an inversion. The Ultimate AI outfield delta went from +15 to +18, which widened it to 1.46 ± 0.31 GD per
+match, about the size of World Class → Legendary. That row and the Ultimate total above are re-measured on the same
+72 seeds; the other steps are unchanged, because the change only touches Ultimate. The Ultimate reaction bonus does
+nothing beyond 0.05: at theta 1 the reaction delay is already at its 0.03 s floor (0.07 and 0.09 measured identical).
+The Ultimate user keeper still saves 61.2% (441/721), inside the 55-80% band.
 
 When a deliberate difficulty change moves a step, re-measure on the same seeds and update this table and the
 `StepGdFloor` / `StepBalanceFloor` arrays in `SinglePlayerSessionTests` together.
@@ -46,7 +49,7 @@ displayed ratings, team sheets, HUD or commentary.
 |---|---|---|---|---|---|---|---|
 | AI keeper reflexes/diving | −6 | −5 | 0 | +5 | +5 | +5 | +5 |
 | User keeper reflexes/diving | 0 | 0 | 0 | 0 | −3 | −6 | −9 |
-| AI outfield ratings | −18 | −11 | −6 | 0 | +6 | +12 | +15 |
+| AI outfield ratings | −18 | −11 | −6 | 0 | +6 | +12 | +18 |
 | AI finishing (Finishing, LongShots, Composure; on top of outfield) | −8 | −7 | −3 | −2 | 0 | 0 | 0 |
 
 The user's own keeper is never weakened below World Class: the easy levels make the AI's finishing worse instead.

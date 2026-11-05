@@ -68,7 +68,7 @@ namespace OpenFifa.Core
         private static readonly float[] PassAssists = { 1.0f, 0.9f, 0.8f, 0.6f, 0.5f, 0.4f, 0.35f };
         private static readonly float[] ShotAssists = { 0.95f, 0.85f, 0.75f, 0.6f, 0.5f, 0.4f, 0.35f };
         private static readonly float[] DefenceSwitch = { 18f, 22f, 26f, 0f, 0f, 0f, 0f };
-        private static readonly int[] OppOutfield = { -18, -11, -6, 0, 6, 12, 15 };
+        private static readonly int[] OppOutfield = { -18, -11, -6, 0, 6, 12, 18 };
 
         public static SinglePlayerDifficultyProfile For(TeamAIDifficultyLevel level)
         {
