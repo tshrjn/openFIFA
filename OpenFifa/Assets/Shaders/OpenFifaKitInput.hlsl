@@ -35,7 +35,7 @@ CBUFFER_START(UnityPerMaterial)
     float _BodyEdgeSoftness; // skinned mode: extra edge blur in limb-parameter / metre units
     half _SkinWrap;
     half4 _HairColor;
-    float4 _HeadStyle;       // x hair style (0 bald, 1 buzz, 2 short), y facial hair (0 none, 1 stubble, 2 beard, 3 goatee), z hairline offset, w eye tone
+    float4 _HeadStyle;       // x hair style (0 bald, 1 buzz, 2 short, 3 braids), y facial hair (0 none, 1 stubble, 2 beard, 3 goatee, 4 moustache), z hairline offset, w eye tone
     float4 _HeadParams;      // kit-space head centre y, centre z, half width, half depth          // wrap-diffuse amount on skin (soft subsurface-like terminator)
 
     // Name / number print

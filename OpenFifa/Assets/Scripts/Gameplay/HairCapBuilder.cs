@@ -5,8 +5,8 @@ using UnityEngine;
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Procedural hair caps for the mannequin head (styles with volume: <see cref="HairStyle.Curly"/> and
-    /// <see cref="HairStyle.Tied"/>; shorter styles are painted by the kit shader). The cap is an ellipsoid shell
+    /// Procedural hair caps for the mannequin head (styles with volume: <see cref="HairStyle.Curly"/>,
+    /// <see cref="HairStyle.Afro"/> and <see cref="HairStyle.Tied"/>; shorter styles are painted by the kit shader). The cap is an ellipsoid shell
     /// around the cranium, cut at the same hairline the shader paints, built once per style (shared mesh) in the
     /// head bone's space and parented to the head bone, so it follows head animation without skinning.
     /// One shared URP Lit material per hair colour (SRP Batcher friendly). Under 1k triangles per cap.
@@ -33,7 +33,8 @@ namespace OpenFifa.Gameplay
         private static readonly int CullId = Shader.PropertyToID("_Cull");
 
         /// <summary>True for styles that need a hair mesh.</summary>
-        public static bool NeedsMesh(HairStyle style) => style == HairStyle.Curly || style == HairStyle.Tied;
+        public static bool NeedsMesh(HairStyle style) =>
+            style == HairStyle.Curly || style == HairStyle.Tied || style == HairStyle.Afro;
 
         /// <summary>
         /// Adds (or replaces) the hair cap under the model's head bone. Returns the renderer, or null when the style
@@ -100,6 +101,10 @@ namespace OpenFifa.Gameplay
             if (style == HairStyle.Curly)
             {
                 AddShell(verts, normals, tris, 0.012f, 0.012f);
+            }
+            else if (style == HairStyle.Afro)
+            {
+                AddShell(verts, normals, tris, 0.028f, 0.016f);
             }
             else
             {

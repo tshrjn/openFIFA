@@ -466,6 +466,13 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     half3 hairShade = hairCol * lerp(0.75, 1.2, strands);
     half3 buzz = lerp(skinCol, hairCol, 0.55 + 0.35 * grain);
     half3 hairPaint = hairStyle >= 2 ? hairShade : buzz;
+    if (hairStyle == 3)
+    {
+        // Braids / cornrows: tight rows running front to back, scalp showing between them.
+        float rows = abs(frac(kp.x * 95.0) - 0.5) * 2.0;
+        half row = 1.0 - smoothstep(0.55, 0.85, rows);
+        hairPaint = lerp(lerp(skinCol, hairCol, 0.35), hairCol * lerp(0.8, 1.15, strands), row);
+    }
     albedo = lerp(albedo, hairPaint, hair * hairAmount);
 
     // Facial hair.
@@ -479,6 +486,7 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     if (facial == 1) { facialMask = beardZone; facialAmount = 0.3 + 0.25 * grain; }
     else if (facial == 2) { facialMask = saturate(beardZone + moustache); facialAmount = 0.85; }
     else if (facial == 3) { facialMask = saturate(goatee + moustache); facialAmount = 0.85; }
+    else if (facial == 4) { facialMask = moustache; facialAmount = 0.9; }
     albedo = lerp(albedo, hairShade, facialMask * facialAmount * (1.0 - hair));
 
     // Face features (front only).

@@ -58,9 +58,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var ids = session != null ? session.Options.PlayerIds : null;
             string playerId = ids != null && id < ids.Length ? ids[id] : null;
             var player = (isHome ? home : away)?.FindPlayer(playerId);
-            string surname = player != null ? player.KnownAs : "";
+            string surname = player != null ? KitShirtName.For(player.ShirtName, player.KnownAs) : "";
             int number = player != null && player.ShirtNumber > 0 ? player.ShirtNumber : id % MatchSetup.PlayersPerTeam + 1;
-            var jersey = MatchKitBinder.AttachPlayer(model, isHome, keeper, surname, number, playerId ?? id.ToString());
+            var jersey = MatchKitBinder.AttachPlayer(model, isHome, keeper, surname, number, playerId ?? id.ToString(),
+                player?.Appearance);
             if (jersey != null) return true;
             var leftover = model.GetComponent<JerseyRenderer>();
             if (leftover != null) Object.Destroy(leftover);

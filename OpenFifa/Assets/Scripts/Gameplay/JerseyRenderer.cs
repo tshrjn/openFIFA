@@ -136,7 +136,8 @@ namespace OpenFifa.Gameplay
         public void SetHead(HairStyle hair, FacialHair facial, Color hairColour, float eyeTone)
         {
             // Volume styles paint a short base under their cap.
-            float painted = hair == HairStyle.Curly || hair == HairStyle.Tied ? (float)HairStyle.Short : (float)hair;
+            // Shader hair codes: 0 bald, 1 buzz, 2 short, 3 braids (cornrows). Volume styles paint a short base.
+            float painted = hair == HairStyle.Bald ? 0f : hair == HairStyle.Buzz ? 1f : hair == HairStyle.Braids ? 3f : 2f;
             _headStyle = new Vector4(painted, (float)facial, 0f, Mathf.Clamp01(eyeTone));
             _hairColour = hairColour;
             if (_material == null) return;
