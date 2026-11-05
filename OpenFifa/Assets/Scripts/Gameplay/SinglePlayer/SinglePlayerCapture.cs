@@ -520,7 +520,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 int id = picked[n];
                 var p = _c.PlayerTransform(id);
                 if (p == null || !p.gameObject.activeInHierarchy) continue;
-                var look = PlayerLook.ForPlayer(LookId(ids, id));
+                var look = LookFor(ids, id);
                 log.Append($"p{n} simId={id} skin={look.SkinIndex} hair={look.Hair} facial={look.Facial}\n");
                 var fwd = p.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
                 var right = Vector3.Cross(Vector3.up, fwd);
@@ -552,8 +552,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Application.Quit(0);
         }
 
-        /// <summary>Roster id the kit dresser uses for a sim id (falls back to the sim id, as SinglePlayerKitDresser does).</summary>
-        private static string LookId(string[] ids, int id) => (ids != null && id < ids.Length ? ids[id] : null) ?? id.ToString();
+        /// <summary>The look the kit dresser renders for a sim id: roster appearance where given, else the id hash.</summary>
+        private PlayerLook LookFor(string[] ids, int id)
+        {
+            string pid = ids != null && id < ids.Length ? ids[id] : null;
+            var club = id < MatchSetup.PlayersPerTeam ? _c.HomeClub : _c.AwayClub;
+            var player = club?.FindPlayer(pid);
+            return PlayerLook.ForPlayer(pid ?? id.ToString(), player?.Appearance);
+        }
 
         /// <summary>Disables the enabled renderers of every other player (portraits stay unobstructed). Returns them.</summary>
         private List<Renderer> HideOtherPlayers(int keep, int count)
@@ -591,7 +597,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         }
 
         /// <summary>Greedy pick of outfield players covering different skin tones and hair styles (keeper last).</summary>
-        private static List<int> PickVariedLooks(string[] ids, int count, int want)
+        private List<int> PickVariedLooks(string[] ids, int count, int want)
         {
             var picked = new List<int>();
             var skins = new HashSet<int>();
@@ -602,7 +608,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 for (int id = 0; id < count && picked.Count < want - 1; id++)
                 {
                     if (id == 0 || id == per || picked.Contains(id)) continue;
-                    var look = PlayerLook.ForPlayer(LookId(ids, id));
+                    var look = LookFor(ids, id);
                     bool newSkin = !skins.Contains(look.SkinIndex), newHair = !hairs.Contains(look.Hair);
                     if ((pass == 0 && !(newSkin && newHair)) || (pass == 1 && !(newSkin || newHair))) continue;
                     picked.Add(id); skins.Add(look.SkinIndex); hairs.Add(look.Hair);

@@ -20,7 +20,7 @@ namespace OpenFifa.Editor
     public static class HeadSculpt
     {
         /// <summary>Bump on any change that alters the sculpted mesh (part of KitBodyMapPostprocessor.GetVersion).</summary>
-        public const uint Version = 2;
+        public const uint Version = 3;
 
         /// <summary>Subdivision passes over the head triangles (each pass splits a triangle into four).</summary>
         public const int Levels = 2;
@@ -70,8 +70,12 @@ namespace OpenFifa.Editor
         }
 
         /// <summary>Subdivides and sculpts the head of one skinned mesh in place. Returns a summary.</summary>
-        public static string Apply(SkinnedMeshRenderer smr)
+        public static string Apply(SkinnedMeshRenderer smr) => Apply(smr, out _);
+
+        /// <summary>As <see cref="Apply(SkinnedMeshRenderer)"/>; <paramref name="sculpted"/> is true when the mesh was changed.</summary>
+        public static string Apply(SkinnedMeshRenderer smr, out bool sculpted)
         {
+            sculpted = false;
             var mesh = smr.sharedMesh;
             if (mesh == null || mesh.vertexCount == 0) return "head sculpt skipped (no mesh)";
             if (mesh.blendShapeCount > 0) return "head sculpt skipped (blend shapes)";
@@ -141,23 +145,23 @@ namespace OpenFifa.Editor
                     mid[key] = idx;
                     return idx;
                 }
+                // Every head edge gets its midpoint (across all submeshes) before any neighbour is split, so a neck
+                // triangle in an earlier submesh still sees the midpoints of a head triangle in a later one.
+                foreach (var tris in subTris)
+                    for (int t = 0; t + 2 < tris.Length; t += 3)
+                    {
+                        int a = tris[t], b = tris[t + 1], c = tris[t + 2];
+                        if (isHead[a] && isHead[b] && isHead[c]) { Mid(a, b); Mid(b, c); Mid(c, a); }
+                    }
                 for (int m = 0; m < subTris.Count; m++)
                 {
                     var tris = subTris[m];
                     var outTris = new List<int>(tris.Length * 2);
-                    // Head triangles first, so every head edge has its midpoint before the neighbours are split.
                     for (int t = 0; t + 2 < tris.Length; t += 3)
                     {
                         int a = tris[t], b = tris[t + 1], c = tris[t + 2];
-                        if (!(isHead[a] && isHead[b] && isHead[c])) continue;
-                        int ab = Mid(a, b), bc = Mid(b, c), ca = Mid(c, a);
-                        outTris.AddRange(new[] { a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca });
-                    }
-                    // Other triangles: split exactly the edges that got a midpoint (conforming, no T-junctions).
-                    for (int t = 0; t + 2 < tris.Length; t += 3)
-                    {
-                        int a = tris[t], b = tris[t + 1], c = tris[t + 2];
-                        if (isHead[a] && isHead[b] && isHead[c]) continue;
+                        // Head triangles split in four; others split exactly the edges that got a midpoint
+                        // (conforming, no T-junctions). The head vertex flags are read for the pre-pass vertices only.
                         SplitConforming(a, b, c, mid, outTris);
                     }
                     subTris[m] = outTris.ToArray();
@@ -168,7 +172,7 @@ namespace OpenFifa.Editor
             var toBone = bindposes[hi];
             var toMesh = toBone.inverse;
             var frontMesh = toMesh.MultiplyVector(KitFront).normalized;
-            int sculpted = 0;
+            int moved = 0;
             for (int i = 0; i < verts.Count; i++)
             {
                 if (!isHead[i] || pinned[i]) continue;
@@ -177,7 +181,7 @@ namespace OpenFifa.Editor
                 float d = FaceRelief(BoneToKit(toBone.MultiplyPoint3x4(verts[i]))) * w;
                 if (Mathf.Abs(d) < 1e-6f) continue;
                 verts[i] += frontMesh * d;
-                sculpted++;
+                moved++;
             }
 
             // No mesh.Clear(): on an import-time mesh with Read/Write off it leaves the mesh unwritable for the rest
@@ -192,7 +196,8 @@ namespace OpenFifa.Editor
             for (int m = 0; m < subTris.Count; m++) mesh.SetTriangles(subTris[m], m);
             if (hasUv) mesh.RecalculateTangents();
             mesh.RecalculateBounds();
-            return $"head sculpt: {startVerts} -> {verts.Count} vertices, {sculpted} sculpted";
+            sculpted = true;
+            return $"head sculpt: {startVerts} -> {verts.Count} vertices, {moved} sculpted";
         }
 
         private static void SplitConforming(int a, int b, int c, Dictionary<long, int> mid, List<int> outTris)

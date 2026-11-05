@@ -203,7 +203,8 @@ void KitForwardFragment(
         half3 V = inputData.viewDirectionWS;
         half3 H = normalize(skinLight.direction + V);
         // Deep tones get more sheen and rim (as on real dark skin under floodlights) so facial planes read.
-        // _SkinColor is linear (linear colour space): ~0 for the four lighter tones, 0.6 / 0.85 / 1 for the deepest.
+        // _SkinColor is linear (linear colour space), Y = Rec.709 luminance: deep ~0 for the four lighter tones,
+        // ~0.59 / 0.85 / 1.0 for the three deepest (Y 0.122 / 0.094 / 0.063, KitSkinTones).
         half deep = 1.0 - smoothstep(0.06, 0.20, dot(_SkinColor.rgb, half3(0.2126, 0.7152, 0.0722)));
         half spec = pow(saturate(dot(inputData.normalWS, H)), 28.0) * lerp(0.10, 0.22, deep) * saturate(ndl * 4.0);
         half fres = pow(1.0 - saturate(dot(inputData.normalWS, V)), 3.0);

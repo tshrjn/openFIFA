@@ -27,10 +27,21 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void Apply_HeadNeckStrip_StaysConformingAndKeepsTheBoundaryStraight()
+        public void Apply_HeadNeckStrip_StaysConformingAndKeepsTheBoundaryStraight() => CheckStrip(0);
+
+        [Test]
+        public void Apply_NeckInFirstSubmeshHeadInSecond_StaysConforming() => CheckStrip(1);
+
+        [Test]
+        public void Apply_HeadInFirstSubmeshNeckInSecond_StaysConforming() => CheckStrip(2);
+
+        /// <summary>
+        /// A 4x4-quad strip: rows y >= 2 skinned to "Head", rows below to the root. Curved normals make the Phong
+        /// midpoints move off the plane, which would open cracks at the head/neck edge if it were not handled.
+        /// layout 0: one submesh; 1: neck triangles in submesh 0, head in 1; 2: head in submesh 0, neck in 1.
+        /// </summary>
+        private static void CheckStrip(int layout)
         {
-            // A 4x4-quad strip: rows y >= 2 skinned to "Head", rows below to the root. Curved normals make the
-            // Phong midpoints move off the plane, which would open cracks at the head/neck edge if it were not handled.
             var root = new GameObject("root");
             var head = new GameObject("Head").transform;
             head.SetParent(root.transform, false);
@@ -44,32 +55,44 @@ namespace OpenFifa.Tests.Editor
                         normals.Add(new Vector3((x - 2) * 0.4f, (y - 2) * 0.4f, 1f).normalized);
                         weights.Add(new BoneWeight { boneIndex0 = y >= 2 ? 1 : 0, weight0 = 1f });
                     }
-                var tris = new List<int>();
+                var neckTris = new List<int>(); var headTris = new List<int>();
                 for (int y = 0; y < 4; y++)
                     for (int x = 0; x < 4; x++)
                     {
                         int i = y * 5 + x;
-                        tris.AddRange(new[] { i, i + 5, i + 1, i + 1, i + 5, i + 6 });
+                        (y >= 2 ? headTris : neckTris).AddRange(new[] { i, i + 5, i + 1, i + 1, i + 5, i + 6 });
                     }
                 var mesh = new Mesh();
                 mesh.SetVertices(verts); mesh.SetNormals(normals); mesh.boneWeights = weights.ToArray();
-                mesh.SetTriangles(tris, 0);
+                if (layout == 0)
+                {
+                    var all = new List<int>(neckTris); all.AddRange(headTris);
+                    mesh.SetTriangles(all, 0);
+                }
+                else
+                {
+                    mesh.subMeshCount = 2;
+                    mesh.SetTriangles(layout == 1 ? neckTris : headTris, 0);
+                    mesh.SetTriangles(layout == 1 ? headTris : neckTris, 1);
+                }
                 mesh.bindposes = new[] { Matrix4x4.identity, Matrix4x4.identity };
                 var smr = root.AddComponent<SkinnedMeshRenderer>();
                 smr.bones = new[] { root.transform, head };
                 smr.sharedMesh = mesh;
 
-                HeadSculpt.Apply(smr);
+                HeadSculpt.Apply(smr, out bool sculpted);
+                Assert.IsTrue(sculpted, "sculpted");
 
                 var v = mesh.vertices;
                 Assert.Greater(v.Length, 25, "head rows subdivided");
-                // Every vertex at the boundary height (y = 0.04, the last row skinned to the neck's neighbour) is on
-                // the original plane: the boundary edge stayed straight.
+                // Every vertex at the boundary height (y = 0.04: head row shared with the neck triangles) is on the
+                // original plane: the boundary edge stayed straight.
                 for (int i = 0; i < v.Length; i++)
                     if (Mathf.Abs(v[i].y - 0.04f) < 1e-5f) Assert.AreEqual(0f, v[i].z, 1e-6f, "boundary vertex " + i + " " + v[i]);
-                // Conforming: no vertex lies strictly inside any triangle edge (no T-junctions).
-                var t = mesh.triangles;
-                for (int k = 0; k < t.Length; k += 3)
+                // Conforming: no vertex lies strictly inside any triangle edge (no T-junctions), across all submeshes.
+                var t = new List<int>();
+                for (int m = 0; m < mesh.subMeshCount; m++) t.AddRange(mesh.GetTriangles(m));
+                for (int k = 0; k < t.Count; k += 3)
                     for (int e = 0; e < 3; e++)
                     {
                         Vector3 a = v[t[k + e]], b = v[t[k + (e + 1) % 3]];
@@ -78,7 +101,7 @@ namespace OpenFifa.Tests.Editor
                             if (i == t[k + e] || i == t[k + (e + 1) % 3]) continue;
                             var ab = b - a; float s = Vector3.Dot(v[i] - a, ab) / ab.sqrMagnitude;
                             if (s <= 1e-4f || s >= 1f - 1e-4f) continue;
-                            Assert.Greater((a + ab * s - v[i]).magnitude, 1e-5f, $"T-junction: vertex {i} on edge {t[k + e]}-{t[k + (e + 1) % 3]}");
+                            Assert.Greater((a + ab * s - v[i]).magnitude, 1e-5f, $"layout {layout}: T-junction, vertex {i} on edge {t[k + e]}-{t[k + (e + 1) % 3]}");
                         }
                     }
             }
