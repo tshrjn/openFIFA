@@ -459,7 +459,14 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     // Hair: hairline high at the forehead, above the ears at the sides, low at the nape; sideburns.
     float hairline = lerp(0.150, 0.288, smoothstep(-0.55, 0.75, nz)) + _HeadStyle.z;
     hairline = min(hairline, lerp(0.288, 0.252, smoothstep(0.055, 0.08, ax) * smoothstep(0.8, 0.2, nz)));
-    half hair = KitSoftStep(hairline, kp.y, 0.003);
+    // Feathered hairline: the edge wanders strand by strand, and just above it the hair thins into separate
+    // hairs (a dot field, faded by footprint at distance) before it fills in.
+    float strandEdge = KitValueNoise(kp * float3(900.0, 110.0, 900.0));
+    float hairEdge = hairline + (strandEdge - 0.5) * 0.009;
+    half hairDots = smoothstep(0.35, 0.75, KitValueNoise(kp * float3(1600.0, 1600.0, 1600.0)));
+    hairDots = lerp(0.55, hairDots, saturate(1.0 - max(fwidth(kp.x), fwidth(kp.y)) * 1600.0 * 1.6));
+    half hairFill = smoothstep(0.003, 0.012, kp.y - hairEdge);
+    half hair = smoothstep(hairEdge - 0.001, hairEdge + 0.004, kp.y) * lerp(hairDots, 1.0, hairFill);
     half sideburn = smoothstep(0.066, 0.078, ax) * step(0.205, kp.y) * smoothstep(-0.1, 0.05, nz) * smoothstep(0.6, 0.4, nz);
     hair = saturate(hair + sideburn) * onHead;
     // Keep painted hair off the skin under the ear meshes, or it shows through as a dark patch.

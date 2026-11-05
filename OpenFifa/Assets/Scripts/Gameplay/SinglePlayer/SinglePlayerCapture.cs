@@ -53,6 +53,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// </summary>
         public bool Looks;
 
+        /// <summary>
+        /// -spLooksShowcase (with -spLooks): the first portrait players are re-dressed with the roster looks that are
+        /// rare in a single match (afro, braids, moustache only, long tied hair), mapped through PlayerLook's roster
+        /// tokens, so a renderer change for those looks can be judged. The rest keep their roster look.
+        /// </summary>
+        public bool LooksShowcase;
+
         /// <summary>Frames per sequence and their spacing (s): 11 frames at 10 fps, the moment at frame 6.</summary>
         public const int SequenceFrames = 11;
         public const float SequenceStep = 0.1f;
@@ -88,6 +95,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (args[i] == "-spCaptureFps") int.TryParse(args[i + 1], out Fps);
                 if (args[i] == "-spKitStills" || args[i + 1] == "-spKitStills") KitStills = true;
                 if (args[i] == "-spLooks" || args[i + 1] == "-spLooks") Looks = true;
+                if (args[i] == "-spLooksShowcase" || args[i + 1] == "-spLooksShowcase") LooksShowcase = true;
             }
             _c = GetComponent<SinglePlayerMatchController>();
             if (string.IsNullOrEmpty(OutputDir))
@@ -502,6 +510,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var ids = _c.Session.Options.PlayerIds;
             int count = _c.Session.Sim.State.Players.Length;
             var picked = PickVariedLooks(ids, count, 6);
+            if (LooksShowcase) ApplyShowcase(picked, ids);
             var log = new StringBuilder();
             var cam = _c.BroadcastCamera;
             var camT = cam.transform;
@@ -552,9 +561,32 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Application.Quit(0);
         }
 
+        // Hair / facial-hair roster tokens forced onto portrait players 0..3 by -spLooksShowcase.
+        private static readonly string[,] Showcase = { { "afro", "none" }, { "braids", "none" }, { "short", "moustache" }, { "long_tied", "stubble" } };
+        private readonly Dictionary<int, PlayerLook> _showcaseLooks = new Dictionary<int, PlayerLook>();
+
+        private void ApplyShowcase(List<int> picked, string[] ids)
+        {
+            for (int n = 0; n < picked.Count && n < Showcase.GetLength(0); n++)
+            {
+                int id = picked[n];
+                var t = _c.PlayerTransform(id);
+                var jersey = t != null ? t.GetComponentInChildren<JerseyRenderer>() : null;
+                if (jersey == null) continue;
+                var look = LookFor(ids, id);
+                PlayerLook.TryHairStyle(Showcase[n, 0], out look.Hair);
+                PlayerLook.TryFacialHair(Showcase[n, 1], out look.Facial);
+                var hairColour = new Color(look.HairColour.R, look.HairColour.G, look.HairColour.B, 1f);
+                jersey.SetHead(look.Hair, look.Facial, hairColour, look.EyeTone);
+                HairCapBuilder.Attach(jersey.gameObject, look.Hair, hairColour);
+                _showcaseLooks[id] = look;
+            }
+        }
+
         /// <summary>The look the kit dresser renders for a sim id: roster appearance where given, else the id hash.</summary>
         private PlayerLook LookFor(string[] ids, int id)
         {
+            if (_showcaseLooks.TryGetValue(id, out var forced)) return forced;
             string pid = ids != null && id < ids.Length ? ids[id] : null;
             var club = id < MatchSetup.PlayersPerTeam ? _c.HomeClub : _c.AwayClub;
             var player = club?.FindPlayer(pid);

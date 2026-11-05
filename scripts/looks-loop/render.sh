@@ -1,6 +1,7 @@
 #!/bin/bash
 # Render the player-appearance review set (-spLooks) and build contact sheets for the judges.
 # Usage: scripts/looks-loop/render.sh <out-dir> [--no-build]
+# LOOKS_EXTRA: extra player args, e.g. LOOKS_EXTRA=-spLooksShowcase (rare roster looks on the first portraits).
 # Writes <out-dir>/looks_*.png, looks.txt and sheets/{faces,angles,bodies,backs,ingame}.png.
 set -euo pipefail
 OUT="${1:?usage: render.sh <out-dir> [--no-build]}"; BUILD=1; [ "${2:-}" = "--no-build" ] && BUILD=0
@@ -18,7 +19,7 @@ if [ "$BUILD" = 1 ]; then
 fi
 timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" "$PLAYER" -screen-width 1280 -screen-height 720 \
   -screen-fullscreen 0 -force-glcore -spBot -spLevel 3 -spSeed 1 -spHome arsenal -spAway chelsea \
-  -spCapture "$OUT" -spLooks -logFile "$OUT/player.log" || { echo "capture failed (exit $?), see $OUT/player.log"; exit 1; }
+  -spCapture "$OUT" -spLooks ${LOOKS_EXTRA:-} -logFile "$OUT/player.log" || { echo "capture failed (exit $?), see $OUT/player.log"; exit 1; }
 rm -rf "$OUT/frames"
 # The capture writes looks.txt last: require it and every expected still (6 players x 5 shots + 2 match stills).
 [ -f "$OUT/looks.txt" ] || { echo "capture incomplete (no looks.txt), see $OUT/player.log"; exit 1; }
