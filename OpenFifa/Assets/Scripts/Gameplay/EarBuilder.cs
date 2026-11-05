@@ -14,10 +14,10 @@ namespace OpenFifa.Gameplay
         private const int Around = 18, Rings = 5;
 
         /// <summary>Vertices in the ear-pair mesh.</summary>
-        public const int VertexCount = 2 * (Rings + 1) * (Around + 1);
+        public const int VertexCount = 2 * (Rings + 2) * (Around + 1);
 
         /// <summary>Triangles in the ear-pair mesh.</summary>
-        public const int TriangleCount = 2 * Rings * Around * 2;
+        public const int TriangleCount = 2 * (Rings + 1) * Around * 2;
 
         private static Mesh _mesh;
         private static readonly Dictionary<Color32, Material> Materials = new Dictionary<Color32, Material>();
@@ -85,24 +85,30 @@ namespace OpenFifa.Gameplay
         {
             var centre = new Vector3(side * 0.087f, 0.212f, -0.022f);
             int start = verts.Count;
-            for (int r = 0; r <= Rings; r++)
+            // Rings 0..Rings: the outer face, from the bowl centre to the helix rim. Ring Rings+1 folds back under
+            // the rim towards the skull, so the ear has an edge with thickness instead of a paper-thin fin.
+            for (int r = 0; r <= Rings + 1; r++)
             {
-                float u = r / (float)Rings;                         // 0 = bowl centre .. 1 = helix rim
+                bool under = r == Rings + 1;
+                float u = under ? 0.93f : r / (float)Rings;          // 0 = bowl centre .. 1 = helix rim
                 for (int a = 0; a <= Around; a++)
                 {
                     float t = a / (float)Around * Mathf.PI * 2f;
-                    float y = Mathf.Sin(t) * 0.030f * u;
-                    float z = Mathf.Cos(t) * 0.017f * u;
+                    // Rounded outline: a broad helix on top, a narrower lobe below (no points).
+                    float y = Mathf.Sin(t) * (Mathf.Sin(t) > 0f ? 0.029f : 0.025f) * u;
+                    float z = Mathf.Cos(t) * 0.018f * u;
                     // Rim stands off the head, more at the back/top; the lobe and front stay close.
-                    float back = Mathf.Clamp01(0.5f - 0.5f * Mathf.Cos(t) + 0.3f * Mathf.Sin(t));
-                    float off = 0.005f * u + 0.008f * back * u * u;
-                    var k = centre + new Vector3(side * (off + 0.003f * Mathf.Sin(u * Mathf.PI)), y, z - 0.004f * u);
+                    float back = Mathf.Clamp01(0.5f - 0.5f * Mathf.Cos(t) + 0.2f * Mathf.Sin(t));
+                    float off = 0.004f * u + 0.0045f * back * u * u;
+                    if (under) off *= 0.25f;                            // tucked under the rim, still clear of the skull
+                    var k = centre + new Vector3(side * (off + 0.003f * Mathf.Sin(Mathf.Min(u, 1f) * Mathf.PI)), y, z - 0.004f * u);
                     verts.Add(HairCapBuilder.KitToBone(k));
-                    var n = new Vector3(side * 1f, -0.25f * y / 0.03f, -0.4f * z / 0.017f * u).normalized;
+                    var n = under ? new Vector3(side * 0.3f, y / 0.03f, z / 0.018f).normalized
+                                  : new Vector3(side * 1f, -0.25f * y / 0.03f, -0.4f * z / 0.018f * u).normalized;
                     normals.Add(HairCapBuilder.KitDirToBone(n));
                 }
             }
-            for (int r = 0; r < Rings; r++)
+            for (int r = 0; r < Rings + 1; r++)
             {
                 for (int a = 0; a < Around; a++)
                 {
