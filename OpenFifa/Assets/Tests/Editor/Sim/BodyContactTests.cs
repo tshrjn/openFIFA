@@ -149,6 +149,30 @@ namespace OpenFifa.Tests.Editor.Sim
         }
 
         [Test]
+        public void BracedKicker_IsHeavyNotAWall_NoEnergyGain()
+        {
+            var sim = Open(8);
+            SimTestHelpers.Place(sim, 9, 0f, 0f);
+            SimTestHelpers.Place(sim, 15, 0f, 0.7f);
+            sim.State.Players[9].ActionState = SimPlayerActionState.WindUp;
+            sim.State.Players[9].ContactTick = sim.State.Tick + 100;
+            sim.State.Players[9].Velocity = new SimVec3(0f, 0f, 1f);
+            sim.State.Players[15].Velocity = new SimVec3(0f, 0f, -6f);
+            float m9 = sim.AttributesOf(9).BodyMass * sim.Config.Actions.BracedMassFactor;
+            float m15 = sim.AttributesOf(15).BodyMass;
+            float before = 0.5f * m9 * 1f + 0.5f * m15 * 36f;
+            var intents = SimTestHelpers.IdleIntents();
+            for (int t = 0; t < 2; t++) sim.Step(intents);
+            var v9 = sim.State.Players[9].Velocity.Flat;
+            var v15 = sim.State.Players[15].Velocity.Flat;
+            float after = 0.5f * m9 * v9.SqrMagnitude + 0.5f * m15 * v15.SqrMagnitude;
+            Assert.LessOrEqual(after, before + 1e-3f, "contact must not add kinetic energy");
+            Assert.That(v9.Z, Is.LessThan(1f), "the braced kicker still feels the hit");
+            Assert.That(SimMath.FlatDistance(sim.State.Players[9].Position, new SimVec3(0f, 0f, 0f)), Is.LessThan(0.15f),
+                "and stays nearly on his spot");
+        }
+
+        [Test]
         public void TeammatesBumping_NoContactEvents()
         {
             var sim = Open(3);

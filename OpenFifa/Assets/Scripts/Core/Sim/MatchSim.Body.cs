@@ -38,16 +38,17 @@ namespace OpenFifa.Core
                     float push = minD - dist;
 
                     bool downI = IsDown(_s.Players[i]), downJ = IsDown(_s.Players[j]);
-                    // A kicker in his wind-up is planted on the ball: he holds his spot and his run, so a bump does not
-                    // carry him away from the ball and turn the strike into a whiff (the other body gives way).
+                    // A kicker in his wind-up is planted on the ball: he counts as BracedMassFactor times heavier, so a
+                    // bump barely moves him off the ball (no whiff) and the other body gives way. Heavy, not immovable:
+                    // the momentum exchange below stays a normal two-body impulse, with no energy gain.
                     bool bracedI = _s.Players[i].ActionState == SimPlayerActionState.WindUp;
                     bool bracedJ = _s.Players[j].ActionState == SimPlayerActionState.WindUp;
-                    float mi = ContactMass(i), mj = ContactMass(j);
+                    float mi = ContactMass(i) * (bracedI ? ac.BracedMassFactor : 1f);
+                    float mj = ContactMass(j) * (bracedJ ? ac.BracedMassFactor : 1f);
                     float wi;
                     if (j == taker) wi = 1f;
                     else if (i == taker) wi = 0f;
-                    else if (bracedI && !bracedJ && !downJ) wi = 0f;
-                    else if (bracedJ && !bracedI && !downI) wi = 1f;
+                    else if (bracedI != bracedJ && !downI && !downJ) wi = mj / (mi + mj);
                     else if (downI && downJ) wi = 0.5f;
                     else if (downI) wi = 0f; // he lies still; j steps around him
                     else if (downJ) wi = 1f;
@@ -63,12 +64,6 @@ namespace OpenFifa.Core
                     if (closing < ac.BodyContactMinSpeed) continue;
                     float impulse = ac.BodyContactAbsorb * closing * (mi * mj / (mi + mj));
                     float dvi = impulse / mi, dvj = impulse / mj;
-                    if (bracedI != bracedJ)
-                    {
-                        // The braced kicker keeps his run; the other body takes the whole speed change.
-                        dvi = bracedI ? 0f : ac.BodyContactAbsorb * closing;
-                        dvj = bracedJ ? 0f : ac.BodyContactAbsorb * closing;
-                    }
                     // A challenge on the ball carrier exchanges no momentum: he and the challenger slide off each other
                     // (position correction only) and his balance judges the hit below, so a strong challenge can still
                     // knock him off the ball. Exchanging momentum there stopped carriers dead and parked the challenger

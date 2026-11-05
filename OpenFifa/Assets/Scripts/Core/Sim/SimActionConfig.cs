@@ -241,6 +241,8 @@ namespace OpenFifa.Core
         /// rigid: some of the approach is absorbed by leaning in.
         /// </summary>
         public float BodyContactAbsorb = 0.85f;
+        /// <summary>Effective mass multiplier for a kicker in his wind-up (planted on the ball).</summary>
+        public float BracedMassFactor = 4f;
         /// <summary>
         /// How much the overlap correction is split by mass (1) rather than evenly (0). Even by default: splitting it by
         /// mass let heavy keepers and centre backs shove strikers off their line every tick, which cut a scripted user's
