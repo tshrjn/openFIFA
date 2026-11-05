@@ -150,6 +150,17 @@ namespace OpenFifa.Core
         private readonly float[] _checkUntil = new float[TeamAIWorld.MaxPlayers];
         private readonly float[] _checkCooldown = new float[TeamAIWorld.MaxPlayers];
         private readonly float[] _spinUntil = new float[TeamAIWorld.MaxPlayers];
+        private readonly int[] _checkMarker = new int[TeamAIWorld.MaxPlayers];
+        private readonly bool[] _checkResolved = new bool[TeamAIWorld.MaxPlayers];
+        private readonly float[] _gapEvalAt = new float[TeamAIWorld.MaxPlayers];
+        /// <summary>Persistent tracker of each opponent runner (-1 none), and since when each opponent has been running at us.</summary>
+        private readonly int[] _trackerOf = new int[TeamAIWorld.MaxPlayers];
+        private readonly float[] _runnerSince = new float[TeamAIWorld.MaxPlayers];
+        private bool _trackPrimed;
+        /// <summary>A tracked runner is released below this goalward speed (m/s): hysteresis under <see cref="TrackRunnerSpeed"/>.</summary>
+        public const float TrackReleaseSpeed = 3f;
+        /// <summary>Seconds between re-picking the gap of a running runner.</summary>
+        public const float GapRefresh = 0.5f;
         /// <summary>Opponent runner each of our midfielders is tracking this tick (-1 none).</summary>
         private readonly int[] _trackTarget = new int[TeamAIWorld.MaxPlayers];
         private readonly float[] _gapXs = new float[TeamAIWorld.MaxPlayers + 2];
@@ -296,7 +307,9 @@ namespace OpenFifa.Core
 
             // ---- Track runners: a midfielder follows an opponent bursting into our half ----
             for (int k = 0; k < TeamAIWorld.MaxPlayers; k++) _trackTarget[k] = -1;
-            if (TrackRunners && !hasPossession && ownerIndex >= 0 && ownerTeam != Team) AssignRunnerTrackers(world, sign, ownerIndex);
+            if (TrackRunners && !hasPossession && ownerIndex >= 0 && ownerTeam != Team && world.MatchPhase == TeamAIMatchPhase.InPlay)
+                AssignRunnerTrackers(world, sign, ownerIndex, ballDepth);
+            else ReleaseAllTrackers();
 
             // ---- Human-directed run ----
             DirectedRunnerIndex = -1;
@@ -480,6 +493,8 @@ namespace OpenFifa.Core
                 runners++;
                 _running[i] = true;
                 _runStart[i] = world.Time;
+                _runX[i] = d.RunHasTarget ? d.RunTarget.X : (GapRuns ? GapRunX(world, p, sign) : TeamAIMath.Lerp(p.Position.X, 0f, 0.3f));
+                _gapEvalAt[i] = world.Time;
                 SimVec3 target;
                 if (d.RunHasTarget)
                 {
@@ -488,12 +503,34 @@ namespace OpenFifa.Core
                 else
                 {
                     float targetDepth = Math.Min(Math.Max(OffsideDepth, myDepth) + 0.12f, 0.95f);
-                    target = TeamAIMath.ClampToPitch(new SimVec3(TeamAIMath.Lerp(p.Position.X, 0f, 0.3f), 0f,
+                    target = TeamAIMath.ClampToPitch(new SimVec3(_runX[i], 0f,
                         TeamAIMath.DepthToZ(targetDepth, sign, pitch)), pitch, 1.5f);
                 }
                 SetMoveTracking(ref cmd, p, target, d.RunHasTarget ? SimVec3.Zero : LineVelocity(sign), true,
                     TeamAIIntent.RunInBehind);
                 return;
+            }
+
+            // A check run in progress carries on for its full length (it is not cut short by a run in behind).
+            bool forwardRole = p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM;
+            if (CheckRuns && ownerOurs && forwardRole)
+            {
+                if (world.Time < _checkUntil[i])
+                {
+                    var o = world.Players[ownerIndex];
+                    var spot = TeamAIMath.ClampToPitch(p.Position + TeamAIMath.FlatDirection(p.Position, o.Position) * 6f, pitch, 1.5f);
+                    SetMove(ref cmd, p, spot, false, TeamAIIntent.CheckRun);
+                    return;
+                }
+                if (!_checkResolved[i] && _checkUntil[i] > 0f)
+                {
+                    // Check over: spin in behind only if the marker came with him.
+                    _checkResolved[i] = true;
+                    int mk = _checkMarker[i];
+                    if (mk >= 0 && world.Players[mk].Active &&
+                        TeamAIMath.FlatDistance(world.Players[mk].Position, p.Position) < TightMarkDistance + 1f)
+                        _spinUntil[i] = world.Time + 1.2f;
+                }
             }
 
             // Run in behind, timed against the offside line.
@@ -518,10 +555,23 @@ namespace OpenFifa.Core
                 if (CounterActive && !ownerHasTime) ownerHasTime = ownerPressure > TeamAIOnBall.BlockSafe;
                 bool spaceBehind = OffsideDepth < 0.9f;
                 bool start = !continuing && ownerHasTime && nearLine && spaceBehind && ownerDepth < OffsideDepth &&
-                             Rng.NextFloat() >= Difficulty.LapseChance;
+                             world.Time >= _checkUntil[i] && Rng.NextFloat() >= Difficulty.LapseChance;
                 if (continuing || start)
                 {
-                    if (start) { _running[i] = true; _runStart[i] = world.Time; _runX[i] = GapRuns ? GapRunX(world, p, sign) : TeamAIMath.Lerp(p.Position.X, 0f, 0.3f); }
+                    if (start)
+                    {
+                        _running[i] = true;
+                        _runStart[i] = world.Time;
+                        _runX[i] = GapRuns ? GapRunX(world, p, sign) : TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
+                        _gapEvalAt[i] = world.Time;
+                    }
+                    else if (GapRuns && world.Time - _gapEvalAt[i] >= GapRefresh)
+                    {
+                        // The line moves: re-pick the gap, but only switch for a clearly better one (2 m).
+                        float nx = GapRunX(world, p, sign);
+                        if (TeamAIMath.Abs(nx - _runX[i]) > 2f) _runX[i] = nx;
+                        _gapEvalAt[i] = world.Time;
+                    }
                     if (start && behindBall) _restBehind--;
                     runners++;
                     float targetDepth = Math.Min(OffsideDepth + 0.12f, 0.95f);
@@ -535,24 +585,19 @@ namespace OpenFifa.Core
             _running[i] = false;
 
             // Check run: a tightly marked forward comes short toward the ball to receive to feet; if his marker follows,
-            // he spins in behind next (see spinning above).
-            bool forwardRole = p.Role == TeamAIRole.ST || p.Role == TeamAIRole.W || p.Role == TeamAIRole.AM;
+            // he spins in behind afterwards (see spinning above).
             if (CheckRuns && ownerOurs && attacking && forwardRole && i != _supporters[0] && i != _supporters[1])
             {
                 var owner = world.Players[ownerIndex];
                 float toOwner = TeamAIMath.FlatDistance(p.Position, owner.Position);
-                bool checking = world.Time < _checkUntil[i];
-                if (!checking && world.Time >= _checkCooldown[i] && toOwner > 12f && toOwner < 35f &&
-                    TeamAIOnBall.NearestOpponentDistance(world, Team, p.Position) < TightMarkDistance &&
+                int marker = NearestOpponentIndex(world, p.Position, out float markDist);
+                if (world.Time >= _checkCooldown[i] && toOwner > 12f && toOwner < 35f && markDist < TightMarkDistance &&
                     Rng.NextFloat() >= Difficulty.LapseChance)
                 {
                     _checkUntil[i] = world.Time + CheckRunSeconds;
                     _checkCooldown[i] = world.Time + CheckRunCooldown;
-                    _spinUntil[i] = world.Time + CheckRunSeconds + 1.2f;
-                    checking = true;
-                }
-                if (checking)
-                {
+                    _checkMarker[i] = marker;
+                    _checkResolved[i] = false;
                     var spot = TeamAIMath.ClampToPitch(p.Position + TeamAIMath.FlatDirection(p.Position, owner.Position) * 6f, pitch, 1.5f);
                     SetMove(ref cmd, p, spot, false, TeamAIIntent.CheckRun);
                     return;
@@ -949,20 +994,44 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Each opponent in our half running at our goal faster than <see cref="TrackRunnerSpeed"/>, with none of our
-        /// players within 3 m, gets the nearest midfield-line player (DM/CM/AM/W, within 15 m, not pressing) as a
-        /// tracker. The back line keeps its own marking.
+        /// Runner tracking. An opponent in our half running at our goal faster than <see cref="TrackRunnerSpeed"/> for
+        /// longer than our reaction delay, with none of our players (other than his tracker) within 3 m, gets the
+        /// nearest midfield-line player (DM/CM/AM/W, within 15 m, not pressing or lane-blocking) as a tracker, who keeps
+        /// him until he slows under <see cref="TrackReleaseSpeed"/>, gets deeper than our back line, or the tracker is
+        /// needed elsewhere. At most one tracker (two from theta 0.6), none while the ball is near our box (the edge of
+        /// the box stays covered for cut-backs), and a lapsing side misses some.
         /// </summary>
-        private void AssignRunnerTrackers(TeamAIWorld world, int sign, int ownerIndex)
+        private void AssignRunnerTrackers(TeamAIWorld world, int sign, int ownerIndex, float ballDepth)
         {
             var pitch = world.Pitch;
+            if (!_trackPrimed) { ReleaseAllTrackers(); _trackPrimed = true; }
+            int maxTrackers = Difficulty.Theta >= 0.6f ? 2 : 1;
+            int active = 0;
             for (int j = 0; j < world.PlayerCount; j++)
             {
                 var o = world.Players[j];
-                if (!o.Active || o.Team == Team || j == ownerIndex || o.Role == TeamAIRole.GK) continue;
-                if (TeamAIMath.Depth(o.Position.Z, sign, pitch) > 0.5f) continue;
-                float goalward = -o.Velocity.Z * sign;
-                if (goalward < TrackRunnerSpeed) continue;
+                bool opp = o.Active && o.Team != Team && o.Role != TeamAIRole.GK && j != ownerIndex;
+                float goalward = opp ? -o.Velocity.Z * sign : 0f;
+                float depth = TeamAIMath.Depth(o.Position.Z, sign, pitch);
+                if (!opp || goalward < TrackRunnerSpeed || depth > 0.5f) _runnerSince[j] = -1f;
+                else if (_runnerSince[j] < 0f) _runnerSince[j] = world.Time;
+
+                int t = _trackerOf[j];
+                if (t >= 0)
+                {
+                    var m = world.Players[t];
+                    bool keep = opp && goalward >= TrackReleaseSpeed && depth > BackLineDepth - 0.02f && m.Active &&
+                                !m.HumanControlled && t != PresserIndex && t != SecondPresserIndex &&
+                                !(_boxDefending && (t == _laneBlockers[0] || t == _laneBlockers[1] || t == _laneBlockers[2]));
+                    if (keep) { _trackTarget[t] = j; active++; }
+                    else _trackerOf[j] = -1;
+                }
+            }
+            if (ballDepth < 0.3f || active >= maxTrackers) return;
+            for (int j = 0; j < world.PlayerCount && active < maxTrackers; j++)
+            {
+                if (_trackerOf[j] >= 0 || _runnerSince[j] < 0f || world.Time - _runnerSince[j] < Difficulty.ReactionDelay) continue;
+                var o = world.Players[j];
                 int best = -1;
                 float bd = 15f;
                 bool covered = false;
@@ -971,14 +1040,37 @@ namespace OpenFifa.Core
                     var m = world.Players[k];
                     if (!m.Active || m.Team != Team || m.Role == TeamAIRole.GK || m.HumanControlled) continue;
                     float d = TeamAIMath.FlatDistance(m.Position, o.Position);
-                    if (d < 3f) { covered = true; break; }
+                    if (d < 3f && _trackTarget[k] != j) { covered = true; break; }
                     if (m.Role == TeamAIRole.CB || m.Role == TeamAIRole.FB || m.Role == TeamAIRole.ST) continue;
                     if (k == PresserIndex || k == SecondPresserIndex || _trackTarget[k] >= 0) continue;
                     if (_boxDefending && (k == _laneBlockers[0] || k == _laneBlockers[1] || k == _laneBlockers[2])) continue;
                     if (d < bd) { bd = d; best = k; }
                 }
-                if (!covered && best >= 0) _trackTarget[best] = j;
+                if (covered || best < 0) continue;
+                if (Rng.NextFloat() < Difficulty.LapseChance) { _runnerSince[j] = world.Time; continue; } // switched off: looks again later
+                _trackerOf[j] = best;
+                _trackTarget[best] = j;
+                active++;
             }
+        }
+
+        private void ReleaseAllTrackers()
+        {
+            for (int k = 0; k < TeamAIWorld.MaxPlayers; k++) { _trackerOf[k] = -1; _runnerSince[k] = -1f; }
+        }
+
+        private int NearestOpponentIndex(TeamAIWorld world, SimVec3 p, out float dist)
+        {
+            int best = -1;
+            dist = float.MaxValue;
+            for (int j = 0; j < world.PlayerCount; j++)
+            {
+                var o = world.Players[j];
+                if (!o.Active || o.Team == Team) continue;
+                float d = TeamAIMath.FlatDistance(o.Position, p);
+                if (d < dist) { dist = d; best = j; }
+            }
+            return best;
         }
 
         /// <summary>Our active outfielders (not the carrier) more than 0.02 of the pitch behind the ball.</summary>
