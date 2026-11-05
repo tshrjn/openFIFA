@@ -100,13 +100,13 @@ namespace OpenFifa.Tests.Editor
             float nose = float.MinValue, cheek = float.MinValue;
             foreach (var k in kit)
             {
-                if (k.y < 0.188f || k.y > 0.198f) continue;
-                if (Mathf.Abs(k.x) < 0.004f) nose = Mathf.Max(nose, k.z);
+                if (k.y < 0.180f || k.y > 0.205f || k.z <= 0f) continue; // front of the face around the nose tip
+                if (Mathf.Abs(k.x) < 0.006f) nose = Mathf.Max(nose, k.z);
                 else if (Mathf.Abs(Mathf.Abs(k.x) - 0.03f) < 0.005f) cheek = Mathf.Max(cheek, k.z);
             }
             Assert.Greater(nose, float.MinValue, "vertices near the nose tip");
             Assert.Greater(cheek, float.MinValue, "vertices on the cheek");
-            Assert.Greater(nose - cheek, 0.012f, $"nose tip {nose:F4} vs cheek {cheek:F4}");
+            Assert.Greater(nose - cheek, 0.015f, $"nose tip {nose:F4} vs cheek {cheek:F4}");
         }
 
         [Test]
