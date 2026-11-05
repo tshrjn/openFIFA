@@ -239,13 +239,18 @@ namespace OpenFifa.Core
         /// <summary>A contact that only holds the player up is reported (BodyContact, Detail 0) from this closing speed (m/s).</summary>
         public float BodyContactEventSpeed = 2.5f;
         /// <summary>Speed change (m/s) a 0-balance / 99-balance player absorbs before stumbling.</summary>
-        public float StumbleDeltaVMin = 1.3f;
-        public float StumbleDeltaVRange = 2.2f;
+        public float StumbleDeltaVMin = 2.0f;
+        public float StumbleDeltaVRange = 2.5f;
         /// <summary>Speed change (m/s) above the stumble limit at which a player goes down instead.</summary>
-        public float FallDeltaVOver = 2.0f;
+        public float FallDeltaVOver = 2.5f;
         /// <summary>How long a stumble (off balance) and a fall (on the ground) last (s).</summary>
         public float StumbleSeconds = 0.45f;
         public float ContactFallGroundTime = 1.1f;
+        /// <summary>
+        /// Chance a stumbling carrier loses the ball: (speed change over his limit) / FallDeltaVOver, times
+        /// (SpillControlBase - ball control). A good dribbler rides most knocks with the ball still at his feet.
+        /// </summary>
+        public float SpillControlBase = 1.1f;
         /// <summary>A stumbling carrier's ball spills this far ahead (m/s over his speed); low ball control loses more.</summary>
         public float StumbleSpillSpeed = 2.5f;
         /// <summary>Strength bonus to effective mass while shielding (fraction at 99 strength).</summary>

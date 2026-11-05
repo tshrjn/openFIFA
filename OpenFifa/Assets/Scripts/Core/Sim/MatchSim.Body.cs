@@ -110,7 +110,13 @@ namespace OpenFifa.Core
             }
 
             p.OffBalanceUntilTick = _s.Tick + _cfg.SecondsToTicks(ac.StumbleSeconds);
-            if (_s.Owner == id && !_s.KeeperHolding) SpillBall(id, by);
+            if (_s.Owner == id && !_s.KeeperHolding)
+            {
+                float over = SimMath.Clamp01((dv - limit) / ac.FallDeltaVOver);
+                float pSpill = over * SimMath.Max(0f, ac.SpillControlBase - SimPlayerAttributes.N(a.BallControl));
+                if (_s.Rng.NextFloat() < pSpill) SpillBall(id, by);
+            }
+
             return 1;
         }
 
