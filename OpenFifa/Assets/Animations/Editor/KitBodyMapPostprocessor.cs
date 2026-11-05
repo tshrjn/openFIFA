@@ -16,7 +16,7 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 7;
+        public const uint Version = 21;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
@@ -54,6 +54,8 @@ namespace OpenFifa.Editor
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
+                string sculpt = HeadSculpt.Apply(smr); // before the bake, so new head vertices get the body map
+                if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {sculpt}");
                 string result = Bake(root.transform, smr, human);
                 if (result == null) continue;
                 if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
