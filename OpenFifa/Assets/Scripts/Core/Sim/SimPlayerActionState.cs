@@ -16,5 +16,8 @@ namespace OpenFifa.Core
 
         /// <summary>On the ground after a slide or a foul; cannot move.</summary>
         Grounded = 4,
+
+        /// <summary>Performing a skill move (<see cref="SimPlayer.Skill"/>): body and ball follow the move's script.</summary>
+        Skill = 5,
     }
 }

@@ -8,6 +8,7 @@ namespace OpenFifa.Core
         public const float Pi = 3.14159265f;
         public const float TwoPi = 6.28318531f;
         public const float Deg2Rad = Pi / 180f;
+        public const float Rad2Deg = 180f / Pi;
 
         public static float Clamp(float v, float min, float max) => v < min ? min : (v > max ? max : v);
         public static float Clamp01(float v) => Clamp(v, 0f, 1f);

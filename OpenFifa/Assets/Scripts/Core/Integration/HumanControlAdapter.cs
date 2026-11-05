@@ -27,6 +27,14 @@ namespace OpenFifa.Core
             return new SimVec3(stick.Y * s + stick.X * c, 0f, stick.Y * c - stick.X * s);
         }
 
+        /// <summary>Unit stick vector for an eight-way direction (Up = +Y, clockwise); zero for None.</summary>
+        public static ControlVec2 Direction8ToStick(Direction8 d)
+        {
+            if (d == Direction8.None) return new ControlVec2(0f, 0f);
+            double rad = ((int)d - 1) * 45.0 * System.Math.PI / 180.0;
+            return new ControlVec2((float)System.Math.Sin(rad), (float)System.Math.Cos(rad));
+        }
+
         /// <summary>Inverse of <see cref="StickToPitch"/>: a flat pitch direction to stick space for the camera yaw.</summary>
         public static ControlVec2 PitchToStick(SimVec3 dir, float cameraYaw)
         {
@@ -84,7 +92,8 @@ namespace OpenFifa.Core
                 case ControlAction.Jockey:
                 case ControlAction.Contain: return IntentAction.Jockey;
                 case ControlAction.Shield: return IntentAction.Shield;
-                // SkillMove, TeammatePress and SwitchPlayer are handled outside the sim intent.
+                case ControlAction.SkillMove: return IntentAction.SkillMove;
+                // TeammatePress and SwitchPlayer are handled outside the sim intent.
                 default: return IntentAction.None;
             }
         }
@@ -125,6 +134,18 @@ namespace OpenFifa.Core
 
             IntentAction act = MapAction(ci.Action);
             if (act == IntentAction.None) return intent;
+            if (act == IntentAction.SkillMove)
+            {
+                SimVec3 flick = StickToPitch(Direction8ToStick(ci.SkillDirection), cameraYaw).Flat;
+                if (flick.SqrMagnitude < 1e-6f) return intent;
+                flick = flick.Normalized;
+                float rel = SimMath.DeltaAngle(p.Facing, SimMath.Yaw(flick)) * SimMath.Rad2Deg;
+                intent.Action = act;
+                intent.Skill = SkillMoveCatalog.FromFlick(rel, intent.Sprint);
+                intent.Aim = flick;
+                return intent;
+            }
+
             intent.Action = act;
             if (PlayerIntent.IsKickAction(act)) intent.Style = MapStyle(ci.Action);
             intent.Power = SimMath.Clamp01(ci.Power);

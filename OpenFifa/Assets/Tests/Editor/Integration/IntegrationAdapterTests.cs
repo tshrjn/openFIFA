@@ -161,7 +161,7 @@ namespace OpenFifa.Tests.Editor.Integration
             Assert.AreEqual(IntentAction.SlideTackle, HumanControlAdapter.MapAction(ControlAction.SlideTackle));
             Assert.AreEqual(IntentAction.Jockey, HumanControlAdapter.MapAction(ControlAction.Contain));
             Assert.AreEqual(IntentAction.None, HumanControlAdapter.MapAction(ControlAction.SwitchPlayer));
-            Assert.AreEqual(IntentAction.None, HumanControlAdapter.MapAction(ControlAction.SkillMove));
+            Assert.AreEqual(IntentAction.SkillMove, HumanControlAdapter.MapAction(ControlAction.SkillMove));
         }
 
         [Test]

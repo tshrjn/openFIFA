@@ -32,6 +32,13 @@ namespace OpenFifa.Core
                     continue;
                 }
 
+                if (p.ActionState == SimPlayerActionState.Skill)
+                {
+                    StepSkill(i, dt);
+                    if (p.ActionState == SimPlayerActionState.Skill) continue;
+                    // Abandoned (ball lost): fall through to normal movement this tick.
+                }
+
                 p.Jockeying = intent.Action == IntentAction.Jockey && _s.Owner != i;
                 p.Shielding = intent.Action == IntentAction.Shield && _s.Owner == i;
 
@@ -66,7 +73,7 @@ namespace OpenFifa.Core
                     if (p.ActionState == SimPlayerActionState.WindUp || p.ActionState == SimPlayerActionState.Recovery)
                         cap = SimMath.Min(cap, SimMath.Max(1.5f, p.Speed * 0.97f));
 
-                    PlayerKinematics.Step(ref p, a, kc, intent.Move, sprint, cap, face, dt);
+                    PlayerKinematics.Step(ref p, a, kc, intent.Move, sprint, cap, face, dt, Responsiveness(p));
                     ClampToArea(ref p);
                 }
 
@@ -111,6 +118,12 @@ namespace OpenFifa.Core
                 }
 
                 BeginWindUp(ref p, act, power, intent.Aim, intent.TargetPlayerId, windup, intent.Style);
+                return;
+            }
+
+            if (act == IntentAction.SkillMove)
+            {
+                TryStartSkill(ref p, intent);
                 return;
             }
 
@@ -556,6 +569,8 @@ namespace OpenFifa.Core
             float z = (skill - (0.6f * ca.Dribbling + 0.4f * ca.BallControl)) / ac.TackleSkillScale + 0.3f;
             if (!slide && t.Jockeying) z += ac.JockeyTackleBonus;
             if (c.Shielding) z -= ac.ShieldTackleMalus * SimPlayerAttributes.N(ca.Strength) * 1.5f;
+            if (c.ActionState == SimPlayerActionState.Skill) z -= SkillMoveCatalog.Get(c.Skill).TackleEvasion;
+            if (_s.Tick < t.WrongFootedUntilTick || _s.Tick < t.OffBalanceUntilTick) z -= ac.WrongFootTackleMalus;
             if (behind) z -= 0.3f;
             z -= 0.8f * (ballDist / range);
             if (slide) z += 0.2f;
@@ -576,8 +591,10 @@ namespace OpenFifa.Core
 
                 c.ActionState = SimPlayerActionState.Recovery;
                 c.StateEndTick = _s.Tick + _cfg.SecondsToTicks(ac.TackledStagger);
+                c.Skill = SkillMoveKind.None;
                 c.ControlBlockedUntilTick = _s.Tick + _cfg.SecondsToTicks(ac.LostTackleControlCooldown);
                 Emit(MatchEventType.Tackle, id, carrier, t.Team, t.Position, detail: 1, action: act);
+                TackleBodyOutcome(carrier, id, slide, ca);
 
                 bool keep = !slide && _s.Rng.NextFloat() < 0.45f + 0.4f * SimPlayerAttributes.N(ta.StandingTackle);
                 if (keep)
@@ -641,40 +658,6 @@ namespace OpenFifa.Core
         {
             _s.IndirectRestartLive = false;
             if (_s.PenaltyKicker >= 0 && id != KeeperId(Opponent(TeamOf(_s.PenaltyKicker)))) _s.PenaltyKicker = -1;
-        }
-
-        /// <summary>
-        /// Keeps players at least two body radii apart (one deterministic pass in id order). A restart taker stands
-        /// still at the ball, so the other player takes the whole correction. Everyone is then re-clamped to the
-        /// playing area plus the run-off margin (<see cref="ClampToArea"/>).
-        /// </summary>
-        private void SeparatePlayers()
-        {
-            float minD = 2f * _cfg.Actions.PlayerSeparationRadius;
-            float minD2 = minD * minD;
-            int taker = _s.Phase == SimMatchPhase.AwaitingRestart ? _s.RestartTakerId : -1;
-            for (int i = 0; i < MatchSimState.PlayerCount; i++)
-            {
-                if (_s.Players[i].SentOff) continue;
-                for (int j = i + 1; j < MatchSimState.PlayerCount; j++)
-                {
-                    if (_s.Players[j].SentOff) continue;
-                    SimVec3 d = (_s.Players[j].Position - _s.Players[i].Position).Flat;
-                    float d2 = d.SqrMagnitude;
-                    if (d2 >= minD2) continue;
-                    float dist = SimMath.Sqrt(d2);
-                    // Coincident players: split along a fixed, team-dependent axis.
-                    SimVec3 n = dist > 1e-4f ? d / dist : new SimVec3(i < j ? 1f : -1f, 0f, 0f);
-                    float push = minD - dist;
-                    float wi = j == taker ? 1f : (i == taker ? 0f : 0.5f);
-                    _s.Players[i].Position -= n * (push * wi);
-                    _s.Players[j].Position += n * (push * (1f - wi));
-                }
-            }
-
-            // A push must not carry anyone past the run-off margin around the pitch.
-            for (int i = 0; i < MatchSimState.PlayerCount; i++)
-                if (!_s.Players[i].SentOff) ClampToArea(ref _s.Players[i]);
         }
     }
 }
