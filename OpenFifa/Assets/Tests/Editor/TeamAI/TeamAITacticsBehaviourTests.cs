@@ -546,7 +546,8 @@ namespace OpenFifa.Tests.Editor.TeamAI
 
         /// <summary>
         /// Against an AI opponent (balanced 4-3-3, Professional, 16 seeds of 6-minute halves) park the bus allows the
-        /// fewest shots and scores the fewest goals. Measured: ParkTheBus 2 goals for, 3.0 shots against per match;
+        /// fewest shots and creates clearly the least (xG, not goals: over 16 seeds goals swing by a few either way).
+        /// Measured before #40: ParkTheBus 2 goals for, 3.0 shots against per match;
         /// Balanced 4 / 3.6, Possession 11 / 4.9, HighPress 14 / 4.4.
         /// </summary>
         [Test]
@@ -554,9 +555,10 @@ namespace OpenFifa.Tests.Editor.TeamAI
         [Timeout(3600000)]
         public void ParkTheBus_AgainstAnAISide_FewestShotsAgainst_FewestGoalsFor()
         {
-            (int gf, int shotsAgainst) Play(TeamAIStyle style)
+            (int gf, float xgFor, int shotsAgainst) Play(TeamAIStyle style)
             {
                 int gf = 0, sa = 0;
+                float xg = 0f;
                 for (int seed = 1; seed <= 16; seed++)
                 {
                     var s = new SinglePlayerMatchSession(new SinglePlayerMatchOptions
@@ -571,19 +573,26 @@ namespace OpenFifa.Tests.Editor.TeamAI
                     {
                         var ev = s.StepOnce(null);
                         for (int i = 0; i < ev.Count; i++)
-                            if (ev[i].Type == MatchEventType.Shot && ev[i].Team == SimTeam.Away) sa++;
+                        {
+                            if (ev[i].Type != MatchEventType.Shot) continue;
+                            if (ev[i].Team == SimTeam.Away) sa++;
+                            else xg += ev[i].Value;
+                        }
                     }
                     gf += s.Result.HomeScore;
                 }
-                return (gf, sa);
+                return (gf, xg, sa);
             }
             var bus = Play(TeamAIStyle.ParkTheBus);
             var bal = Play(TeamAIStyle.Balanced);
             var press = Play(TeamAIStyle.HighPress);
-            System.Console.WriteLine($"AI vs AI over 16: ParkTheBus {bus.gf} GF / {bus.shotsAgainst} SA, Balanced {bal.gf} / {bal.shotsAgainst}, HighPress {press.gf} / {press.shotsAgainst}");
+            System.Console.WriteLine($"AI vs AI over 16: ParkTheBus {bus.gf} GF ({bus.xgFor:F1} xG) / {bus.shotsAgainst} SA, " +
+                                     $"Balanced {bal.gf} ({bal.xgFor:F1}) / {bal.shotsAgainst}, HighPress {press.gf} ({press.xgFor:F1}) / {press.shotsAgainst}");
             Assert.Less(bus.shotsAgainst, bal.shotsAgainst, "park the bus should allow fewer shots than a balanced side");
-            Assert.Less(bus.gf, bal.gf + 1, "park the bus should not outscore a balanced side");
-            Assert.Less(bus.gf, press.gf, "park the bus should score less than a high press");
+            // Attacking intent is judged on xG created: goals over 16 seeds swing by +-3 (9 vs 10 on one main build,
+            // the other way on the next), xG by far less.
+            Assert.Less(bus.xgFor, bal.xgFor * 0.75f, "park the bus should create clearly less than a balanced side");
+            Assert.Less(bus.xgFor, press.xgFor * 0.75f, "park the bus should create clearly less than a high press");
         }
     }
 }

@@ -61,3 +61,13 @@ Difficulty-ladder balances below come from 5 seeds with 4-minute halves, the sam
 ## Rosters
 
 A club can name a style in the roster JSON with an optional `"style"` key, for example `"style": "counter"`. The validator rejects names it does not know. With a style, `RosterMatchBuilder.TacticsFor` shifts the preset by reputation: pressing changes by 0.05 and line height by 0.03 for each star above or below three, so two clubs with the same style still differ. Without a style, or with `balanced`, it keeps the reputation-based sliders. The Premier League styles live in `tools/rosters/premier_league/build_premier_league.py` (`STYLES`).
+
+## Pressing and fouls
+
+A high press challenges for the ball about twice as often as a balanced side, so it also commits more fouls in
+absolute terms. On main after #40, over 6 AI-vs-AI seeds of 3-minute halves, HighPress committed 30 fouls against
+Balanced's 18, which is 67% more. Per defensive action (tackle or interception) the rate is lower: 0.29 for
+HighPress (30/103) against 0.35 for Balanced (18/51). The PPDA test
+(`Ppda_HighPress_Below_Balanced_Below_ParkTheBus_WithoutExtraFouls`) therefore bounds fouls per defensive action at
+1.5× Balanced's rate, rather than the raw count. The squeeze's tackle-threshold shift (`SqueezeTackleShift`, 0.05)
+is what keeps the rate down: at 0.12 HighPress fouled 1.8× as often as Balanced.

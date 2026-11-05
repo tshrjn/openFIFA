@@ -219,5 +219,82 @@ namespace OpenFifa.Tests.Editor.TeamAI
                 Assert.AreEqual(x0, dir.Commands[st].MoveTarget.X, 0.01f, $"tick {k}: same line");
             }
         }
+
+        private static TeamAIWorld RunnerScene(float cmX, float cmDepth, out int cm, out int runner)
+        {
+            var w = TeamAITestWorlds.Empty();
+            TeamAITestWorlds.Add(w, 0, TeamAIRole.GK, 0, 0f, Z(0.02f));
+            TeamAITestWorlds.Add(w, 0, TeamAIRole.CB, 1, -8f, Z(0.2f));
+            TeamAITestWorlds.Add(w, 0, TeamAIRole.CB, 2, 8f, Z(0.2f));
+            cm = TeamAITestWorlds.Add(w, 0, TeamAIRole.CM, 6, cmX, Z(cmDepth));
+            TeamAITestWorlds.Add(w, 0, TeamAIRole.DM, 5, -9f, Z(0.57f));
+            TeamAITestWorlds.Add(w, 0, TeamAIRole.W, 8, -13f, Z(0.58f));
+            TeamAITestWorlds.Add(w, 1, TeamAIRole.GK, 0, 0f, Z(0.98f));
+            int carrier = TeamAITestWorlds.Add(w, 1, TeamAIRole.CM, 6, -10f, Z(0.6f));
+            runner = TeamAITestWorlds.Add(w, 1, TeamAIRole.CM, 7, 2f, Z(0.47f));
+            w.Players[runner].Velocity = new SimVec3(0f, 0f, -6f);
+            TeamAITestWorlds.GiveBall(w, carrier);
+            w.Time = 10f;
+            return w;
+        }
+
+        [Test]
+        public void Tracking_HandsOverAtTheBackLine_WithoutFlicker()
+        {
+            var w = RunnerScene(4f, 0.42f, out int cm, out int runner);
+            var dir = new TeamAIDirector(Pitch, new TeamAITactics(), new TeamAITactics(), 1f, 1f, 7);
+            var vel = w.Players[runner].Velocity;
+            bool released = false;
+            var trace = new System.Text.StringBuilder();
+            for (int k = 0; k < 60; k++)
+            {
+                dir.DecideNow(w, 0.1f);
+                var c = dir.Commands[cm];
+                bool marking = c.Intent == TeamAIIntent.Mark && c.TargetPlayerId == w.Players[runner].Id;
+                trace.Append(marking ? 'M' : '.');
+                if (released) Assert.IsFalse(marking, "reassigned after the hand-over: " + trace);
+                if (marking) { w.Players[cm].Position = c.MoveTarget; w.Players[cm].Velocity = vel; }
+                else if (trace.ToString().Contains("M")) released = true;
+                w.Players[runner].Position = w.Players[runner].Position + vel * 0.1f;
+                w.Time += 0.1f;
+            }
+            Assert.IsTrue(released, "the runner was tracked and handed over to the back line: " + trace);
+        }
+
+        [Test]
+        public void Tracking_AMidfielderBesideTheRunnerTakesHimAtOnce()
+        {
+            // Our CM starts 1.5 m from the runner: he is the tracker, not a reason to leave the runner free.
+            var w = RunnerScene(3.2f, 0.462f, out int cm, out int runner);
+            var dir = new TeamAIDirector(Pitch, new TeamAITactics(), new TeamAITactics(), 1f, 1f, 7);
+            int first = -1;
+            for (int k = 0; k < 6 && first < 0; k++)
+            {
+                dir.DecideNow(w, 0.1f);
+                if (dir.Commands[cm].Intent == TeamAIIntent.Mark) first = k;
+                w.Players[runner].Position = w.Players[runner].Position + w.Players[runner].Velocity * 0.1f;
+                w.Players[cm].Position = w.Players[cm].Position + w.Players[runner].Velocity * 0.1f; // keeps alongside
+                w.Time += 0.1f;
+            }
+            Assert.GreaterOrEqual(first, 0, "the adjacent midfielder never picked up the runner");
+        }
+
+        [Test]
+        public void AimedDirectedRun_KeepsTheUsersLineAfterTheCallExpires()
+        {
+            var w = Attack(out _, new[] { -16f, -4f, 4f, 16f });
+            int st = TeamAITestWorlds.Add(w, 0, TeamAIRole.ST, 10, 4f, Z(0.7f));
+            // The user aims the run at x = 4 (straight at a defender: the AI would pick a gap).
+            w.Directives[0].RequestRun(w.Players[st].Id, new SimVec3(4f, 0f, Z(0.9f)), true, w.Time + 0.15f);
+            var dir = new TeamAIDirector(Pitch, new TeamAITactics(), new TeamAITactics(), 1f, 1f, 3);
+            for (int k = 0; k < 12; k++)
+            {
+                dir.DecideNow(w, 0.1f);
+                var c = dir.Commands[st];
+                Assert.AreEqual(TeamAIIntent.RunInBehind, c.Intent, $"tick {k}");
+                Assert.AreEqual(4f, c.MoveTarget.X, 0.01f, $"tick {k}: the user's line");
+                w.Time += 0.1f;
+            }
+        }
     }
 }

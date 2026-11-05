@@ -153,6 +153,7 @@ namespace OpenFifa.Core
         private readonly int[] _checkMarker = new int[TeamAIWorld.MaxPlayers];
         private readonly bool[] _checkResolved = new bool[TeamAIWorld.MaxPlayers];
         private readonly float[] _gapEvalAt = new float[TeamAIWorld.MaxPlayers];
+        private readonly bool[] _userLine = new bool[TeamAIWorld.MaxPlayers];
         /// <summary>Persistent tracker of each opponent runner (-1 none), and since when each opponent has been running at us.</summary>
         private readonly int[] _trackerOf = new int[TeamAIWorld.MaxPlayers];
         private readonly float[] _runnerSince = new float[TeamAIWorld.MaxPlayers];
@@ -494,6 +495,8 @@ namespace OpenFifa.Core
                 _running[i] = true;
                 _runStart[i] = world.Time;
                 _runX[i] = d.RunHasTarget ? d.RunTarget.X : (GapRuns ? GapRunX(world, p, sign) : TeamAIMath.Lerp(p.Position.X, 0f, 0.3f));
+                // A run the user aimed keeps the user's line to the end; an un-aimed call may re-pick its gap.
+                _userLine[i] = d.RunHasTarget;
                 _gapEvalAt[i] = world.Time;
                 SimVec3 target;
                 if (d.RunHasTarget)
@@ -564,8 +567,9 @@ namespace OpenFifa.Core
                         _runStart[i] = world.Time;
                         _runX[i] = GapRuns ? GapRunX(world, p, sign) : TeamAIMath.Lerp(p.Position.X, 0f, 0.3f);
                         _gapEvalAt[i] = world.Time;
+                        _userLine[i] = false;
                     }
-                    else if (GapRuns && world.Time - _gapEvalAt[i] >= GapRefresh)
+                    else if (GapRuns && !_userLine[i] && world.Time - _gapEvalAt[i] >= GapRefresh)
                     {
                         // The line moves: re-pick the gap, but only switch for a clearly better one (2 m).
                         float nx = GapRunX(world, p, sign);
@@ -1032,6 +1036,8 @@ namespace OpenFifa.Core
             {
                 if (_trackerOf[j] >= 0 || _runnerSince[j] < 0f || world.Time - _runnerSince[j] < Difficulty.ReactionDelay) continue;
                 var o = world.Players[j];
+                // Same depth rule as the keep step: a runner already deeper than our back line is the back line's man.
+                if (TeamAIMath.Depth(o.Position.Z, sign, pitch) <= BackLineDepth - 0.02f) continue;
                 int best = -1;
                 float bd = 15f;
                 bool covered = false;
@@ -1040,10 +1046,13 @@ namespace OpenFifa.Core
                     var m = world.Players[k];
                     if (!m.Active || m.Team != Team || m.Role == TeamAIRole.GK || m.HumanControlled) continue;
                     float d = TeamAIMath.FlatDistance(m.Position, o.Position);
-                    if (d < 3f && _trackTarget[k] != j) { covered = true; break; }
-                    if (m.Role == TeamAIRole.CB || m.Role == TeamAIRole.FB || m.Role == TeamAIRole.ST) continue;
-                    if (k == PresserIndex || k == SecondPresserIndex || _trackTarget[k] >= 0) continue;
-                    if (_boxDefending && (k == _laneBlockers[0] || k == _laneBlockers[1] || k == _laneBlockers[2])) continue;
+                    bool eligible = m.Role != TeamAIRole.CB && m.Role != TeamAIRole.FB && m.Role != TeamAIRole.ST &&
+                                    k != PresserIndex && k != SecondPresserIndex && _trackTarget[k] < 0 &&
+                                    !(_boxDefending && (k == _laneBlockers[0] || k == _laneBlockers[1] || k == _laneBlockers[2]));
+                    // A midfielder right beside the runner takes him (he is the natural tracker); anyone else that close
+                    // (a defender, a presser, a man already tracking) covers him already.
+                    if (d < 3f && !eligible && _trackTarget[k] != j) { covered = true; break; }
+                    if (!eligible) continue;
                     if (d < bd) { bd = d; best = k; }
                 }
                 if (covered || best < 0) continue;
