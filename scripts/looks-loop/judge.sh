@@ -1,7 +1,7 @@
 #!/bin/bash
 # Three-provider looks council: Claude Opus 5.5, GPT-6.1 Sol (Codex), Gemini 4 Argon (Antigravity).
 # Usage: judge.sh <candidate-dir> <best-dir> <out-dir> [change description]
-# The description (if any) tells the judges what was changed, not which set has it, so they look in the right place.
+# The hint (if any) names the region that differs, not the direction or which set has it, so they look in the right place.
 # Each judge sees both render sets (labelled A/B in random order), scores each on face/hair/skin/body/overall
 # (0-10, EA FC broadcast quality = 9-10) and says which set is better. Writes <out>/{claude,gpt,gemini}.json
 # and <out>/verdict.json ({"keep": bool, "votes": ..., "cand_mean": ..., "best_mean": ...}).
@@ -29,7 +29,7 @@ faces (front face close-ups of six players), angles (three-quarter and profile p
 backs (full body back), ingame (broadcast camera and the in-game close-up camera).
 Open every image below with your file-read tool and look at them carefully before scoring:
 $LIST
-$( [ -n "$CHANGE" ] && printf '%s\n' "One of the two sets has this change (you are not told which): $CHANGE" "Before scoring, find exactly where the two sets differ on the players (compare the same player, p0..p5, across A and B; changes may affect only some players or skin tones), and judge that difference. If you cannot find a player difference, say tie." )
+$( [ -n "$CHANGE" ] && printf '%s\n' "The two sets differ in this region (you are not told which set is newer or in which direction): $CHANGE" "Before scoring, find exactly where the two sets differ on the players (compare the same player, p0..p5, across A and B; changes may affect only some players or skin tones), and judge that difference. If you cannot find a player difference, say tie." )
 Score each set 0-10 per dimension, calibrated against EA SPORTS FC 26 live gameplay = 9-10, a good 2015-era
 console football game = 6-7, generic low-poly mannequins with painted faces = 2-3. Be strict and consistent;
 small real improvements should move scores by 0.5, not more.

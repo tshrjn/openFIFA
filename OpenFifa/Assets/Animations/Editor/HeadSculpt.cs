@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using OpenFifa.Core;
 using UnityEngine;
 
 namespace OpenFifa.Editor
@@ -8,11 +9,19 @@ namespace OpenFifa.Editor
     /// Triangles skinned to the head bone are subdivided (Phong-style midpoints, so the cranium and jaw round off),
     /// then front-of-face vertices are pushed forward or back by smooth volumes in kit space: nose bridge and tip,
     /// brow ridge, eye sockets, cheekbones, lips and chin. Painted features (KitPaintHead) are positioned in the same
-    /// kit space, so they stay on the volumes. Edges shared with unsubdivided triangles stay straight (no cracks).
-    /// Runs before the kit body-map bake, which then maps the new vertices like any other.
+    /// kit space, so they stay on the volumes. Neighbouring (neck) triangles are split at the same midpoints, so the
+    /// mesh stays conforming (no T-junctions); midpoints on head/neck edges stay on the straight edge and boundary
+    /// vertices are never sculpted. <see cref="Apply"/> runs before the kit body-map bake (which maps the new vertices
+    /// like any other); <see cref="RecomputeHeadNormals"/> runs after it, because the bake's wide seam weld would
+    /// otherwise blur the sculpted features' shading.
+    /// Calibrated on UAL2_Standard (<see cref="MannequinHeadSpace"/>); KitBodyMapPostprocessor applies it to the UAL
+    /// animation models only. Changing anything here needs <see cref="Version"/> bumped (it feeds the importer version).
     /// </summary>
     public static class HeadSculpt
     {
+        /// <summary>Bump on any change that alters the sculpted mesh (part of KitBodyMapPostprocessor.GetVersion).</summary>
+        public const uint Version = 2;
+
         /// <summary>Subdivision passes over the head triangles (each pass splits a triangle into four).</summary>
         public const int Levels = 2;
 
@@ -20,19 +29,17 @@ namespace OpenFifa.Editor
         public const float HeadWeightMin = 0.5f;
 
         /// <summary>Overall strength of the face relief.</summary>
-        public const float ReliefScale = 2.2f;
+        public const float ReliefScale = 1.5f;
 
-        // Kit space in head-bone space: the Quaternius mannequin's values, as in HairCapBuilder / KitBodyMapPostprocessor.
-        private static readonly Vector3 HeadCentreBone = new Vector3(0f, 0.1194f, -0.0068f);
-        private const float HeadCentreKitY = 0.201f, HeadCentreKitZ = -0.012f;
-        private static readonly Vector3 KitUp = new Vector3(0f, 0.999f, 0.037f);
-        private static readonly Vector3 KitFront = new Vector3(0f, -0.037f, 0.999f);
+        private static readonly Vector3 HeadCentreBone = new Vector3(MannequinHeadSpace.CentreBoneX, MannequinHeadSpace.CentreBoneY, MannequinHeadSpace.CentreBoneZ);
+        private static readonly Vector3 KitUp = new Vector3(0f, MannequinHeadSpace.UpBoneY, MannequinHeadSpace.UpBoneZ);
+        private static readonly Vector3 KitFront = new Vector3(0f, MannequinHeadSpace.FrontBoneY, MannequinHeadSpace.FrontBoneZ);
 
         /// <summary>Head-bone-space point to kit space.</summary>
         public static Vector3 BoneToKit(Vector3 b)
         {
             var d = b - HeadCentreBone;
-            return new Vector3(d.x, Vector3.Dot(d, KitUp) + HeadCentreKitY, Vector3.Dot(d, KitFront) + HeadCentreKitZ);
+            return new Vector3(d.x, Vector3.Dot(d, KitUp) + MannequinHeadSpace.CentreKitY, Vector3.Dot(d, KitFront) + MannequinHeadSpace.CentreKitZ);
         }
 
         /// <summary>
@@ -41,7 +48,7 @@ namespace OpenFifa.Editor
         /// </summary>
         public static float FaceRelief(Vector3 k)
         {
-            float nz = (k.z - HeadCentreKitZ) / 0.118f;
+            float nz = MannequinHeadSpace.Frontness(k.z);
             float front = Smooth(0.25f, 0.65f, nz);
             if (front <= 0f) return 0f;
             float x = k.x, ax = Mathf.Abs(x), y = k.y;
@@ -68,10 +75,7 @@ namespace OpenFifa.Editor
             var mesh = smr.sharedMesh;
             if (mesh == null || mesh.vertexCount == 0) return "head sculpt skipped (no mesh)";
             if (mesh.blendShapeCount > 0) return "head sculpt skipped (blend shapes)";
-            var bones = smr.bones;
-            int hi = -1;
-            for (int i = 0; i < bones.Length; i++)
-                if (bones[i] != null && (bones[i].name == "Head" || bones[i].name == "head" || bones[i].name == "DEF-head")) { hi = i; break; }
+            int hi = HeadBoneIndex(smr);
             var bindposes = mesh.bindposes;
             if (hi < 0 || hi >= bindposes.Length) return "head sculpt skipped (no head bone)";
             for (int m = 0; m < mesh.subMeshCount; m++)
@@ -93,12 +97,18 @@ namespace OpenFifa.Editor
                 (w.boneIndex2 == hi ? w.weight2 : 0f) + (w.boneIndex3 == hi ? w.weight3 : 0f);
             var isHead = new List<bool>(verts.Count);
             for (int i = 0; i < verts.Count; i++) isHead.Add(HeadW(weights[i]) >= HeadWeightMin);
+            // Vertices on any non-head triangle are boundary: never moved by the subdivision or the sculpt.
             var pinned = new List<bool>(new bool[verts.Count]);
+            foreach (var tris in subTris)
+                for (int t = 0; t + 2 < tris.Length; t += 3)
+                    if (!(isHead[tris[t]] && isHead[tris[t + 1]] && isHead[tris[t + 2]]))
+                        pinned[tris[t]] = pinned[tris[t + 1]] = pinned[tris[t + 2]] = true;
 
             for (int level = 0; level < Levels; level++)
             {
                 var smoothN = PositionNormals(verts, normals);
-                // Edges also used by a triangle that is not subdivided keep their midpoint on the straight edge.
+                // Edges of non-head triangles (rebuilt each pass: neck triangles are split conformingly below, so
+                // their sub-edges are in this set on the next pass) keep their midpoints on the straight edge.
                 var straight = new HashSet<long>();
                 foreach (var tris in subTris)
                     for (int t = 0; t + 2 < tris.Length; t += 3)
@@ -124,9 +134,10 @@ namespace OpenFifa.Editor
                     verts.Add(p);
                     normals.Add((normals[a] + normals[b]).normalized);
                     if (hasUv) uv0.Add(0.5f * (uv0[a] + uv0[b]));
-                    weights.Add(Blend(weights[a], weights[b]));
-                    isHead.Add(true);
-                    pinned.Add(flat || (pinned[a] && pinned[b]));
+                    var w = Blend(weights[a], weights[b]);
+                    weights.Add(w);
+                    isHead.Add(HeadW(w) >= HeadWeightMin);
+                    pinned.Add(flat);
                     mid[key] = idx;
                     return idx;
                 }
@@ -134,12 +145,20 @@ namespace OpenFifa.Editor
                 {
                     var tris = subTris[m];
                     var outTris = new List<int>(tris.Length * 2);
+                    // Head triangles first, so every head edge has its midpoint before the neighbours are split.
                     for (int t = 0; t + 2 < tris.Length; t += 3)
                     {
                         int a = tris[t], b = tris[t + 1], c = tris[t + 2];
-                        if (!(isHead[a] && isHead[b] && isHead[c])) { outTris.Add(a); outTris.Add(b); outTris.Add(c); continue; }
+                        if (!(isHead[a] && isHead[b] && isHead[c])) continue;
                         int ab = Mid(a, b), bc = Mid(b, c), ca = Mid(c, a);
                         outTris.AddRange(new[] { a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca });
+                    }
+                    // Other triangles: split exactly the edges that got a midpoint (conforming, no T-junctions).
+                    for (int t = 0; t + 2 < tris.Length; t += 3)
+                    {
+                        int a = tris[t], b = tris[t + 1], c = tris[t + 2];
+                        if (isHead[a] && isHead[b] && isHead[c]) continue;
+                        SplitConforming(a, b, c, mid, outTris);
                     }
                     subTris[m] = outTris.ToArray();
                 }
@@ -150,41 +169,15 @@ namespace OpenFifa.Editor
             var toMesh = toBone.inverse;
             var frontMesh = toMesh.MultiplyVector(KitFront).normalized;
             int sculpted = 0;
-            var touched = new bool[verts.Count];
             for (int i = 0; i < verts.Count; i++)
             {
                 if (!isHead[i] || pinned[i]) continue;
-                // Fade near the neck so the sculpt never pulls at vertices shared with unsubdivided triangles.
+                // Boundary vertices are pinned; the weight fade keeps the sculpt soft towards the neck.
                 float w = Mathf.Clamp01((HeadW(weights[i]) - HeadWeightMin) / (1f - HeadWeightMin) * 2f);
                 float d = FaceRelief(BoneToKit(toBone.MultiplyPoint3x4(verts[i]))) * w;
                 if (Mathf.Abs(d) < 1e-6f) continue;
                 verts[i] += frontMesh * d;
-                touched[i] = true;
                 sculpted++;
-            }
-
-            // Smooth normals over the head (position-welded, area weighted) after the sculpt.
-            var faceSum = new Vector3[verts.Count];
-            foreach (var tris in subTris)
-                for (int t = 0; t + 2 < tris.Length; t += 3)
-                {
-                    int a = tris[t], b = tris[t + 1], c = tris[t + 2];
-                    if (!(isHead[a] && isHead[b] && isHead[c])) continue;
-                    var fn = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]);
-                    faceSum[a] += fn; faceSum[b] += fn; faceSum[c] += fn;
-                }
-            var groups = new Dictionary<Vector3Int, Vector3>();
-            for (int i = 0; i < verts.Count; i++)
-            {
-                if (!isHead[i] || pinned[i]) continue;
-                var key = Vector3Int.RoundToInt(verts[i] * 4000f);
-                groups[key] = (groups.TryGetValue(key, out var s) ? s : Vector3.zero) + faceSum[i];
-            }
-            for (int i = 0; i < verts.Count; i++)
-            {
-                if (!isHead[i] || pinned[i]) continue;
-                var s = groups[Vector3Int.RoundToInt(verts[i] * 4000f)];
-                if (s.sqrMagnitude > 1e-14f && Vector3.Dot(s, normals[i]) > 0f) normals[i] = s.normalized;
             }
 
             // No mesh.Clear(): on an import-time mesh with Read/Write off it leaves the mesh unwritable for the rest
@@ -200,6 +193,101 @@ namespace OpenFifa.Editor
             if (hasUv) mesh.RecalculateTangents();
             mesh.RecalculateBounds();
             return $"head sculpt: {startVerts} -> {verts.Count} vertices, {sculpted} sculpted";
+        }
+
+        private static void SplitConforming(int a, int b, int c, Dictionary<long, int> mid, List<int> outTris)
+        {
+            int[] v = { a, b, c };
+            int[] m = new int[3];
+            int count = 0;
+            for (int e = 0; e < 3; e++)
+            {
+                m[e] = mid.TryGetValue(Key(v[e], v[(e + 1) % 3]), out int idx) ? idx : -1;
+                if (m[e] >= 0) count++;
+            }
+            if (count == 0) { outTris.Add(a); outTris.Add(b); outTris.Add(c); return; }
+            if (count == 3)
+            {
+                outTris.AddRange(new[] { a, m[0], m[2], m[0], b, m[1], m[2], m[1], c, m[0], m[1], m[2] });
+                return;
+            }
+            // Rotate so edge 0 (v0-v1) is split; for two splits, also edge 1 (v1-v2).
+            int r = 0;
+            if (count == 1) { while (m[r] < 0) r++; }
+            else { while (!(m[r] >= 0 && m[(r + 1) % 3] >= 0)) r++; }
+            int p0 = v[r], p1 = v[(r + 1) % 3], p2 = v[(r + 2) % 3];
+            int m01 = m[r], m12 = m[(r + 1) % 3];
+            if (count == 1)
+            {
+                outTris.AddRange(new[] { p0, m01, p2, m01, p1, p2 });
+            }
+            else
+            {
+                outTris.AddRange(new[] { m01, p1, m12, p0, m01, m12, p0, m12, p2 });
+            }
+        }
+
+        /// <summary>
+        /// Smooth, area-weighted normals for the sculpted head vertices (welded by position), from the final positions.
+        /// Run after the kit bake: its 18 mm seam weld would otherwise blur the sculpted features' shading. Boundary
+        /// vertices (shared with neck triangles) keep the weld's normals so the neck seam stays continuous.
+        /// Returns the number of normals written.
+        /// </summary>
+        public static int RecomputeHeadNormals(SkinnedMeshRenderer smr)
+        {
+            var mesh = smr.sharedMesh;
+            int hi = HeadBoneIndex(smr);
+            if (mesh == null || hi < 0) return 0;
+            var verts = mesh.vertices;
+            var normals = mesh.normals;
+            var weights = mesh.boneWeights;
+            if (normals.Length != verts.Length || weights.Length != verts.Length) return 0;
+            var isHead = new bool[verts.Length];
+            for (int i = 0; i < verts.Length; i++)
+            {
+                var w = weights[i];
+                float h = (w.boneIndex0 == hi ? w.weight0 : 0f) + (w.boneIndex1 == hi ? w.weight1 : 0f) +
+                          (w.boneIndex2 == hi ? w.weight2 : 0f) + (w.boneIndex3 == hi ? w.weight3 : 0f);
+                isHead[i] = h >= HeadWeightMin;
+            }
+            var boundary = new bool[verts.Length];
+            var faceSum = new Vector3[verts.Length];
+            for (int m = 0; m < mesh.subMeshCount; m++)
+            {
+                var tris = mesh.GetTriangles(m);
+                for (int t = 0; t + 2 < tris.Length; t += 3)
+                {
+                    int a = tris[t], b = tris[t + 1], c = tris[t + 2];
+                    if (!(isHead[a] && isHead[b] && isHead[c])) { boundary[a] = boundary[b] = boundary[c] = true; continue; }
+                    var fn = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]);
+                    faceSum[a] += fn; faceSum[b] += fn; faceSum[c] += fn;
+                }
+            }
+            var groups = new Dictionary<Vector3Int, Vector3>();
+            for (int i = 0; i < verts.Length; i++)
+            {
+                if (!isHead[i]) continue;
+                var key = Vector3Int.RoundToInt(verts[i] * 4000f);
+                groups[key] = (groups.TryGetValue(key, out var s) ? s : Vector3.zero) + faceSum[i];
+            }
+            int written = 0;
+            for (int i = 0; i < verts.Length; i++)
+            {
+                if (!isHead[i] || boundary[i]) continue;
+                var s = groups[Vector3Int.RoundToInt(verts[i] * 4000f)];
+                if (s.sqrMagnitude > 1e-14f && Vector3.Dot(s, normals[i]) > 0f) { normals[i] = s.normalized; written++; }
+            }
+            mesh.normals = normals;
+            if (mesh.uv != null && mesh.uv.Length == verts.Length) mesh.RecalculateTangents();
+            return written;
+        }
+
+        private static int HeadBoneIndex(SkinnedMeshRenderer smr)
+        {
+            var bones = smr.bones;
+            for (int i = 0; i < bones.Length; i++)
+                if (bones[i] != null && (bones[i].name == "Head" || bones[i].name == "head" || bones[i].name == "DEF-head")) return i;
+            return -1;
         }
 
         private static long Key(int a, int b) => a < b ? ((long)a << 32) | (uint)b : ((long)b << 32) | (uint)a;

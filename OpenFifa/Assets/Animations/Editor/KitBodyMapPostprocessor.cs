@@ -34,7 +34,8 @@ namespace OpenFifa.Editor
         /// </summary>
         public const string BodyMaterialPath = "Assets/Resources/Kits/OpenFifaKitBody.mat";
 
-        public override uint GetVersion() => Version;
+        // HeadSculpt.Version is part of the importer version, so sculpt changes reimport the models.
+        public override uint GetVersion() => Version * 1000 + HeadSculpt.Version;
 
         // After QuaterniusImportPostprocessor (default order 0).
         public override int GetPostprocessOrder() => 50;
@@ -54,9 +55,20 @@ namespace OpenFifa.Editor
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                string sculpt = HeadSculpt.Apply(smr); // before the bake, so new head vertices get the body map
-                if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {sculpt}");
+                // Head sculpt: calibrated on the UAL mannequin only. Before the bake (new head vertices get the body
+                // map), head normals again after it (the bake's seam weld would blur the sculpted shading).
+                bool sculptHead = assetPath.StartsWith(QuaterniusImportPostprocessor.AnimationsRoot, StringComparison.Ordinal);
+                if (sculptHead)
+                {
+                    string sculpt = HeadSculpt.Apply(smr);
+                    if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {sculpt}");
+                }
                 string result = Bake(root.transform, smr, human);
+                if (sculptHead && result != null)
+                {
+                    int n = HeadSculpt.RecomputeHeadNormals(smr);
+                    if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: head normals recomputed after the bake: {n}");
+                }
                 if (result == null) continue;
                 if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
                 if (bodyMaterial != null && smr.sharedMesh != null
