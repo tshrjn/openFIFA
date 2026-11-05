@@ -11,6 +11,7 @@ namespace OpenFifa.Core
         private bool TryStartSkill(ref SimPlayer p, PlayerIntent intent)
         {
             var ac = _cfg.Actions;
+            if (!ac.SkillMovesEnabled || _s.Tick < p.NextSkillTick) return false;
             if (_s.Phase != SimMatchPhase.InPlay || _s.Owner != p.Id || _s.KeeperHolding) return false;
             SimPlayerAttributes a = AttributesOf(p.Id);
             if (a.IsGoalkeeper) return false;
@@ -81,6 +82,7 @@ namespace OpenFifa.Core
                 p.ActionState = SimPlayerActionState.Recovery;
                 p.StateEndTick = _s.Tick + _cfg.SecondsToTicks(0.15f);
                 p.Skill = SkillMoveKind.None;
+                p.NextSkillTick = _s.Tick + _cfg.SecondsToTicks(ac.SkillCooldown);
                 return;
             }
 
@@ -112,6 +114,7 @@ namespace OpenFifa.Core
 
             p.Velocity = vel;
             p.Position = new SimVec3(p.Position.X + vel.X * dt, 0f, p.Position.Z + vel.Z * dt);
+            DrainSkillStamina(ref p, a, speed, dt);
             ClampToArea(ref p);
 
             if (prof.KeepFacing)
@@ -175,6 +178,7 @@ namespace OpenFifa.Core
             p.ActionState = SimPlayerActionState.Free;
             p.Skill = SkillMoveKind.None;
             p.SkillExitYaw = exitYaw;
+            p.NextSkillTick = _s.Tick + _cfg.SecondsToTicks(ac.SkillCooldown);
             p.NextTouchTick = _s.Tick + SimMath.Clamp(_cfg.SecondsToTicks(ac.SkillReleaseTouchGap), 1, 1000);
             p.LastTouchTick = _s.Tick;
             p.LastTouchYaw = exitYaw;
@@ -222,6 +226,17 @@ namespace OpenFifa.Core
                 d.Facing = SimMath.WrapAngle(d.Facing + SimMath.Clamp(SimMath.DeltaAngle(d.Facing, SimMath.Yaw(lunge)), -0.45f, 0.45f));
                 Emit(MatchEventType.WrongFooted, j, id, d.Team, d.Position, value: c.SkillQuality, detail: (int)c.Skill);
             }
+        }
+
+        /// <summary>A move bursts at sprint pace: it costs stamina like sprinting (and recovers nothing).</summary>
+        private void DrainSkillStamina(ref SimPlayer p, SimPlayerAttributes a, float speed, float dt)
+        {
+            var kc = _cfg.Kinematics;
+            float sprint = PlayerKinematics.SprintSpeed(a, kc, p.Stamina);
+            p.Sprinting = speed > sprint * kc.JogFraction;
+            if (!p.Sprinting) return;
+            float drain = kc.SprintDrainPerSecond * (1.4f - SimPlayerAttributes.N(a.Stamina));
+            p.Stamina = SimMath.Clamp01(p.Stamina - drain * dt);
         }
 
         /// <summary>Turn/acceleration multiplier for a player who is wrong-footed or off balance this tick.</summary>

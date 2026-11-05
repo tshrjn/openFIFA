@@ -13,7 +13,8 @@ namespace OpenFifa.Core
         /// mostly absorbed as an inelastic impulse shared by mass, so a light winger running into a centre back
         /// bounces off while the centre back barely slows. An opponent whose speed change exceeds what his balance
         /// can take stumbles (off balance, and a carrier spills the ball) or goes down; a player knocked down from
-        /// behind is fouled. Everyone is then re-clamped to the playing area plus the run-off margin.
+        /// Body contact never gives a foul by itself (only tackles do). A player on the ground does not move: whoever runs
+        /// into him takes the whole correction. Everyone is then re-clamped to the playing area plus the run-off margin.
         /// </summary>
         private void SeparatePlayers()
         {
@@ -22,7 +23,6 @@ namespace OpenFifa.Core
             float minD2 = minD * minD;
             int taker = _s.Phase == SimMatchPhase.AwaitingRestart ? _s.RestartTakerId : -1;
             bool live = _s.Phase == SimMatchPhase.InPlay;
-            int foulBy = -1, foulOn = -1;
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
             {
                 if (_s.Players[i].SentOff) continue;
@@ -38,11 +38,19 @@ namespace OpenFifa.Core
                     float push = minD - dist;
 
                     bool downI = IsDown(_s.Players[i]), downJ = IsDown(_s.Players[j]);
+                    // A kicker in his wind-up is planted on the ball: he holds his spot and his run, so a bump does not
+                    // carry him away from the ball and turn the strike into a whiff (the other body gives way).
+                    bool bracedI = _s.Players[i].ActionState == SimPlayerActionState.WindUp;
+                    bool bracedJ = _s.Players[j].ActionState == SimPlayerActionState.WindUp;
                     float mi = ContactMass(i), mj = ContactMass(j);
                     float wi;
                     if (j == taker) wi = 1f;
                     else if (i == taker) wi = 0f;
-                    else if (downI || downJ) wi = 0.5f;
+                    else if (bracedI && !bracedJ && !downJ) wi = 0f;
+                    else if (bracedJ && !bracedI && !downI) wi = 1f;
+                    else if (downI && downJ) wi = 0.5f;
+                    else if (downI) wi = 0f; // he lies still; j steps around him
+                    else if (downJ) wi = 1f;
                     else wi = mj / (mi + mj);
                     _s.Players[i].Position -= n * (push * wi);
                     _s.Players[j].Position += n * (push * (1f - wi));
@@ -52,6 +60,12 @@ namespace OpenFifa.Core
                     if (closing <= 0f) continue;
                     float impulse = ac.BodyContactAbsorb * closing * (mi * mj / (mi + mj));
                     float dvi = impulse / mi, dvj = impulse / mj;
+                    if (bracedI != bracedJ)
+                    {
+                        // The braced kicker keeps his run; the other body takes the whole speed change.
+                        dvi = bracedI ? 0f : ac.BodyContactAbsorb * closing;
+                        dvj = bracedJ ? 0f : ac.BodyContactAbsorb * closing;
+                    }
                     _s.Players[i].Velocity -= n * dvi;
                     _s.Players[j].Velocity += n * dvj;
 
@@ -62,20 +76,13 @@ namespace OpenFifa.Core
                     int outcome = KnockBody(knocked, other, dv);
                     if (outcome > 0 || closing >= ac.BodyContactEventSpeed)
                         Emit(MatchEventType.BodyContact, knocked, other, TeamOf(knocked), _s.Players[knocked].Position,
-                        closing, dv, outcome);
-                    if (outcome == 2 && foulBy < 0 && FromBehind(other, knocked))
-                    {
-                        foulBy = other;
-                        foulOn = knocked;
-                    }
+                            closing, dv, outcome);
                 }
             }
 
             // A push must not carry anyone past the run-off margin around the pitch.
             for (int i = 0; i < MatchSimState.PlayerCount; i++)
                 if (!_s.Players[i].SentOff) ClampToArea(ref _s.Players[i]);
-
-            if (foulBy >= 0 && _s.Phase == SimMatchPhase.InPlay) CommitFoul(foulBy, foulOn, false, true);
         }
 
         private static bool IsDown(in SimPlayer p) =>
@@ -101,7 +108,7 @@ namespace OpenFifa.Core
             SimPlayerAttributes a = AttributesOf(id);
             float steady = 0.7f * SimPlayerAttributes.N(a.Balance) + 0.3f * SimPlayerAttributes.N(a.Strength);
             float limit = ac.StumbleDeltaVMin + ac.StumbleDeltaVRange * steady;
-            if (dv <= limit) return 0;
+            if (dv <= limit || _s.Tick < p.KnockImmuneUntilTick) return 0;
 
             if (dv > limit + ac.FallDeltaVOver && !a.IsGoalkeeper)
             {
@@ -124,11 +131,7 @@ namespace OpenFifa.Core
         private void KnockDown(int id, float seconds)
         {
             ref SimPlayer p = ref _s.Players[id];
-            if (_s.Owner == id && !_s.KeeperHolding)
-            {
-                _s.Owner = -1;
-                _s.Ball.Velocity = (_s.Ball.Velocity.Flat + p.Velocity.Flat * 0.3f);
-            }
+            if (_s.Owner == id && !_s.KeeperHolding) SetBallLoose(_s.Ball.Velocity.Flat + p.Velocity.Flat * 0.3f, id);
 
             p.ActionState = SimPlayerActionState.Grounded;
             p.PendingAction = IntentAction.None;
@@ -137,6 +140,8 @@ namespace OpenFifa.Core
             p.Jockeying = false;
             p.Shielding = false;
             p.StateEndTick = _s.Tick + _cfg.SecondsToTicks(seconds);
+            // Back on his feet, he cannot be bowled straight over again.
+            p.KnockImmuneUntilTick = p.StateEndTick + _cfg.SecondsToTicks(_cfg.Actions.GetUpGraceSeconds);
             if (p.ControlBlockedUntilTick < p.StateEndTick) p.ControlBlockedUntilTick = p.StateEndTick;
         }
 
@@ -156,6 +161,7 @@ namespace OpenFifa.Core
                 p.ActionState = SimPlayerActionState.Recovery;
                 p.StateEndTick = _s.Tick + _cfg.SecondsToTicks(0.15f);
                 p.Skill = SkillMoveKind.None;
+                p.NextSkillTick = _s.Tick + _cfg.SecondsToTicks(_cfg.Actions.SkillCooldown);
             }
         }
 

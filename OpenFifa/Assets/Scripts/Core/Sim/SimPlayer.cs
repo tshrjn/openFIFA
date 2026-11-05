@@ -64,6 +64,12 @@ namespace OpenFifa.Core
         /// <summary>A heavy body contact knocked him off balance until this tick (sluggish, like wrong-footed).</summary>
         public int OffBalanceUntilTick;
 
+        /// <summary>Just got up: contacts cannot stumble or floor him again before this tick.</summary>
+        public int KnockImmuneUntilTick;
+
+        /// <summary>Earliest tick for the next skill move (cooldown after one ends).</summary>
+        public int NextSkillTick;
+
         public bool Jockeying;
         public bool Shielding;
         public bool Sprinting;

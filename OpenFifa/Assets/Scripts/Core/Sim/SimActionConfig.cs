@@ -206,6 +206,13 @@ namespace OpenFifa.Core
         public float KnuckleShotResidualSpin = 1.5f;
 
         // ---- Skill moves (SkillMoveCatalog has the per-move shapes). ----
+        /// <summary>
+        /// Master switch. Off until the skill-move clips exist: without them the body path plays over the run cycle and
+        /// a roulette or drag back reads as skating. Tests and the clip work turn it on.
+        /// </summary>
+        public bool SkillMovesEnabled = false;
+        /// <summary>Gap after a skill move ends before the next one can start (s): no chained roulettes.</summary>
+        public float SkillCooldown = 0.5f;
         /// <summary>The ball must be within this flat distance of the carrier's feet to start a skill move.</summary>
         public float SkillStartReach = 1.3f;
         /// <summary>Defenders within this radius (m) of the carrier, and not behind him, can bite on a fake.</summary>
@@ -237,7 +244,7 @@ namespace OpenFifa.Core
         /// <summary>Closing speed (m/s) below which a contact is just a lean (no stumble, no event).</summary>
         public float BodyContactMinSpeed = 1.2f;
         /// <summary>A contact that only holds the player up is reported (BodyContact, Detail 0) from this closing speed (m/s).</summary>
-        public float BodyContactEventSpeed = 2.5f;
+        public float BodyContactEventSpeed = 4.0f;
         /// <summary>Speed change (m/s) a 0-balance / 99-balance player absorbs before stumbling.</summary>
         public float StumbleDeltaVMin = 2.0f;
         public float StumbleDeltaVRange = 2.5f;
@@ -245,7 +252,11 @@ namespace OpenFifa.Core
         public float FallDeltaVOver = 2.5f;
         /// <summary>How long a stumble (off balance) and a fall (on the ground) last (s).</summary>
         public float StumbleSeconds = 0.45f;
-        public float ContactFallGroundTime = 1.1f;
+        /// <summary>
+        /// Time on the ground after a knock-down (s). At least the Fall clip (Hit_Knockback 0.83 s, left at 95 %) plus
+        /// GetUp (LayToIdle 46 frames = 1.53 s, left at 90 %) plus the blends, so nobody slides while lying or rising.
+        /// </summary>
+        public float ContactFallGroundTime = 2.4f;
         /// <summary>
         /// Chance a stumbling carrier loses the ball: (speed change over his limit) / FallDeltaVOver, times
         /// (SpillControlBase - ball control). A good dribbler rides most knocks with the ball still at his feet.
@@ -258,9 +269,12 @@ namespace OpenFifa.Core
 
         // ---- Tackle body outcomes. ----
         /// <summary>Chance a carrier beaten by a slide goes down (before balance), and for a standing tackle.</summary>
-        public float SlideWinFallChance = 0.55f;
-        public float StandingWinFallChance = 0.12f;
-        public float TackleFallGroundTime = 1.0f;
+        public float SlideWinFallChance = 0.35f;
+        public float StandingWinFallChance = 0.05f;
+        /// <summary>Same clip pair as <see cref="ContactFallGroundTime"/>.</summary>
+        public float TackleFallGroundTime = 2.4f;
+        /// <summary>After getting up, contacts cannot stumble or floor the player for this long (s).</summary>
+        public float GetUpGraceSeconds = 1.0f;
 
         /// <summary>Speed (m/s) at which a caught ball is gathered from the catch point into the hands.</summary>
         public float GkGatherSpeed = 6f;

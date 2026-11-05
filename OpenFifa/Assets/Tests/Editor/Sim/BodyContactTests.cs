@@ -79,6 +79,56 @@ namespace OpenFifa.Tests.Editor.Sim
         }
 
         [Test]
+        public void PlayerOnTheGround_IsNotShovedByARunner()
+        {
+            var sim = Open(5);
+            SimTestHelpers.Place(sim, 15, 0f, 0.6f);
+            sim.State.Players[15].ActionState = SimPlayerActionState.Grounded;
+            sim.State.Players[15].StateEndTick = sim.State.Tick + 600;
+            SimTestHelpers.Place(sim, 9, 0f, 0f);
+            sim.State.Players[9].Velocity = new SimVec3(0f, 0f, 6f);
+            var intents = SimTestHelpers.IdleIntents();
+            intents[9] = PlayerIntent.MoveOnly(new SimVec3(0f, 0f, 1f), true);
+            for (int t = 0; t < 20; t++) sim.Step(intents);
+            Assert.AreEqual(0.6f, sim.State.Players[15].Position.Z, 1e-4f);
+            Assert.AreEqual(0f, sim.State.Players[15].Position.X, 1e-4f);
+        }
+
+        [Test]
+        public void KnockDown_LastsForFallPlusGetUp_AndGivesNoFoul()
+        {
+            var ac = new SimActionConfig();
+            Assert.GreaterOrEqual(ac.ContactFallGroundTime, 0.83f * 0.95f + 1.53f * 0.9f);
+            Assert.GreaterOrEqual(ac.TackleFallGroundTime, 0.83f * 0.95f + 1.53f * 0.9f);
+
+            var sim = Open(6);
+            var c = sim.AttributesOf(9);
+            c.Balance = 1; c.Strength = 1; c.Height = 1.60f;
+            var d = sim.AttributesOf(15);
+            d.Strength = 99; d.Height = 1.98f;
+            SimTestHelpers.Place(sim, 9, 0f, 0f);
+            SimTestHelpers.Place(sim, 15, 0f, -0.85f); // from behind
+            sim.State.Players[9].Facing = 0f;
+            sim.State.Players[9].Velocity = new SimVec3(0f, 0f, -6f);
+            sim.State.Players[15].Velocity = new SimVec3(0f, 0f, 9f);
+            var intents = SimTestHelpers.IdleIntents();
+            bool down = false, foul = false;
+            for (int t = 0; t < 5; t++)
+            {
+                var ev = sim.Step(intents);
+                for (int i = 0; i < ev.Count; i++)
+                {
+                    if (ev[i].Type == MatchEventType.BodyContact && ev[i].Detail == 2) down = true;
+                    if (ev[i].Type == MatchEventType.Foul) foul = true;
+                }
+            }
+
+            Assert.IsTrue(down, "a 9 m/s hit on a 1-balance player floors him");
+            Assert.IsFalse(foul, "body contact alone is never a foul");
+            Assert.AreEqual(SimMatchPhase.InPlay, sim.State.Phase);
+        }
+
+        [Test]
         public void TeammatesBumping_NoContactEvents()
         {
             var sim = Open(3);

@@ -15,6 +15,7 @@ namespace OpenFifa.Tests.Editor.Sim
         private static MatchSim Setup(ulong seed, float speed = 4f, int stars = 5, int dribbling = 90)
         {
             var sim = SimTestHelpers.NewSim(seed);
+            sim.Config.Actions.SkillMovesEnabled = true;
             SimTestHelpers.ForceOpenPlay(sim);
             SimTestHelpers.ParkTeam(sim, SimTeam.Home, -45f);
             SimTestHelpers.ParkTeam(sim, SimTeam.Away, 45f);
@@ -172,6 +173,37 @@ namespace OpenFifa.Tests.Editor.Sim
             var ev = sim.Step(intents);
             Assert.AreNotEqual(SimPlayerActionState.Skill, sim.State.Players[Carrier].ActionState);
             for (int e = 0; e < ev.Count; e++) Assert.AreNotEqual(MatchEventType.SkillMove, ev[e].Type);
+        }
+
+        [Test]
+        public void SkillMoves_OffByDefault_UntilClipsExist()
+        {
+            Assert.IsFalse(new SimActionConfig().SkillMovesEnabled);
+            var sim = Setup(8);
+            sim.Config.Actions.SkillMovesEnabled = false;
+            var intents = SimTestHelpers.IdleIntents();
+            intents[Carrier] = PlayerIntent.SkillMove(SkillMoveKind.Stepover, new SimVec3(1f, 0f, 0f));
+            Assert.IsFalse(SimTestHelpers.StepUntil(sim, intents, MatchEventType.SkillMove, 5, out _));
+        }
+
+        [Test]
+        public void SkillMove_Cooldown_NoChainedMoves()
+        {
+            var sim = Setup(10, speed: 3f);
+            var intents = SimTestHelpers.IdleIntents();
+            intents[Carrier] = PlayerIntent.SkillMove(SkillMoveKind.Roulette, new SimVec3(1f, 0f, 0f));
+            int moves = 0, freeTicks = 0;
+            int durTicks = sim.Config.SecondsToTicks(SkillMoveCatalog.Get(SkillMoveKind.Roulette).Duration);
+            int coolTicks = sim.Config.SecondsToTicks(sim.Config.Actions.SkillCooldown);
+            for (int t = 0; t < durTicks + coolTicks - 2; t++)
+            {
+                var ev = sim.Step(intents); // keeps asking every tick
+                for (int e = 0; e < ev.Count; e++) if (ev[e].Type == MatchEventType.SkillMove) moves++;
+                if (sim.State.Players[Carrier].IsFree) freeTicks++;
+            }
+
+            Assert.AreEqual(1, moves, "a second move must wait for the cooldown");
+            Assert.Greater(freeTicks, 0);
         }
 
         [Test]

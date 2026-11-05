@@ -160,6 +160,7 @@ namespace OpenFifa.Core
                 h.Add(p.YellowCards); h.Add(p.SentOff ? 1 : 0);
                 h.Add((int)p.Skill); h.Add(p.SkillStartTick); h.Add(p.SkillEntryYaw); h.Add(p.SkillExitYaw); h.Add(p.SkillEntryFacing);
                 h.Add(p.SkillEntrySpeed); h.Add(p.SkillBallFrom); h.Add(p.SkillQuality); h.Add(p.WrongFootedUntilTick); h.Add(p.OffBalanceUntilTick);
+                h.Add(p.KnockImmuneUntilTick); h.Add(p.NextSkillTick);
                 h.Add(_s.OffsidePositions[i]); h.Add(_s.OffsideMargins[i]);
             }
 
