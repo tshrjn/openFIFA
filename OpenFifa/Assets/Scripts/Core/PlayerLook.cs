@@ -39,7 +39,10 @@ namespace OpenFifa.Core
             if (appearance.HairStyle != null && TryHairStyle(appearance.HairStyle, out var hair)) look.Hair = hair;
             if (appearance.HasHairColour && KitColorUtility.TryParseHex(appearance.HairColour, out var hairColour))
                 look.HairColour = hairColour;
-            if (appearance.FacialHair != null && TryFacialHair(appearance.FacialHair, out var facial)) look.Facial = facial;
+            // An appearance block without facialHair means clean-shaven (roster authors omit it on purpose).
+            look.Facial = appearance.FacialHair != null && TryFacialHair(appearance.FacialHair, out var facial)
+                ? facial
+                : FacialHair.None;
             if (appearance.HasBootColour && KitColorUtility.TryParseHex(appearance.BootColour, out var boot))
             {
                 look.BootBase = boot;
@@ -99,7 +102,8 @@ namespace OpenFifa.Core
             uint r = h % 100u;
             look.Hair = r < 6u ? HairStyle.Bald : r < 30u ? HairStyle.Buzz : r < 68u ? HairStyle.Short : r < 88u ? HairStyle.Curly : HairStyle.Tied;
             uint f = (h >> 8) % 100u;
-            look.Facial = f < 50u ? FacialHair.None : f < 75u ? FacialHair.Stubble : f < 90u ? FacialHair.Beard : FacialHair.Goatee;
+            // Without roster data: mostly clean-shaven, some light stubble, never a full beard or goatee.
+            look.Facial = f < 80u ? FacialHair.None : FacialHair.Stubble;
 
             // Darker skin tones mostly pair with black / dark brown hair; lighter ones use the whole range.
             uint c = (h >> 16) % 100u;
