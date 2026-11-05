@@ -16,13 +16,16 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 5;
+        public const uint Version = 7;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
 
         /// <summary>Mesh UV channel holding the rest-pose kit-space position (w = 1 when baked).</summary>
         public const int BodyChannel = 3;
+
+        /// <summary>Rest-pose distance (m) within which normals are averaged across seams.</summary>
+        public const float SeamWeldRadius = 0.018f;
 
         /// <summary>
         /// Neutral kit-shader material put on every slot of the baked renderers. Besides giving the undressed
@@ -175,6 +178,21 @@ namespace OpenFifa.Editor
             }
             mesh.SetUVs(LimbChannel, uv2);
             mesh.SetUVs(BodyChannel, uv3);
+
+            // Smooth shading across the mannequin's segment and joint-ring seams (hard lines on sleeves/arms).
+            var meshNormals = mesh.normals;
+            if (meshNormals != null && meshNormals.Length == verts.Length)
+            {
+                var flat = new float[verts.Length * 3];
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    flat[v * 3] = meshNormals[v].x; flat[v * 3 + 1] = meshNormals[v].y; flat[v * 3 + 2] = meshNormals[v].z;
+                }
+                var welded = KitNormalWelder.Weld(positions, flat, SeamWeldRadius);
+                for (int v = 0; v < verts.Length; v++)
+                    meshNormals[v] = new Vector3(welded[v * 3], welded[v * 3 + 1], welded[v * 3 + 2]);
+                mesh.normals = meshNormals;
+            }
 
             // Optional dump for offline inspection: OPENFIFA_KITBODY_DUMP=<dir> writes one CSV per mesh and logs the
             // bake summary (head profile included) for each model.
