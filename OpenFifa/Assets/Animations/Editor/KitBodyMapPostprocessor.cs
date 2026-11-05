@@ -16,7 +16,7 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 6;
+        public const uint Version = 7;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
@@ -51,7 +51,12 @@ namespace OpenFifa.Editor
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                if (smr.sharedMesh != null && smr.sharedMesh.vertexCount > 0) SmoothNormals(smr.sharedMesh, SmoothAngle);
+                if (smr.sharedMesh != null && smr.sharedMesh.vertexCount > 0)
+                {
+                    string reshaped = Reshape(root.transform, smr, human);
+                    if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {reshaped}");
+                    SmoothNormals(smr.sharedMesh, SmoothAngle);
+                }
                 string result = Bake(root.transform, smr, human);
                 if (result == null) continue;
                 if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
@@ -114,6 +119,64 @@ namespace OpenFifa.Editor
             }
             mesh.normals = result;
             if (mesh.uv != null && mesh.uv.Length == n) mesh.RecalculateTangents();
+        }
+
+        /// <summary>
+        /// Athletic reshaping of the mannequin at import: the upper arms lose the balloon deltoids (radial offset
+        /// from the shoulder-elbow axis shrunk most near the shoulder) and the neck is slimmed. Vertices move by
+        /// their skin weight on the bone, so seams stay closed and skinning is unchanged.
+        /// </summary>
+        public const float DeltoidShrink = 0.22f, UpperArmShrink = 0.08f, NeckShrink = 0.12f;
+
+        public static string Reshape(Transform root, SkinnedMeshRenderer smr, HumanBone[] human)
+        {
+            var mesh = smr.sharedMesh;
+            var bones = smr.bones;
+            var bindposes = mesh.bindposes;
+            var weights = mesh.boneWeights;
+            if (bones == null || weights == null || weights.Length != mesh.vertexCount) return "reshape skipped";
+            var names = HumanBoneNames(human);
+            var meshToRoot = root.worldToLocalMatrix * smr.transform.localToWorldMatrix;
+            var rootToMesh = meshToRoot.inverse;
+            int IndexOf(Transform t) { for (int i = 0; i < bones.Length; i++) if (bones[i] == t) return i; return -1; }
+            Vector3 RestMesh(Transform t)
+            {
+                int bi = IndexOf(t);
+                if (bi >= 0 && bi < bindposes.Length) return bindposes[bi].inverse.MultiplyPoint3x4(Vector3.zero);
+                return rootToMesh.MultiplyPoint3x4(root.InverseTransformPoint(t.position));
+            }
+            var verts = mesh.vertices;
+            int moved = 0;
+            void Shrink(string boneName, string childName, Func<float, float> amount)
+            {
+                var b = FindBone(root, names, boneName);
+                var c = FindBone(root, names, childName);
+                if (b == null || c == null) return;
+                int bi = IndexOf(b);
+                if (bi < 0) return;
+                var a = RestMesh(b); var e = RestMesh(c);
+                var axis = e - a; float len = axis.magnitude; if (len < 1e-4f) return; axis /= len;
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    var w = weights[v];
+                    float wb = (w.boneIndex0 == bi ? w.weight0 : 0f) + (w.boneIndex1 == bi ? w.weight1 : 0f)
+                             + (w.boneIndex2 == bi ? w.weight2 : 0f) + (w.boneIndex3 == bi ? w.weight3 : 0f);
+                    if (wb <= 0.01f) continue;
+                    var d = verts[v] - a;
+                    float t = Mathf.Clamp01(Vector3.Dot(d, axis) / len);
+                    var onAxis = a + axis * (t * len);
+                    float k = amount(t) * wb;
+                    verts[v] = onAxis + (verts[v] - onAxis) * (1f - k);
+                    moved++;
+                }
+            }
+            Func<float, float> arm = t => Mathf.Lerp(DeltoidShrink, UpperArmShrink, Mathf.SmoothStep(0f, 1f, t / 0.6f));
+            Shrink("LeftUpperArm", "LeftLowerArm", arm);
+            Shrink("RightUpperArm", "RightLowerArm", arm);
+            Shrink("Neck", "Head", t => NeckShrink);
+            mesh.vertices = verts;
+            mesh.RecalculateBounds();
+            return "reshaped " + moved + " vertices";
         }
 
         /// <summary>Bakes one renderer's mesh in place. Returns a summary, or null when skipped.</summary>
