@@ -778,7 +778,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     if (animator == null) animator = model.AddComponent<Animator>();
                     if (AnimatorController != null) animator.runtimeAnimatorController = AnimatorController;
                     animator.applyRootMotion = false;
-                    if (!kits || !SinglePlayerKitDresser.Dress(model, Session, HomeClub, AwayClub, id))
+                    if (!SinglePlayerKitDresser.Dress(model, Session, HomeClub, AwayClub, id, kits))
                     foreach (var r in model.GetComponentsInChildren<Renderer>())
                     {
                         var block = new MaterialPropertyBlock();
