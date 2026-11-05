@@ -79,6 +79,26 @@ namespace OpenFifa.Tests.Editor.Sim
         }
 
         [Test]
+        public void BallCarrier_DrivesThroughAChallenge_KeepsHisRun()
+        {
+            var sim = Open(7);
+            var c = sim.AttributesOf(9);
+            c.Balance = 99; c.Strength = 99; c.BallControl = 99;
+            SimTestHelpers.Place(sim, 9, 0f, 0f);
+            SimTestHelpers.Place(sim, 15, 0.3f, 0.75f);
+            sim.State.Players[9].Velocity = new SimVec3(0f, 0f, 5f);
+            sim.State.Players[9].Facing = 0f;
+            SimTestHelpers.SetBall(sim, new SimVec3(0f, 0.11f, 0.4f), new SimVec3(0f, 0f, 5f));
+            sim.State.Owner = 9;
+            sim.State.Players[9].NextTouchTick = sim.State.Tick + 1000;
+            var intents = SimTestHelpers.IdleIntents();
+            intents[9] = PlayerIntent.MoveOnly(new SimVec3(0f, 0f, 1f), true);
+            for (int t = 0; t < 4; t++) sim.Step(intents);
+            Assert.That(sim.State.Players[9].Velocity.Flat.Magnitude, Is.GreaterThan(4.5f));
+            Assert.AreEqual(9, sim.State.Owner);
+        }
+
+        [Test]
         public void PlayerOnTheGround_IsNotShovedByARunner()
         {
             var sim = Open(5);

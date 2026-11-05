@@ -8,8 +8,8 @@ namespace OpenFifa.Core
     {
         /// <summary>
         /// Keeps players at least two separation radii apart (one deterministic pass in id order). Each overlap is a
-        /// contact between two bodies: the overlap is split by inverse mass (the heavier, stronger player moves less;
-        /// a restart taker does not move at all), and in open play their closing speed along the contact normal is
+        /// contact between two bodies: the overlap is split evenly (or partly by mass, SeparationMassWeight; a restart
+        /// taker and a braced kicker do not move at all), and in open play their closing speed along the contact normal is
         /// mostly absorbed as an inelastic impulse shared by mass, so a light winger running into a centre back
         /// bounces off while the centre back barely slows. An opponent whose speed change exceeds what his balance
         /// can take stumbles (off balance, and a carrier spills the ball) or goes down; a player knocked down from
@@ -51,13 +51,16 @@ namespace OpenFifa.Core
                     else if (downI && downJ) wi = 0.5f;
                     else if (downI) wi = 0f; // he lies still; j steps around him
                     else if (downJ) wi = 1f;
-                    else wi = mj / (mi + mj);
+                    else wi = ac.SeparationMassWeight * (mj / (mi + mj)) + (1f - ac.SeparationMassWeight) * 0.5f;
                     _s.Players[i].Position -= n * (push * wi);
                     _s.Players[j].Position += n * (push * (1f - wi));
 
                     if (!live || downI || downJ) continue;
                     float closing = -SimVec3.Dot(_s.Players[j].Velocity.Flat - _s.Players[i].Velocity.Flat, n);
-                    if (closing <= 0f) continue;
+                    // Jostling (players leaning on each other tick after tick) is only the position correction above:
+                    // bleeding speed on every touching tick slowed every pressed carrier to a crawl. A real collision
+                    // (a closing speed of at least BodyContactMinSpeed) exchanges momentum once.
+                    if (closing < ac.BodyContactMinSpeed) continue;
                     float impulse = ac.BodyContactAbsorb * closing * (mi * mj / (mi + mj));
                     float dvi = impulse / mi, dvj = impulse / mj;
                     if (bracedI != bracedJ)
@@ -66,10 +69,18 @@ namespace OpenFifa.Core
                         dvi = bracedI ? 0f : ac.BodyContactAbsorb * closing;
                         dvj = bracedJ ? 0f : ac.BodyContactAbsorb * closing;
                     }
-                    _s.Players[i].Velocity -= n * dvi;
-                    _s.Players[j].Velocity += n * dvj;
+                    // A challenge on the ball carrier exchanges no momentum: he and the challenger slide off each other
+                    // (position correction only) and his balance judges the hit below, so a strong challenge can still
+                    // knock him off the ball. Exchanging momentum there stopped carriers dead and parked the challenger
+                    // in front of them, which cut a scripted user's goals against World Class AI by about a third.
+                    bool carrierContact = _s.Owner == i || _s.Owner == j;
+                    if (!carrierContact)
+                    {
+                        _s.Players[i].Velocity -= n * dvi;
+                        _s.Players[j].Velocity += n * dvj;
+                    }
 
-                    if (closing < ac.BodyContactMinSpeed || TeamOf(i) == TeamOf(j)) continue;
+                    if (TeamOf(i) == TeamOf(j)) continue;
                     int knocked = dvi >= dvj ? i : j;
                     int other = knocked == i ? j : i;
                     float dv = knocked == i ? dvi : dvj;

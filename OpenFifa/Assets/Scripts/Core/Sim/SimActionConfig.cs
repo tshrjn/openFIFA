@@ -241,7 +241,14 @@ namespace OpenFifa.Core
         /// rigid: some of the approach is absorbed by leaning in.
         /// </summary>
         public float BodyContactAbsorb = 0.85f;
-        /// <summary>Closing speed (m/s) below which a contact is just a lean (no stumble, no event).</summary>
+        /// <summary>
+        /// How much the overlap correction is split by mass (1) rather than evenly (0). Even by default: splitting it by
+        /// mass let heavy keepers and centre backs shove strikers off their line every tick, which cut a scripted user's
+        /// goals against Legendary AI by about a fifth. Mass still decides the momentum exchange and who stumbles.
+        /// </summary>
+        public float SeparationMassWeight = 0f;
+        /// <summary>Closing speed (m/s) below which a contact is just a lean: position correction only (no momentum
+        /// exchange, no stumble, no event).</summary>
         public float BodyContactMinSpeed = 1.2f;
         /// <summary>A contact that only holds the player up is reported (BodyContact, Detail 0) from this closing speed (m/s).</summary>
         public float BodyContactEventSpeed = 4.0f;
