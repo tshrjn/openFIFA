@@ -7,6 +7,8 @@ OUT="${1:?usage: render.sh <out-dir> [--no-build]}"; BUILD=1; [ "${2:-}" = "--no
 HERE="$(cd "$(dirname "$0")" && pwd)"; REPO="$(cd "$HERE/../.." && pwd)"; PROJECT="$REPO/OpenFifa"
 UNITY="${UNITY:-$HOME/Unity/6000.3.10f1/Editor/Unity}"
 PLAYER="$PROJECT/build/LooksCapture/OpenFootball.x86_64"
+# Fresh output directory: stale stills from an earlier run must never pass as this render.
+[ -e "$OUT" ] && [ -n "$(ls -A "$OUT" 2>/dev/null)" ] && { echo "output dir $OUT is not empty"; exit 1; }
 mkdir -p "$OUT"
 if ! pgrep -f "projectPath $PROJECT" >/dev/null; then rm -f "$PROJECT/Temp/UnityLockfile"; fi
 if [ "$BUILD" = 1 ]; then
@@ -16,8 +18,12 @@ if [ "$BUILD" = 1 ]; then
 fi
 timeout 600 xvfb-run -a -s "-screen 0 1280x720x24" "$PLAYER" -screen-width 1280 -screen-height 720 \
   -screen-fullscreen 0 -force-glcore -spBot -spLevel 3 -spSeed 1 -spHome arsenal -spAway chelsea \
-  -spCapture "$OUT" -spLooks -logFile "$OUT/player.log" || true
+  -spCapture "$OUT" -spLooks -logFile "$OUT/player.log" || { echo "capture failed (exit $?), see $OUT/player.log"; exit 1; }
 rm -rf "$OUT/frames"
-ls "$OUT"/looks_face_p*.png >/dev/null 2>&1 || { echo "no looks stills, see $OUT/player.log"; exit 1; }
+# The capture writes looks.txt last: require it and every expected still (6 players x 5 shots + 2 match stills).
+[ -f "$OUT/looks.txt" ] || { echo "capture incomplete (no looks.txt), see $OUT/player.log"; exit 1; }
+for k in 0 1 2 3 4 5; do for shot in face face34 profile body bodyback; do
+  [ -f "$OUT/looks_${shot}_p$k.png" ] || { echo "missing looks_${shot}_p$k.png"; exit 1; }; done; done
+for f in looks_broadcast.png looks_closeup_ingame.png; do [ -f "$OUT/$f" ] || { echo "missing $f"; exit 1; }; done
 python3 "$HERE/sheets.py" "$OUT"
 echo "[looks] $OUT/sheets"

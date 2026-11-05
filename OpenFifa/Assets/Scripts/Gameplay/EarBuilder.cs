@@ -4,12 +4,21 @@ using UnityEngine;
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Procedural ears for the mannequin head (the Quaternius head has none). Each ear is a small curved shell
-    /// (helix rim + bowl) in the head bone's space, parented to the head bone like <see cref="HairCapBuilder"/>
-    /// caps, with one shared URP Lit material per skin tone. About 300 triangles per pair.
+    /// Procedural ears for the mannequin head (the Quaternius head has none). Each ear is a flat elliptical plate
+    /// whose back and top rim stand slightly off the skull, in the head bone's space and parented to the head bone
+    /// like <see cref="HairCapBuilder"/> caps, with one shared URP Lit material per skin tone.
+    /// <see cref="VertexCount"/> vertices and <see cref="TriangleCount"/> triangles per pair.
     /// </summary>
     public static class EarBuilder
     {
+        private const int Around = 18, Rings = 5;
+
+        /// <summary>Vertices in the ear-pair mesh.</summary>
+        public const int VertexCount = 2 * (Rings + 1) * (Around + 1);
+
+        /// <summary>Triangles in the ear-pair mesh.</summary>
+        public const int TriangleCount = 2 * Rings * Around * 2;
+
         private static Mesh _mesh;
         private static readonly Dictionary<Color32, Material> Materials = new Dictionary<Color32, Material>();
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -45,8 +54,8 @@ namespace OpenFifa.Gameplay
             var shader = Shader.Find("Universal Render Pipeline/Lit");
             if (shader == null) return null;
             m = new Material(shader) { name = "Ear_" + ColorUtility.ToHtmlStringRGB(skin), hideFlags = HideFlags.DontSave };
-            // Ears are thin and back-lit: a touch warmer and redder than the face.
-            var c = new Color(skin.r * 1.02f, skin.g * 0.93f, skin.b * 0.9f, 1f);
+            // Warmer and redder than the face, and a little brighter: URP Lit lacks the kit shader's skin fill.
+            var c = new Color(Mathf.Clamp01(skin.r * 1.17f), Mathf.Clamp01(skin.g * 1.07f), Mathf.Clamp01(skin.b * 1.03f), 1f);
             if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, c);
             if (m.HasProperty(SmoothnessId)) m.SetFloat(SmoothnessId, 0.32f);
             if (m.HasProperty(CullId)) m.SetFloat(CullId, 0f);
@@ -70,12 +79,11 @@ namespace OpenFifa.Gameplay
             return _mesh;
         }
 
-        // Ear: an elliptical cup, 6 cm tall and 3.4 cm deep, standing ~1.6 cm off the skull at the rim
-        // and flush at the front edge, centred behind the jaw line at eye-to-nose height.
+        // Ear: a flat elliptical plate, 6 cm tall and 3.4 cm deep, clear of the skull (|x| 0.087 m), its back and top
+        // rim standing up to ~1.3 cm off, centred behind the jaw line at eye-to-nose height.
         private static void AddEar(List<Vector3> verts, List<Vector3> normals, List<int> tris, int side)
         {
-            const int Around = 18, Rings = 5;
-            var centre = new Vector3(side * 0.079f, 0.212f, -0.022f);
+            var centre = new Vector3(side * 0.087f, 0.212f, -0.022f);
             int start = verts.Count;
             for (int r = 0; r <= Rings; r++)
             {
@@ -87,12 +95,11 @@ namespace OpenFifa.Gameplay
                     float z = Mathf.Cos(t) * 0.017f * u;
                     // Rim stands off the head, more at the back/top; the lobe and front stay close.
                     float back = Mathf.Clamp01(0.5f - 0.5f * Mathf.Cos(t) + 0.3f * Mathf.Sin(t));
-                    float off = (0.004f + 0.014f * back) * u * u;
-                    float bowl = 0.002f * (1f - u);                  // flat plate, no recess (a recess renders as a dark hole)
-                    var k = centre + new Vector3(side * (off + bowl + 0.003f * Mathf.Sin(u * Mathf.PI)), y, z - 0.004f * u);
-                    verts.Add(HairCapBuilder.KitToBonePoint(k));
+                    float off = 0.005f * u + 0.008f * back * u * u;
+                    var k = centre + new Vector3(side * (off + 0.003f * Mathf.Sin(u * Mathf.PI)), y, z - 0.004f * u);
+                    verts.Add(HairCapBuilder.KitToBone(k));
                     var n = new Vector3(side * 1f, -0.25f * y / 0.03f, -0.4f * z / 0.017f * u).normalized;
-                    normals.Add(HairCapBuilder.KitToBoneDir(n));
+                    normals.Add(HairCapBuilder.KitDirToBone(n));
                 }
             }
             for (int r = 0; r < Rings; r++)

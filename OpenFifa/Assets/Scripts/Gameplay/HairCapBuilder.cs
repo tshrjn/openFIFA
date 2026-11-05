@@ -191,17 +191,13 @@ namespace OpenFifa.Gameplay
             }
         }
 
-        /// <summary>Kit-space head point to head-bone space.</summary>
-        public static Vector3 KitToBonePoint(Vector3 k) => KitToBone(k);
-
-        /// <summary>Kit-space direction to head-bone space.</summary>
-        public static Vector3 KitToBoneDir(Vector3 d) => KitDirToBone(d);
-
-        private static Vector3 KitToBone(Vector3 k)
+        /// <summary>Kit-space head point to head-bone space (also used by <see cref="EarBuilder"/>).</summary>
+        public static Vector3 KitToBone(Vector3 k)
         {
             return HeadCentreBone + Vector3.right * k.x + KitUpInBone * (k.y - HeadCentreKitY) + KitFrontInBone * (k.z - HeadCentreKitZ);
         }
 
-        private static Vector3 KitDirToBone(Vector3 d) => (Vector3.right * d.x + KitUpInBone * d.y + KitFrontInBone * d.z).normalized;
+        /// <summary>Kit-space direction to head-bone space.</summary>
+        public static Vector3 KitDirToBone(Vector3 d) => (Vector3.right * d.x + KitUpInBone * d.y + KitFrontInBone * d.z).normalized;
     }
 }

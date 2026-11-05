@@ -499,11 +499,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 int id = picked[n];
                 var p = _c.PlayerTransform(id);
                 if (p == null || !p.gameObject.activeInHierarchy) continue;
-                var look = PlayerLook.ForPlayer(ids != null && id < ids.Length ? ids[id] : id.ToString());
+                var look = PlayerLook.ForPlayer(LookId(ids, id));
                 log.Append($"p{n} simId={id} skin={look.SkinIndex} hair={look.Hair} facial={look.Facial}\n");
                 var fwd = p.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
                 var right = Vector3.Cross(Vector3.up, fwd);
                 float headY = HeadHeight(p);
+                var hidden = HideOtherPlayers(id, count);
                 var face = new Vector3(p.position.x, headY, p.position.z);
                 var body = p.position + Vector3.up * 0.95f;
                 unityCam.fieldOfView = 26f;
@@ -518,6 +519,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_body_p{n}.png"));
                 camT.position = body - fwd * 4.2f + Vector3.up * 0.2f; camT.LookAt(body);
                 yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_bodyback_p{n}.png"));
+                foreach (var r in hidden) if (r != null) r.enabled = true;
             }
             unityCam.fieldOfView = oldFov;
             cam.enabled = true;
@@ -527,6 +529,24 @@ namespace OpenFifa.Gameplay.SinglePlayer
             File.WriteAllText(Path.Combine(OutputDir, "looks.txt"), log.ToString());
             Debug.Log("[capture] looks done");
             Application.Quit(0);
+        }
+
+        /// <summary>Roster id the kit dresser uses for a sim id (falls back to the sim id, as SinglePlayerKitDresser does).</summary>
+        private static string LookId(string[] ids, int id) => (ids != null && id < ids.Length ? ids[id] : null) ?? id.ToString();
+
+        /// <summary>Disables the enabled renderers of every other player (portraits stay unobstructed). Returns them.</summary>
+        private List<Renderer> HideOtherPlayers(int keep, int count)
+        {
+            var hidden = new List<Renderer>();
+            for (int i = 0; i < count; i++)
+            {
+                if (i == keep) continue;
+                var t = _c.PlayerTransform(i);
+                if (t == null) continue;
+                foreach (var r in t.GetComponentsInChildren<Renderer>())
+                    if (r.enabled) { r.enabled = false; hidden.Add(r); }
+            }
+            return hidden;
         }
 
         /// <summary>Head centre height of a player model (Animator head bone, else bounds top minus 0.12 m).</summary>
@@ -561,7 +581,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 for (int id = 0; id < count && picked.Count < want - 1; id++)
                 {
                     if (id == 0 || id == per || picked.Contains(id)) continue;
-                    var look = PlayerLook.ForPlayer(ids != null && id < ids.Length ? ids[id] : id.ToString());
+                    var look = PlayerLook.ForPlayer(LookId(ids, id));
                     bool newSkin = !skins.Contains(look.SkinIndex), newHair = !hairs.Contains(look.Hair);
                     if ((pass == 0 && !(newSkin && newHair)) || (pass == 1 && !(newSkin || newHair))) continue;
                     picked.Add(id); skins.Add(look.SkinIndex); hairs.Add(look.Hair);

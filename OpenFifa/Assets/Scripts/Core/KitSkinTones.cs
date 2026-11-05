@@ -9,7 +9,7 @@ namespace OpenFifa.Core
     {
         public static readonly string[] Palette =
         {
-            "#F1C9A5", "#E0AC88", "#C68863", "#A86E4B", "#8D583A", "#74462D", "#5C3626",
+            "#F1C9A5", "#E0AC88", "#C68863", "#A86E4B", "#8A5537", "#6B3F28", "#4E2C1C",
         };
 
         /// <summary>Tone for a player id (empty id = middle of the palette).</summary>

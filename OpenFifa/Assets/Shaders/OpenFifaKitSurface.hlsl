@@ -164,7 +164,7 @@ void KitComputeSkinnedSpace(inout KitSpace k, float4 body0, float4 body1)
     half socks = KitSoftStep(_BodyLimbLimits.w, legT, soft) * (1.0 - boots);
 
     // Torso: neckline (dipping slightly at the front, rising over the trapezius), shirt, shorts below the waist.
-    float collarY = -0.012 - 0.03 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.055, 0.0);
+    float collarY = -0.008 - 0.014 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.05, 0.0);
     half neckSkin = KitSoftStep(collarY, kp.y, soft * 0.5);
     half torsoShorts = (1.0 - KitSoftStep(hem, kp.y, soft)) * (1.0 - neckSkin);
     half torsoShirt = (1.0 - neckSkin) * (1.0 - torsoShorts);
@@ -383,7 +383,7 @@ half2 KitCollar(KitSpace k)
 // Fabric micro detail (tangent space, x along knitTangent, y along knitBitangent)
 // ----------------------------------------------------------------------------------------
 
-half3 KitKnitNormalTS(float2 kc, half strength)
+half3 KitKnitNormalTS(float2 kc, half strength, half fabric)
 {
     float f = max(_KnitScale, 1.0);                  // cycles per metre
     float2 a = kc * f * TWO_PI;
@@ -403,7 +403,7 @@ half3 KitKnitNormalTS(float2 kc, half strength)
     float2 w = kc * float2(5.3, 8.1);
     float2 wrinkle = float2(cos(w.x + 1.7 * sin(w.y)), cos(w.y * 1.3 + w.x * 0.6)) * _WrinkleStrength;
 
-    half2 xy = -(slope * strength * fade) + wrinkle;
+    half2 xy = -(slope * strength * fade) + wrinkle * fabric;   // no drape wrinkles on bare skin
     return normalize(half3(xy, 1.0));
 }
 
@@ -456,6 +456,10 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     half hair = KitSoftStep(hairline, kp.y, 0.003);
     half sideburn = smoothstep(0.066, 0.078, ax) * step(0.205, kp.y) * smoothstep(-0.1, 0.05, nz) * smoothstep(0.6, 0.4, nz);
     hair = saturate(hair + sideburn) * onHead;
+    // Keep painted hair off the skin under the ear meshes, or it shows through as a dark patch.
+    half earZone = smoothstep(0.070, 0.076, ax) * smoothstep(0.185, 0.190, kp.y) * smoothstep(0.248, 0.243, kp.y)
+                 * smoothstep(-0.050, -0.042, kp.z) * smoothstep(0.010, 0.004, kp.z);
+    hair *= 1.0 - earZone;
     half hairAmount = hairStyle >= 2 ? 1.0 : (hairStyle == 1 ? 0.6 : 0.0);
     half3 hairShade = hairCol * lerp(0.75, 1.2, strands);
     half3 buzz = lerp(skinCol, hairCol, 0.55 + 0.35 * grain);
@@ -492,7 +496,7 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
         q.y -= 0.25 * q.x * q.x * sign(q.y);
         half e = 1.0 - smoothstep(0.85, 1.0, length(q));
         eyes = max(eyes, e);
-        iris = max(iris, 1.0 - smoothstep(0.0042, 0.0050, length(p - c - float2(0.0, -0.0006))));
+        iris = max(iris, 1.0 - smoothstep(0.0031, 0.0038, length(p - c - float2(0.0, -0.0006))));   // sclera corners show
         pupil = max(pupil, 1.0 - smoothstep(0.0016, 0.0022, length(p - c - float2(0.0, -0.0006))));
         float2 lq = (p - c - float2(0.0, 0.0030)) / float2(0.0135, 0.0030);
         lidLine = max(lidLine, (1.0 - smoothstep(0.6, 1.0, length(lq))) * step(c.y + 0.0012, p.y));
@@ -501,12 +505,14 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
         bag = max(bag, 1.0 - smoothstep(0.4, 1.0, length((p - c - float2(0.0, -0.011)) / float2(0.013, 0.005))));
     }
     half3 irisCol = lerp(half3(0.13, 0.08, 0.05), half3(0.22, 0.31, 0.37), _HeadStyle.w);
-    albedo *= 1.0 - f * (0.22 * socket + 0.08 * bag);                                  // brow ridge / socket shade
+    half lightness = saturate(dot(skinCol, half3(0.3, 0.5, 0.2)) * 1.6);
+    // On deep tones the socket and lash line are kept light so the eyes stay readable in shade.
+    albedo *= 1.0 - f * (0.22 * socket * lerp(0.4, 1.0, lightness) + 0.08 * bag);                                  // brow ridge / socket shade
     half3 sclera = lerp(half3(0.72, 0.66, 0.60), skinCol, 0.15);
     albedo = lerp(albedo, sclera, f * eyes);
     albedo = lerp(albedo, irisCol, f * eyes * iris);
     albedo = lerp(albedo, half3(0.02, 0.02, 0.02), f * eyes * pupil);
-    albedo = lerp(albedo, skinCol * 0.28, f * lidLine * 0.85);                          // lash line / upper lid
+    albedo = lerp(albedo, skinCol * 0.28, f * lidLine * 0.85 * lerp(0.35, 1.0, lightness));                          // lash line / upper lid
     albedo = lerp(albedo, skinCol * 0.70, f * lowerLid * 0.35 * (1.0 - eyes));
 
     // Brows: thick at the inner end, tapering outwards, soft edges and hair grain.
@@ -528,9 +534,8 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     albedo *= 1.0 - 0.06 * philtrum;
 
     // Cheeks and nose warmth (stronger on lighter skin), contour under the cheekbones.
-    half lightness = saturate(dot(skinCol, half3(0.3, 0.5, 0.2)) * 1.6);
-    half cheeks = f * (1.0 - smoothstep(0.4, 1.0, length((float2(ax, kp.y) - float2(0.040, 0.198)) / float2(0.022, 0.018))));
-    albedo = lerp(albedo, albedo * half3(1.06, 0.90, 0.88), (cheeks + 0.6 * noseZone) * 0.5 * lightness);
+    half cheeks = f * (1.0 - smoothstep(0.0, 1.0, length((float2(ax, kp.y) - float2(0.040, 0.198)) / float2(0.030, 0.024))));
+    albedo = lerp(albedo, albedo * half3(1.06, 0.90, 0.88), (cheeks + 0.6 * noseZone) * 0.3 * lightness);
     half contour = f * (1.0 - smoothstep(0.4, 1.0, length((float2(ax, kp.y) - float2(0.052, 0.178)) / float2(0.014, 0.022))));
     albedo *= 1.0 - 0.07 * contour;
 
@@ -542,9 +547,7 @@ half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
     albedo = lerp(albedo, skinCol * 0.4, f * smoothstep(0.019, 0.013, ax) * (1.0 - smoothstep(0.0004, 0.0012, abs(kp.y - 0.1615))) * 0.8);
     albedo *= 1.0 - f * 0.08 * (1.0 - smoothstep(0.4, 1.0, length((p - float2(0.0, 0.150)) / float2(0.016, 0.005))));  // under-lip shadow
 
-    // Ears: a darker rim on the head sides.
-    half ears = onHead * smoothstep(0.075, 0.085, ax) * step(0.19, kp.y) * step(kp.y, 0.245) * smoothstep(0.35, 0.0, abs(nz - 0.0)) * (1.0 - hair);
-    albedo = lerp(albedo, skinCol * 0.82, ears * 0.6);
+    // Ears are meshes (EarBuilder); no painted ear rim.
 
     return saturate(hair * hairAmount * step(1.5, hairStyle) + facialMask * step(1.5, facial));
 }
@@ -574,6 +577,7 @@ KitSurface KitBuildSurface(KitSpace k)
 
     // --- Base garment colour -------------------------------------------------------------
     half3 shirt;
+    half collarSkin = 0.0;   // skin showing inside the V of the shirt
     half fabricSmoothness = _FabricSmoothness;
     half3 licensedNormal = half3(0, 0, 1);
 
@@ -600,6 +604,7 @@ KitSurface KitBuildSurface(KitSpace k)
         half2 collar = KitCollar(k);
         shirt = lerp(shirt, _TertiaryColor.rgb, collar.x);
         shirt = lerp(shirt, _SkinColor.rgb, collar.y);
+        collarSkin = collar.y;
     }
 
     // Derivative-based terms are evaluated before any per-pixel branching.
@@ -641,10 +646,12 @@ KitSurface KitBuildSurface(KitSpace k)
     half4 w = k.regionW;
     half glove = k.gloveW;
     half skin = saturate(1.0 - dot(w, 1.0) - glove);
-    half fabric = w.x + w.y + w.z;
+    // Skin inside the V is skin, not fabric: no knit, sheen, sweat or dirt there, and it gets the skin lighting.
+    skin += collarSkin * w.x;
+    half fabric = w.x * (1.0 - collarSkin) + w.y + w.z;
     half3 shortsCol = lerp(_ShortsColor.rgb, _TertiaryColor.rgb, shortsStripe);
     half3 socksCol = lerp(socksBase, _TertiaryColor.rgb, socksBand);
-    half3 albedo = shirt * w.x + shortsCol * w.y + socksCol * w.z + bootCol * w.w
+    half3 albedo = shirt * (w.x * (1.0 - collarSkin)) + shortsCol * w.y + socksCol * w.z + bootCol * w.w
                  + _GloveColor.rgb * glove + _SkinColor.rgb * skin;
     int region = (int)k.region;
 
@@ -738,7 +745,7 @@ KitSurface KitBuildSurface(KitSpace k)
     o.skinMask = skin * (1.0 - hairCover);
 
     // --- Micro normal ------------------------------------------------------------------------
-    half3 knit = KitKnitNormalTS(k.knitCoord, knitStrength);
+    half3 knit = KitKnitNormalTS(k.knitCoord, knitStrength, fabric);
     // Whiteout blend of licensed normal and knit detail.
     o.normalTS = normalize(half3(licensedNormal.xy + knit.xy, licensedNormal.z * knit.z));
 

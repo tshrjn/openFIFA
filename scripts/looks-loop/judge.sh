@@ -8,12 +8,16 @@ set -uo pipefail
 CAND="$(realpath "$1")"; BEST="$(realpath "$2")"; OUT="$3"; mkdir -p "$OUT"; OUT="$(realpath "$OUT")"
 HERE="$(cd "$(dirname "$0")" && pwd)"; TIMEOUT="${JUDGE_TIMEOUT:-900}"
 if [ $((RANDOM % 2)) = 0 ]; then A="$CAND"; B="$BEST"; echo cand=A > "$OUT/order"; else A="$BEST"; B="$CAND"; echo cand=B > "$OUT/order"; fi
+# Blind: the judges see anonymous copies (A_faces.png, ...) in a neutral directory, run there, and never see
+# iteration names, paths or the order file. Their raw output is copied back to $OUT afterwards.
+WORK="$(mktemp -d "${TMPDIR:-/tmp}/looks-judge-XXXXXX")"
 SHEETS=(faces angles bodies backs ingame)
 IMGS=(); LIST=""
 for s in "${SHEETS[@]}"; do
   for L in A B; do d=$([ $L = A ] && echo "$A" || echo "$B"); f="$d/sheets/$s.png"
-    [ -f "$f" ] && { IMGS+=("$f"); LIST+="- Set $L, $s: $f"$'\n'; }; done; done
-cat > "$OUT/prompt.md" <<P
+    [ -f "$f" ] || { echo "missing $f"; exit 1; }
+    cp "$f" "$WORK/${L}_$s.png"; IMGS+=("$WORK/${L}_$s.png"); LIST+="- Set $L, $s: $WORK/${L}_$s.png"$'\n'; done; done
+cat > "$WORK/prompt.md" <<P
 You are a judge on a visual council for OpenFootball, an original football game in Unity. We are hill-climbing the
 look of the PLAYERS ONLY: faces, hair, skin and body (proportions, joints/seams, how the kit sits on the body, neckline).
 Ignore stadium, pitch, HUD, crowd, kit design/colours and animation timing except where they show the body badly.
@@ -38,14 +42,15 @@ Output ONLY this JSON, no prose before or after:
 {"A":{"face":0,"hair":0,"skin":0,"body":0,"overall":0},"B":{"face":0,"hair":0,"skin":0,"body":0,"overall":0},
  "better":"A|B|tie","confidence":"low|medium|high","why":"one or two sentences","fixes":["...","...","..."]}
 P
-run_claude(){ (cd "$OUT" && timeout "$TIMEOUT" claude -p --model claude-opus-5-5 --permission-mode dontAsk \
-   --allowedTools Read --add-dir "$A" "$B" < "$OUT/prompt.md" > "$OUT/claude.raw" 2> "$OUT/claude.err"); }
+cp "$WORK/prompt.md" "$OUT/prompt.md"
+run_claude(){ (cd "$WORK" && timeout "$TIMEOUT" claude -p --model claude-opus-5-5 --permission-mode dontAsk \
+   --allowedTools Read < "$WORK/prompt.md" > "$OUT/claude.raw" 2> "$OUT/claude.err"); }
 run_gpt(){ local im=(); for f in "${IMGS[@]}"; do im+=(-i "$f"); done
-  (cd "$OUT" && timeout "$TIMEOUT" codex exec -m gpt-6.1-sol -s read-only --skip-git-repo-check "${im[@]}" -- - \
-   < "$OUT/prompt.md" > "$OUT/gpt.raw" 2> "$OUT/gpt.err"); }
-run_gemini(){ (cd "$OUT" && timeout "$TIMEOUT" agy --model gemini-4-argon-high --mode plan --add-dir "$A" --add-dir "$B" \
-   --add-dir "$OUT" --print-timeout "${TIMEOUT}s" \
-   -p "Read the file $OUT/prompt.md with your file-read tool and follow it exactly. Run NO shell commands; use only your file-read tool. Output only the JSON." \
+  (cd "$WORK" && timeout "$TIMEOUT" codex exec -m gpt-6.1-sol -s read-only --skip-git-repo-check "${im[@]}" -- - \
+   < "$WORK/prompt.md" > "$OUT/gpt.raw" 2> "$OUT/gpt.err"); }
+run_gemini(){ (cd "$WORK" && timeout "$TIMEOUT" agy --model gemini-4-argon-high --mode plan --add-dir "$WORK" \
+   --print-timeout "${TIMEOUT}s" \
+   -p "Read the file $WORK/prompt.md with your file-read tool and follow it exactly. Run NO shell commands; use only your file-read tool. Output only the JSON." \
    < /dev/null > "$OUT/gemini.raw" 2> "$OUT/gemini.err"); }
 extract(){ python3 - "$1" "$2" <<'PY'
 import json,sys
@@ -61,4 +66,5 @@ PY
 }
 for n in claude gpt gemini; do ( "run_$n"; extract "$OUT/$n.raw" "$OUT/$n.json" || rm -f "$OUT/$n.json" ) & done
 wait
+rm -rf "$WORK"
 python3 "$HERE/verdict.py" "$OUT"
