@@ -19,5 +19,11 @@ namespace OpenFifa.Core
         SlideTackle = 9,
         Jockey = 10,
         Shield = 11,
+
+        /// <summary>
+        /// One-shot dribbling skill move (<see cref="PlayerIntent.Skill"/>); <see cref="PlayerIntent.Aim"/> picks the side.
+        /// Only the ball carrier can perform one.
+        /// </summary>
+        SkillMove = 12,
     }
 }

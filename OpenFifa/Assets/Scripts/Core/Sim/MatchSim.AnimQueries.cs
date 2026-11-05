@@ -24,6 +24,8 @@ namespace OpenFifa.Core
             if (playerId < 0 || playerId >= MatchSimState.PlayerCount || _s.Owner != playerId || _s.KeeperHolding) return false;
             ref readonly SimPlayer p = ref _s.Players[playerId];
             if (p.SentOff) return false;
+            // A skill move carries the ball on a scripted path; its release touch arrives as a DribbleTouch event.
+            if (p.ActionState == SimPlayerActionState.Skill) return false;
             var ac = _cfg.Actions;
             float reach = ac.ControlRadius * DribbleCatchUpFactor;
             float dt = _cfg.Dt, bdt = _cfg.BallDt;

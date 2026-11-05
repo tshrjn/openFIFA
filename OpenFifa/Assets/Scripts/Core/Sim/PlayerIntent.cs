@@ -31,6 +31,9 @@ namespace OpenFifa.Core
         /// </summary>
         public KickStyle Style;
 
+        /// <summary>Which skill move to perform when <see cref="Action"/> is <see cref="IntentAction.SkillMove"/>.</summary>
+        public SkillMoveKind Skill;
+
         public static PlayerIntent Idle => new PlayerIntent { TargetPlayerId = -1 };
 
         public static PlayerIntent MoveOnly(SimVec3 move, bool sprint = false) =>
@@ -41,6 +44,10 @@ namespace OpenFifa.Core
 
         public static PlayerIntent Kick(IntentAction action, float power, SimVec3 aim, int target, KickStyle style) =>
             new PlayerIntent { Action = action, Power = power, Aim = aim, TargetPlayerId = target, Style = style };
+
+        /// <summary>A skill move toward <paramref name="side"/> (world flat direction; its side of the facing picks the exit side).</summary>
+        public static PlayerIntent SkillMove(SkillMoveKind kind, SimVec3 side, SimVec3 move = default, bool sprint = false) =>
+            new PlayerIntent { Action = IntentAction.SkillMove, Skill = kind, Aim = side, Move = move, Sprint = sprint, TargetPlayerId = -1 };
 
         public bool IsKick => IsKickAction(Action);
 

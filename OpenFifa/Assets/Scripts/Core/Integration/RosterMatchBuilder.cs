@@ -102,6 +102,7 @@ namespace OpenFifa.Core
                 GkReflexes = G(RosterAttribute.GkReflexes),
                 GkPositioning = G(RosterAttribute.GkPositioning),
                 WeakFoot = p.WeakFoot,
+                SkillMoves = p.SkillMoves,
                 PreferredFoot = p.PreferredFoot == PreferredFoot.Left ? SimFoot.Left : SimFoot.Right,
                 Height = p.HeightCm / 100f,
                 IsGoalkeeper = p.PrimaryPosition == RosterPosition.GK,

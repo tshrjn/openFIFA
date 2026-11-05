@@ -51,5 +51,13 @@ namespace OpenFifa.Core
         FullTime,
         /// <summary>The loose ball bounced off a player's body. Player = that player, Other = previous toucher, Speed = ball speed after.</summary>
         Deflection,
+        /// <summary>A skill move started. Player = carrier, Detail = (int)SkillMoveKind, Value = execution quality 0..1,
+        /// Speed = move duration (s), Position = carrier. The move ends Speed seconds later with a DribbleTouch.</summary>
+        SkillMove,
+        /// <summary>A defender bit on a fake. Player = defender, Other = carrier.</summary>
+        WrongFooted,
+        /// <summary>Two bodies collided hard. Player = the one knocked (larger speed change), Other = the other player,
+        /// Speed = closing speed (m/s), Value = Player's speed change (m/s), Detail = 0 held up, 1 stumbled, 2 went down.</summary>
+        BodyContact,
     }
 }

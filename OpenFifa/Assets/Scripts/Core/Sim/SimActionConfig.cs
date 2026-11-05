@@ -205,6 +205,86 @@ namespace OpenFifa.Core
         public float KnuckleShotSpeedFactor = 1.05f;
         public float KnuckleShotResidualSpin = 1.5f;
 
+        // ---- Skill moves (SkillMoveCatalog has the per-move shapes). ----
+        /// <summary>
+        /// Master switch. Off until the skill-move clips exist: without them the body path plays over the run cycle and
+        /// a roulette or drag back reads as skating. Tests and the clip work turn it on.
+        /// </summary>
+        public bool SkillMovesEnabled = false;
+        /// <summary>Gap after a skill move ends before the next one can start (s): no chained roulettes.</summary>
+        public float SkillCooldown = 0.5f;
+        /// <summary>The ball must be within this flat distance of the carrier's feet to start a skill move.</summary>
+        public float SkillStartReach = 1.3f;
+        /// <summary>Defenders within this radius (m) of the carrier, and not behind him, can bite on a fake.</summary>
+        public float SkillBiteRadius = 4.0f;
+        /// <summary>Bite logit at full fake strength for an even matchup, and how much skill vs reading moves it.</summary>
+        public float SkillBiteBase = 0.4f;
+        public float SkillBiteSkillScale = 22f;
+        /// <summary>Bite logit shift for a jockeying defender (he is set and side-on, harder to sell).</summary>
+        public float SkillBiteJockeyMalus = 0.5f;
+        /// <summary>How long a bitten defender stays wrong-footed (s), and his lunge toward the fake (m/s).</summary>
+        public float WrongFootSeconds = 0.5f;
+        public float WrongFootLunge = 1.6f;
+        /// <summary>Turn rate and acceleration multiplier while wrong-footed or off balance.</summary>
+        public float WrongFootResponsiveness = 0.3f;
+        /// <summary>Tackle win-logit penalty for a wrong-footed or off-balance tackler.</summary>
+        public float WrongFootTackleMalus = 1.2f;
+        /// <summary>Release error sd (degrees) at zero quality, and extra loose-touch lead (m) for a botched move.</summary>
+        public float SkillReleaseErrorDeg = 25f;
+        public float SkillBotchLead = 1.6f;
+        /// <summary>Gap to the next dribble touch after the release (s).</summary>
+        public float SkillReleaseTouchGap = 0.3f;
+
+        // ---- Body contact (shoulder to shoulder, collisions). ----
+        /// <summary>
+        /// Share of the closing speed removed on contact (0 = bodies pass through, 1 = fully inelastic). Players are not
+        /// rigid: some of the approach is absorbed by leaning in.
+        /// </summary>
+        public float BodyContactAbsorb = 0.85f;
+        /// <summary>Effective mass multiplier for a kicker in his wind-up (planted on the ball).</summary>
+        public float BracedMassFactor = 4f;
+        /// <summary>
+        /// How much the overlap correction is split by mass (1) rather than evenly (0). Even by default: splitting it by
+        /// mass let heavy keepers and centre backs shove strikers off their line every tick, which cut a scripted user's
+        /// goals against Legendary AI by about a fifth. Mass still decides the momentum exchange and who stumbles.
+        /// </summary>
+        public float SeparationMassWeight = 0f;
+        /// <summary>Closing speed (m/s) below which a contact is just a lean: position correction only (no momentum
+        /// exchange, no stumble, no event).</summary>
+        public float BodyContactMinSpeed = 1.2f;
+        /// <summary>A contact that only holds the player up is reported (BodyContact, Detail 0) from this closing speed (m/s).</summary>
+        public float BodyContactEventSpeed = 4.0f;
+        /// <summary>Speed change (m/s) a 0-balance / 99-balance player absorbs before stumbling.</summary>
+        public float StumbleDeltaVMin = 2.0f;
+        public float StumbleDeltaVRange = 2.5f;
+        /// <summary>Speed change (m/s) above the stumble limit at which a player goes down instead.</summary>
+        public float FallDeltaVOver = 2.5f;
+        /// <summary>How long a stumble (off balance) and a fall (on the ground) last (s).</summary>
+        public float StumbleSeconds = 0.45f;
+        /// <summary>
+        /// Time on the ground after a knock-down (s). At least the Fall clip (Hit_Knockback 0.83 s, left at 95 %) plus
+        /// GetUp (LayToIdle 46 frames = 1.53 s, left at 90 %) plus the blends, so nobody slides while lying or rising.
+        /// </summary>
+        public float ContactFallGroundTime = 2.4f;
+        /// <summary>
+        /// Chance a stumbling carrier loses the ball: (speed change over his limit) / FallDeltaVOver, times
+        /// (SpillControlBase - ball control). A good dribbler rides most knocks with the ball still at his feet.
+        /// </summary>
+        public float SpillControlBase = 1.1f;
+        /// <summary>A stumbling carrier's ball spills this far ahead (m/s over his speed); low ball control loses more.</summary>
+        public float StumbleSpillSpeed = 2.5f;
+        /// <summary>Strength bonus to effective mass while shielding (fraction at 99 strength).</summary>
+        public float ShieldMassBonus = 0.6f;
+
+        // ---- Tackle body outcomes. ----
+        /// <summary>Chance a carrier beaten by a slide goes down (before balance), and for a standing tackle.</summary>
+        public float SlideWinFallChance = 0.35f;
+        public float StandingWinFallChance = 0.05f;
+        /// <summary>Same clip pair as <see cref="ContactFallGroundTime"/>.</summary>
+        public float TackleFallGroundTime = 2.4f;
+        /// <summary>After getting up, contacts cannot stumble or floor the player for this long (s).</summary>
+        public float GetUpGraceSeconds = 1.0f;
+
         /// <summary>Speed (m/s) at which a caught ball is gathered from the catch point into the hands.</summary>
         public float GkGatherSpeed = 6f;
 

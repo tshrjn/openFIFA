@@ -44,6 +44,32 @@ namespace OpenFifa.Core
         /// <summary>Yaw of the last dribble touch direction (for early retouch on sharp turns).</summary>
         public float LastTouchYaw;
 
+        /// <summary>The skill move in progress (valid while ActionState is Skill).</summary>
+        public SkillMoveKind Skill;
+        public int SkillStartTick;
+        /// <summary>Entry and exit headings of the move (yaw, radians), and the body facing at its start.</summary>
+        public float SkillEntryYaw;
+        public float SkillExitYaw;
+        public float SkillEntryFacing;
+        /// <summary>Speed when the move started (m/s).</summary>
+        public float SkillEntrySpeed;
+        /// <summary>Ball offset from the feet when the move started (flat, world).</summary>
+        public SimVec3 SkillBallFrom;
+        /// <summary>Execution quality 0..1 drawn at the start (release accuracy and fake strength).</summary>
+        public float SkillQuality;
+
+        /// <summary>Bit on a fake: until this tick the player turns and accelerates sluggishly.</summary>
+        public int WrongFootedUntilTick;
+
+        /// <summary>A heavy body contact knocked him off balance until this tick (sluggish, like wrong-footed).</summary>
+        public int OffBalanceUntilTick;
+
+        /// <summary>Just got up: contacts cannot stumble or floor him again before this tick.</summary>
+        public int KnockImmuneUntilTick;
+
+        /// <summary>Earliest tick for the next skill move (cooldown after one ends).</summary>
+        public int NextSkillTick;
+
         public bool Jockeying;
         public bool Shielding;
         public bool Sprinting;

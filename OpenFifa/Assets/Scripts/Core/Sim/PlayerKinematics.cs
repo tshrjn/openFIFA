@@ -48,8 +48,12 @@ namespace OpenFifa.Core
         /// <param name="move">Desired flat direction, magnitude 0..1 is throttle.</param>
         /// <param name="speedCap">Hard cap on speed (dribbling, jockey, shield); use float.MaxValue for none.</param>
         /// <param name="faceDir">If non-zero, the body turns to face this direction (jockey/strafe) instead of the run.</param>
+        /// <param name="responsiveness">
+        /// Multiplier on turn rate, acceleration and braking (1 = normal). Below 1 for a player who is wrong-footed by a
+        /// fake or knocked off balance: his body is committed and slow to re-orient.
+        /// </param>
         public static void Step(ref SimPlayer p, SimPlayerAttributes a, PlayerKinematicsConfig c,
-            SimVec3 move, bool sprint, float speedCap, SimVec3 faceDir, float dt)
+            SimVec3 move, bool sprint, float speedCap, SimVec3 faceDir, float dt, float responsiveness = 1f)
         {
             SimVec3 flatMove = move.Flat;
             float throttle = SimMath.Clamp01(flatMove.Magnitude);
@@ -65,7 +69,7 @@ namespace OpenFifa.Core
             // plant-and-turn zeroed the speed every tick, so the heading reset to the facing and he never moved.
             float heading = speed > 0.05f ? SimMath.Yaw(vel)
                 : (strafing && throttle > 1e-3f ? SimMath.Yaw(flatMove) : p.Facing);
-            float turnRate = TurnRate(a, c, speed);
+            float turnRate = TurnRate(a, c, speed) * responsiveness;
 
             if (throttle > 1e-3f)
             {
@@ -84,12 +88,12 @@ namespace OpenFifa.Core
             if (target > speed)
             {
                 float f = sprintSpeed > 0f ? speed / sprintSpeed : 1f;
-                float acc = PeakAcceleration(a, c) * AccelerationCurve(a.AccelerationType, f) * StaminaFactor(c, p.Stamina);
+                float acc = PeakAcceleration(a, c) * AccelerationCurve(a.AccelerationType, f) * StaminaFactor(c, p.Stamina) * responsiveness;
                 speed = SimMath.Min(target, speed + acc * dt);
             }
             else
             {
-                speed = SimMath.Max(target, speed - Deceleration(a, c) * dt);
+                speed = SimMath.Max(target, speed - Deceleration(a, c) * responsiveness * dt);
             }
 
             SimVec3 newVel = SimMath.FromYaw(heading) * speed;

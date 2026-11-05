@@ -39,6 +39,15 @@ namespace OpenFifa.Core
         /// <summary>Weak-foot rating, 1-5 stars.</summary>
         public int WeakFoot = 3;
 
+        /// <summary>Skill-move rating, 1-5 stars (gates <see cref="SkillMoveCatalog"/> moves).</summary>
+        public int SkillMoves = 2;
+
+        /// <summary>Body mass in kg; 0 derives it from height and strength (<see cref="BodyMass"/>).</summary>
+        public float Weight;
+
+        /// <summary>Mass used for body contact: <see cref="Weight"/>, or a height/strength estimate (about 60-95 kg).</summary>
+        public float BodyMass => Weight > 0f ? Weight : 22f * Height * Height * (0.92f + 0.16f * N(Strength));
+
         public SimFoot PreferredFoot = SimFoot.Right;
 
         /// <summary>Height in metres (drives the acceleration-type derivation and aerial reach).</summary>

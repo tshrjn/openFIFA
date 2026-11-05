@@ -119,6 +119,10 @@ namespace OpenFifa.Core
                     case MatchEventType.Foul:
                         if (e.OtherPlayerId >= 0) StartNow(sim, e.OtherPlayerId, AnimActionKind.Fall, s.Ball.Position, SimVec3.Zero);
                         break;
+                    case MatchEventType.BodyContact:
+                        // Knocked down by a body check or a clean tackle (fouls are handled above).
+                        if (e.PlayerId >= 0 && e.Detail == 2) StartNow(sim, e.PlayerId, AnimActionKind.Fall, s.Ball.Position, SimVec3.Zero);
+                        break;
                     case MatchEventType.Goal:
                         if (e.PlayerId >= 0 && e.Detail == 0) StartNow(sim, e.PlayerId, AnimActionKind.Celebrate, s.Ball.Position, SimVec3.Zero);
                         break;
