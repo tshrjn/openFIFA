@@ -23,7 +23,7 @@ namespace OpenFifa.Core
         // Front panel.
         public const float FrontNumberCenterX = 0.5f;
         public const float FrontNumberCenterY = 0.74f;
-        public const float FrontNumberHeight = 0.13f;
+        public const float FrontNumberHeight = 0.17f;
 
         /// <summary>Arch radius as a multiple of panel width (larger = flatter).</summary>
         public const float ArchRadius = 0.95f;

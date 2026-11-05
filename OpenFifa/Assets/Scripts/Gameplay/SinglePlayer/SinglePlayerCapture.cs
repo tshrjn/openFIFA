@@ -66,6 +66,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private SinglePlayerMatchController _c;
         private int _frame;
         private readonly StringBuilder _commentary = new StringBuilder(4096);
+        /// <summary>commentary_cues.jsonl: one JSON object per Start/Stop cue with video time and clip ids, so the
+        /// commentary can be mixed onto the recording offline (tools/commentary/mix_capture.py).</summary>
+        private readonly StringBuilder _cueLog = new StringBuilder(4096);
         private int _commentaryLines;
         private readonly CommentaryUtterance[] _recent = new CommentaryUtterance[8];
         private int _recentNext;
@@ -265,6 +268,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _c.OffsideSource.OnOffence -= LogOffside;
             var r = _c.Session.Result;
             File.WriteAllText(Path.Combine(OutputDir, "commentary.txt"), _commentary.ToString());
+            File.WriteAllText(Path.Combine(OutputDir, "commentary_cues.jsonl"), _cueLog.ToString());
             WriteSequences(probeOptions.Config.HalfDurationSeconds);
             File.WriteAllText(Path.Combine(OutputDir, "capture.txt"),
                 $"frames={total} fps={Fps} level={_c.Level} seed={_c.Seed} goalTick={goalTick} startTick={startTick} " +
@@ -321,6 +325,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     _recentCutNext = (_recentCutNext + 1) % _recentCuts.Length;
                     _commentary.Append(CaptureText.CommentaryLine(clock, cue.Utterance.Category.Event, cue.Utterance.Voice,
                         "[cut] " + cue.Utterance.Transcript)).Append('\n');
+                    AppendCue("Stop", cue.Utterance);
                     continue;
                 }
                 if (Seen(_recent, cue.Utterance)) continue;
@@ -329,8 +334,24 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 string tag = cue.Utterance.Category.Event == CommentaryEventType.OnTheBall ? "[call] " : "";
                 _commentary.Append(CaptureText.CommentaryLine(clock, cue.Utterance.Category.Event, cue.Utterance.Voice,
                     tag + cue.Utterance.Transcript)).Append('\n');
+                AppendCue("Start", cue.Utterance);
                 _commentaryLines++;
             }
+        }
+
+        private void AppendCue(string kind, CommentaryUtterance u)
+        {
+            string voice = u.Voice == CommentaryVoice.Analyst ? "analyst" : "lead";
+            double t = (_frame - 1) / (double)Mathf.Max(1, Fps);
+            _cueLog.Append("{\"t\":").Append(t.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture))
+                .Append(",\"cue\":\"").Append(kind).Append("\",\"voice\":\"").Append(voice).Append("\",\"clips\":[");
+            var clips = u.Clips;
+            for (int i = 0; i < clips.Count; i++)
+            {
+                if (i > 0) _cueLog.Append(',');
+                _cueLog.Append('"').Append(clips[i].ClipId).Append('"');
+            }
+            _cueLog.Append("],\"text\":\"").Append((u.Transcript ?? "").Replace("\\", "\\\\").Replace("\"", "\\\"")).Append("\"}\n");
         }
 
         private static bool Seen(CommentaryUtterance[] recent, CommentaryUtterance u)
@@ -455,7 +476,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 camT.LookAt(chest);
                 yield return new WaitForEndOfFrame();
                 Save(Path.Combine(OutputDir, $"kit_front_{tags[n]}.png"));
-                camT.position = face + fwd * 0.75f + p.right * 0.25f;
+                camT.position = face + fwd * 1.05f + p.right * 0.3f;
                 camT.LookAt(face);
                 yield return new WaitForEndOfFrame();
                 Save(Path.Combine(OutputDir, $"kit_face_{tags[n]}.png"));

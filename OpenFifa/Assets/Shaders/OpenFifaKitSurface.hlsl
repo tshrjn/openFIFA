@@ -163,8 +163,11 @@ void KitComputeSkinnedSpace(inout KitSpace k, float4 body0, float4 body1)
     half boots = KitSoftStep(_BodyTorsoLines.y, legT, soft);
     half socks = KitSoftStep(_BodyLimbLimits.w, legT, soft) * (1.0 - boots);
 
-    // Torso: neckline (dipping slightly at the front, rising over the trapezius), shirt, shorts below the waist.
-    float collarY = -0.012 - 0.03 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.055, 0.0);
+    // Torso: crew neckline at the base of the neck (dipping slightly at the front), shirt, shorts below the waist.
+    // The rig's neck joint sits at the top of the sternum, so the crew line is ~2 cm above it. The neck is a column
+    // |x| < 6 cm: outside it the line climbs steeply, so the tops of the shoulders (which sit
+    // at neck-base height on this rig) stay shirt and only the neck itself is bare.
+    float collarY = 0.022 - 0.012 * saturate(kp.z / rad.y) + 2.0 * max(abs(kp.x) - 0.06, 0.0);
     half neckSkin = KitSoftStep(collarY, kp.y, soft * 0.5);
     half torsoShorts = (1.0 - KitSoftStep(hem, kp.y, soft)) * (1.0 - neckSkin);
     half torsoShirt = (1.0 - neckSkin) * (1.0 - torsoShorts);
@@ -360,17 +363,20 @@ half2 KitCollar(KitSpace k)
     float trim = 0.0;
     float skin = 0.0;
 
+    // Skinned bodies: the neckline already sits at the base of the neck, so the V is shallow (a real V-neck opens
+    // a few centimetres, never down the sternum).
+    float vScale = k.isSkinned > 0.5 ? 0.35 : 1.0;
     if (style == KIT_COLLAR_VNECK)
     {
-        float vDepth = 0.055 - across * 1.1;        // V edge, metres below neck (shallow, like a match shirt)
+        float vDepth = (0.12 - across * 1.6) * vScale;  // V edge, metres below neck
         float inV = frontFacing * step(below, vDepth);
         skin = inV;
-        trim = max(frontFacing * KitBand(below - vDepth, 0.012) * step(across, 0.075), KitBand(below, 0.016));
+        trim = max(frontFacing * KitBand(below - vDepth, 0.012) * step(across, 0.075 * vScale), KitBand(below, 0.016));
     }
     else if (style == KIT_COLLAR_POLO)
     {
         trim = KitBand(below - 0.022, 0.024);
-        trim = max(trim, frontFacing * step(across, 0.014) * step(below, 0.13));
+        trim = max(trim, frontFacing * step(across, 0.014) * step(below, 0.13 * vScale));
     }
     else
     {
@@ -577,7 +583,7 @@ KitSurface KitBuildSurface(KitSpace k)
 
     // --- Base garment colour -------------------------------------------------------------
     half3 shirt;
-    half collarSkin = 0.0;   // skin showing inside the V of the shirt
+    half collarSkinW = 0.0;
     half fabricSmoothness = _FabricSmoothness;
     half3 licensedNormal = half3(0, 0, 1);
 
@@ -604,7 +610,7 @@ KitSurface KitBuildSurface(KitSpace k)
         half2 collar = KitCollar(k);
         shirt = lerp(shirt, _TertiaryColor.rgb, collar.x);
         shirt = lerp(shirt, _SkinColor.rgb, collar.y);
-        collarSkin = collar.y;
+        collarSkinW = collar.y;
     }
 
     // Derivative-based terms are evaluated before any per-pixel branching.
@@ -645,14 +651,14 @@ KitSurface KitBuildSurface(KitSpace k)
     // Region blend (weights are one-hot in object/UV modes, soft-edged in skinned mode).
     half4 w = k.regionW;
     half glove = k.gloveW;
-    half skin = saturate(1.0 - dot(w, 1.0) - glove);
-    // Skin inside the V is skin, not fabric: no knit, sheen, sweat or dirt there, and it gets the skin lighting.
-    skin += collarSkin * w.x;
-    half fabric = w.x * (1.0 - collarSkin) + w.y + w.z;
+    half collarSkin = collarSkinW * w.x;
+    half bareSkin = saturate(1.0 - dot(w, 1.0) - glove);
+    half skin = bareSkin + collarSkin;            // the V opening is already skin-coloured inside `shirt`
+    half fabric = w.x + w.y + w.z - collarSkin;
     half3 shortsCol = lerp(_ShortsColor.rgb, _TertiaryColor.rgb, shortsStripe);
     half3 socksCol = lerp(socksBase, _TertiaryColor.rgb, socksBand);
-    half3 albedo = shirt * (w.x * (1.0 - collarSkin)) + shortsCol * w.y + socksCol * w.z + bootCol * w.w
-                 + _GloveColor.rgb * glove + _SkinColor.rgb * skin;
+    half3 albedo = shirt * w.x + shortsCol * w.y + socksCol * w.z + bootCol * w.w
+                 + _GloveColor.rgb * glove + _SkinColor.rgb * bareSkin;
     int region = (int)k.region;
 
     fabricSmoothness = fabricSmoothness * fabric + 0.62 * w.w + 0.35 * glove + 0.38 * skin;

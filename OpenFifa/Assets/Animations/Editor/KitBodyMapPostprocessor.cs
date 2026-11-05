@@ -16,13 +16,16 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 8;
+        public const uint Version = 7;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
 
         /// <summary>Mesh UV channel holding the rest-pose kit-space position (w = 1 when baked).</summary>
         public const int BodyChannel = 3;
+
+        /// <summary>Rest-pose distance (m) within which normals are averaged across seams.</summary>
+        public const float SeamWeldRadius = 0.018f;
 
         /// <summary>
         /// Neutral kit-shader material put on every slot of the baked renderers. Besides giving the undressed
@@ -51,7 +54,6 @@ namespace OpenFifa.Editor
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
-                if (smr.sharedMesh != null && smr.sharedMesh.vertexCount > 0) SmoothNormals(smr.sharedMesh, SmoothAngle);
                 string result = Bake(root.transform, smr, human);
                 if (result == null) continue;
                 if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
@@ -63,57 +65,6 @@ namespace OpenFifa.Editor
                     smr.sharedMaterials = mats;
                 }
             }
-        }
-
-        /// <summary>Normals within this angle of each other are averaged across split vertices (degrees).</summary>
-        public const float SmoothAngle = 75f;
-
-        /// <summary>
-        /// Smooth shading for the low-poly mannequin: vertices that share a position (hard edges and the split
-        /// shells at the neck, shoulders, elbows and knees) get the area-weighted average of the face normals around
-        /// them, for faces within <see cref="SmoothAngle"/> of each other. Positions, UVs and skinning are untouched.
-        /// </summary>
-        public static void SmoothNormals(Mesh mesh, float maxAngle)
-        {
-            var verts = mesh.vertices;
-            int n = verts.Length;
-            if (n == 0) return;
-            var faceSum = new Vector3[n];
-            for (int m = 0; m < mesh.subMeshCount; m++)
-            {
-                if (mesh.GetTopology(m) != MeshTopology.Triangles) continue;
-                var idx = mesh.GetIndices(m);
-                for (int t = 0; t + 2 < idx.Length; t += 3)
-                {
-                    int a = idx[t], b = idx[t + 1], c = idx[t + 2];
-                    var fn = Vector3.Cross(verts[b] - verts[a], verts[c] - verts[a]); // area weighted
-                    faceSum[a] += fn; faceSum[b] += fn; faceSum[c] += fn;
-                }
-            }
-            var groups = new Dictionary<Vector3Int, List<int>>();
-            for (int i = 0; i < n; i++)
-            {
-                var key = Vector3Int.RoundToInt(verts[i] * 2000f); // 0.5 mm
-                if (!groups.TryGetValue(key, out var list)) groups[key] = list = new List<int>(4);
-                list.Add(i);
-            }
-            var old = mesh.normals;
-            var result = new Vector3[n];
-            float cos = Mathf.Cos(maxAngle * Mathf.Deg2Rad);
-            foreach (var list in groups.Values)
-            {
-                foreach (int i in list)
-                {
-                    var ni = faceSum[i].normalized;
-                    var sum = Vector3.zero;
-                    foreach (int j in list)
-                        if (Vector3.Dot(ni, faceSum[j].normalized) >= cos) sum += faceSum[j];
-                    result[i] = sum.sqrMagnitude > 1e-12f ? sum.normalized
-                        : (old != null && old.Length == n ? old[i] : Vector3.up);
-                }
-            }
-            mesh.normals = result;
-            if (mesh.uv != null && mesh.uv.Length == n) mesh.RecalculateTangents();
         }
 
         /// <summary>Bakes one renderer's mesh in place. Returns a summary, or null when skipped.</summary>
@@ -227,6 +178,21 @@ namespace OpenFifa.Editor
             }
             mesh.SetUVs(LimbChannel, uv2);
             mesh.SetUVs(BodyChannel, uv3);
+
+            // Smooth shading across the mannequin's segment and joint-ring seams (hard lines on sleeves/arms).
+            var meshNormals = mesh.normals;
+            if (meshNormals != null && meshNormals.Length == verts.Length)
+            {
+                var flat = new float[verts.Length * 3];
+                for (int v = 0; v < verts.Length; v++)
+                {
+                    flat[v * 3] = meshNormals[v].x; flat[v * 3 + 1] = meshNormals[v].y; flat[v * 3 + 2] = meshNormals[v].z;
+                }
+                var welded = KitNormalWelder.Weld(positions, flat, SeamWeldRadius);
+                for (int v = 0; v < verts.Length; v++)
+                    meshNormals[v] = new Vector3(welded[v * 3], welded[v * 3 + 1], welded[v * 3 + 2]);
+                mesh.normals = meshNormals;
+            }
 
             // Optional dump for offline inspection: OPENFIFA_KITBODY_DUMP=<dir> writes one CSV per mesh and logs the
             // bake summary (head profile included) for each model.

@@ -1,0 +1,46 @@
+# Qodo Merge (PR-Agent) config: https://qodo-merge-docs.qodo.ai/usage-guide/configuration_options/
+
+[github_app]
+# Run on every new PR.
+pr_commands = [
+    "/describe",
+    "/review",
+    "/improve",
+]
+
+[pr_description]
+# Post /describe output as a comment instead of rewriting the PR body,
+# so the attribution header at the top of each PR description survives.
+publish_description_as_comment = true
+
+[ignore]
+# Unity serialised assets and binaries are noise for review.
+glob = [
+    "*.meta",
+    "*.unity",
+    "*.prefab",
+    "*.asset",
+    "*.mat",
+    "*.anim",
+    "*.controller",
+    "*.fbx",
+    "*.png",
+    "*.wav",
+    "*.ogg",
+    "OpenFifa/Assets/TextMesh Pro/**",
+    "test-results/**",
+    "screenshots/**",
+    "build/**",
+]
+
+[pr_reviewer]
+extra_instructions = """\
+This is a Unity C# football game that ships to iPad. Focus on gameplay correctness, \
+per-frame allocations in Update/FixedUpdate, physics outside FixedUpdate, and GitHub \
+Actions changes that waste macOS runner time.
+"""
+
+[pr_code_suggestions]
+extra_instructions = """\
+Skip style-only nits. Prioritise bugs, performance on mobile, and test coverage.
+"""

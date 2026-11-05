@@ -2,10 +2,43 @@
 
 Seven levels, Beginner to Ultimate. Each adjacent step is strictly harder for the human, measured against the
 scripted gamepad bot (48 seeds per level, 2 x 6-minute halves). `SinglePlayerSessionTests.Difficulty_AllSevenLevels_EachStepGoesClearlyBetterForTheAI`
-(Category Slow) fails on any inversion (minimum +0.25 GD and +0.5 balance per match per step, seeds 1..24). It also
+(Category Slow) fails when any step falls below its floor (seeds 49..120, see "Ladder test floors" below). It also
 checks each keeper's save rate against the 55-80% band on those seeds, allowing min(1.5 binomial standard errors,
 4 points) at the band edge, and skips a keeper that faced fewer than 40 shots on target (the Professional and higher
 AI keepers, and the Beginner and Amateur user keepers). A 50% keeper fails even on ~120 shots.
+
+## Ladder test floors
+
+The ladder test plays seeds 49..120 (72 per level, 504 matches, 2 x 6-minute halves) against the scripted gamepad
+bot. Each match is chaotic in its seed, so any sim or AI change reshuffles every match. The old fixed set of 24 seeds
+flipped a different step red with each unrelated change. Each step now has its own floor: the baseline mean step on
+these seeds minus 2 standard errors of the per-seed paired difference (same seed, the two adjacent levels), rounded
+down and never below 0. A step that loses more than about 2 SE fails; noise within that does not.
+
+Baseline: main at d762568 (after #41, player body contact). Per match, over the 72 seeds:
+
+| Step | GD step (mean ± SE) | GD floor | Balance step (mean ± SE) | Balance floor |
+|---|---|---|---|---|
+| Beginner → Amateur | 1.375 ± 0.265 | 0.84 | 2.500 ± 0.331 | 1.83 |
+| Amateur → Semi-Pro | 1.097 ± 0.223 | 0.65 | 1.956 ± 0.298 | 1.35 |
+| Semi-Pro → Professional | 0.722 ± 0.233 | 0.25 | 1.733 ± 0.306 | 1.12 |
+| Professional → World Class | 0.861 ± 0.237 | 0.38 | 1.653 ± 0.325 | 1.00 |
+| World Class → Legendary | 1.431 ± 0.287 | 0.85 | 2.428 ± 0.390 | 1.64 |
+| Legendary → Ultimate | 1.458 ± 0.309 | 0.84 | 2.061 ± 0.403 | 1.25 |
+
+Level totals on these seeds (GD / balance): Beginner -172 / -282.8, Amateur -73 / -102.8, Semi-Pro 6 / 38.0,
+Professional 58 / 162.8, World Class 120 / 281.8, Legendary 223 / 456.6, Ultimate 328 / 605.0.
+
+Legendary → Ultimate used to be the thinnest step: 0.64 ± 0.30 GD per match at d762568, with a floor that only
+ruled out an inversion. The Ultimate AI outfield delta went from +15 to +18, which widened it to 1.46 ± 0.31 GD per
+match, about the size of World Class → Legendary. That row and the Ultimate total above are re-measured on the same
+72 seeds; the other steps are unchanged, because the change only touches Ultimate. The Ultimate reaction bonus does
+nothing beyond 0.05: at theta 1 the reaction delay is already at its 0.03 s floor (0.07 and 0.09 measured identical).
+The Ultimate user keeper still saves 61.2% (441/721), inside the 55-80% band.
+
+When a deliberate difficulty change moves a step, re-measure on the same seeds and update this table and the
+`StepGdFloor` / `StepBalanceFloor` arrays in `SinglePlayerSessionTests` together.
+
 
 Levers per level live in `TeamAIDifficultyLadder` (AI thetas, reaction bonus) and `SinglePlayerDifficultyProfile`
 (hidden AI outfield rating delta, hidden AI finishing delta, keeper deltas, assists). The outfield and finishing deltas
@@ -16,7 +49,7 @@ displayed ratings, team sheets, HUD or commentary.
 |---|---|---|---|---|---|---|---|
 | AI keeper reflexes/diving | −6 | −5 | 0 | +5 | +5 | +5 | +5 |
 | User keeper reflexes/diving | 0 | 0 | 0 | 0 | −3 | −6 | −9 |
-| AI outfield ratings | −18 | −11 | −6 | 0 | +6 | +12 | +15 |
+| AI outfield ratings | −18 | −11 | −6 | 0 | +6 | +12 | +18 |
 | AI finishing (Finishing, LongShots, Composure; on top of outfield) | −8 | −7 | −3 | −2 | 0 | 0 | 0 |
 
 The user's own keeper is never weakened below World Class: the easy levels make the AI's finishing worse instead.
