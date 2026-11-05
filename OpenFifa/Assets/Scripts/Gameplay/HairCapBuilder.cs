@@ -42,7 +42,7 @@ namespace OpenFifa.Gameplay
         public static MeshRenderer Attach(GameObject model, HairStyle style, Color colour)
         {
             if (model == null) return null;
-            var head = FindHead(model);
+            var head = FindHeadBone(model);
             if (head == null) return null;
             var old = head.Find("HairCap");
             if (old != null)
@@ -63,7 +63,8 @@ namespace OpenFifa.Gameplay
             return mr;
         }
 
-        private static Transform FindHead(GameObject model)
+        /// <summary>The model's head bone (humanoid mapping, else common names), or null.</summary>
+        public static Transform FindHeadBone(GameObject model)
         {
             var animator = model.GetComponentInChildren<Animator>();
             if (animator != null && animator.isHuman)
@@ -190,11 +191,13 @@ namespace OpenFifa.Gameplay
             }
         }
 
-        private static Vector3 KitToBone(Vector3 k)
+        /// <summary>Kit-space head point to head-bone space (also used by <see cref="EarBuilder"/>).</summary>
+        public static Vector3 KitToBone(Vector3 k)
         {
             return HeadCentreBone + Vector3.right * k.x + KitUpInBone * (k.y - HeadCentreKitY) + KitFrontInBone * (k.z - HeadCentreKitZ);
         }
 
-        private static Vector3 KitDirToBone(Vector3 d) => (Vector3.right * d.x + KitUpInBone * d.y + KitFrontInBone * d.z).normalized;
+        /// <summary>Kit-space direction to head-bone space.</summary>
+        public static Vector3 KitDirToBone(Vector3 d) => (Vector3.right * d.x + KitUpInBone * d.y + KitFrontInBone * d.z).normalized;
     }
 }

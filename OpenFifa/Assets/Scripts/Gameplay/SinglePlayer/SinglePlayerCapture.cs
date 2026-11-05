@@ -46,6 +46,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         /// <summary>-spKitStills: after the clip, close-ups of kits (back, front) and faces (kit_*.png).</summary>
         public bool KitStills;
 
+        /// <summary>
+        /// -spLooks: player-appearance review only (no probe, no clip). Starts the match, plays a few seconds, then
+        /// saves looks_*.png: face front / three-quarter / profile and full body for six players picked to cover
+        /// skin tones and hair styles, plus a broadcast and an in-game close-up still. Writes looks.txt and quits.
+        /// </summary>
+        public bool Looks;
+
         /// <summary>Frames per sequence and their spacing (s): 11 frames at 10 fps, the moment at frame 6.</summary>
         public const int SequenceFrames = 11;
         public const float SequenceStep = 0.1f;
@@ -80,6 +87,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 else if (args[i] == "-spCaptureSeconds") float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out Seconds);
                 else if (args[i] == "-spCaptureFps") int.TryParse(args[i + 1], out Fps);
                 if (args[i] == "-spKitStills" || args[i + 1] == "-spKitStills") KitStills = true;
+                if (args[i] == "-spLooks" || args[i + 1] == "-spLooks") Looks = true;
             }
             _c = GetComponent<SinglePlayerMatchController>();
             if (string.IsNullOrEmpty(OutputDir))
@@ -103,6 +111,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             Debug.Log("[capture] start, writing to " + OutputDir);
             for (int i = 0; i < 8; i++) yield return null;
+            if (Looks)
+            {
+                yield return LooksRun();
+                yield break;
+            }
             yield return Still("still_picker.png");
 
             // Replay the whole match headless with the same options and inputs: first goal, ball moments, tactics.
@@ -473,6 +486,130 @@ namespace OpenFifa.Gameplay.SinglePlayer
             cam.enabled = true;
             if (hud != null) hud.enabled = hudWas;
             _c.Frozen = false;
+        }
+
+        private IEnumerator LooksRun()
+        {
+            _c.StartMatch(_c.Level);
+            int tickRate = _c.Session.Sim.Config.TickRate;
+            _c.FastForwardTo(_c.Session.Sim.Tick + 20 * tickRate);
+            // Let animation and the camera settle on the live match.
+            for (int i = 0; i < 45; i++) yield return null;
+            yield return ModeStill(SinglePlayerCamera.Mode.Broadcast, "looks_broadcast.png");
+            for (int i = 0; i < 20; i++) yield return null;
+            yield return CloseUpStill(true, "looks_closeup_ingame.png");
+
+            var ids = _c.Session.Options.PlayerIds;
+            int count = _c.Session.Sim.State.Players.Length;
+            var picked = PickVariedLooks(ids, count, 6);
+            var log = new StringBuilder();
+            var cam = _c.BroadcastCamera;
+            var camT = cam.transform;
+            var unityCam = cam.GetComponent<Camera>();
+            var hud = GetComponent<SinglePlayerHud>();
+            bool hudWas = hud != null && hud.enabled;
+            if (hud != null) hud.enabled = false;
+            var canvases = FindObjectsByType<Canvas>(FindObjectsSortMode.None);
+            var canvasWas = new bool[canvases.Length];
+            for (int i = 0; i < canvases.Length; i++) { canvasWas[i] = canvases[i].enabled; canvases[i].enabled = false; }
+            cam.enabled = false;
+            _c.Frozen = true;
+            float oldFov = unityCam.fieldOfView;
+            for (int n = 0; n < picked.Count; n++)
+            {
+                int id = picked[n];
+                var p = _c.PlayerTransform(id);
+                if (p == null || !p.gameObject.activeInHierarchy) continue;
+                var look = PlayerLook.ForPlayer(LookId(ids, id));
+                log.Append($"p{n} simId={id} skin={look.SkinIndex} hair={look.Hair} facial={look.Facial}\n");
+                var fwd = p.forward; fwd.y = 0f; fwd = fwd.sqrMagnitude > 1e-4f ? fwd.normalized : Vector3.forward;
+                var right = Vector3.Cross(Vector3.up, fwd);
+                float headY = HeadHeight(p);
+                var hidden = HideOtherPlayers(id, count);
+                var face = new Vector3(p.position.x, headY, p.position.z);
+                var body = p.position + Vector3.up * 0.95f;
+                unityCam.fieldOfView = 26f;
+                camT.position = face + fwd * 1.15f + Vector3.up * 0.03f; camT.LookAt(face);
+                yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_face_p{n}.png"));
+                camT.position = face + (fwd * 0.7f + right * 0.5f).normalized * 1.15f; camT.LookAt(face);
+                yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_face34_p{n}.png"));
+                camT.position = face + right * 1.15f; camT.LookAt(face);
+                yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_profile_p{n}.png"));
+                unityCam.fieldOfView = 30f;
+                camT.position = body + (fwd * 0.85f + right * 0.35f).normalized * 4.2f + Vector3.up * 0.2f; camT.LookAt(body);
+                yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_body_p{n}.png"));
+                camT.position = body - fwd * 4.2f + Vector3.up * 0.2f; camT.LookAt(body);
+                yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_bodyback_p{n}.png"));
+                foreach (var r in hidden) if (r != null) r.enabled = true;
+            }
+            unityCam.fieldOfView = oldFov;
+            cam.enabled = true;
+            if (hud != null) hud.enabled = hudWas;
+            for (int i = 0; i < canvases.Length; i++) if (canvases[i] != null) canvases[i].enabled = canvasWas[i];
+            _c.Frozen = false;
+            File.WriteAllText(Path.Combine(OutputDir, "looks.txt"), log.ToString());
+            Debug.Log("[capture] looks done");
+            Application.Quit(0);
+        }
+
+        /// <summary>Roster id the kit dresser uses for a sim id (falls back to the sim id, as SinglePlayerKitDresser does).</summary>
+        private static string LookId(string[] ids, int id) => (ids != null && id < ids.Length ? ids[id] : null) ?? id.ToString();
+
+        /// <summary>Disables the enabled renderers of every other player (portraits stay unobstructed). Returns them.</summary>
+        private List<Renderer> HideOtherPlayers(int keep, int count)
+        {
+            var hidden = new List<Renderer>();
+            for (int i = 0; i < count; i++)
+            {
+                if (i == keep) continue;
+                var t = _c.PlayerTransform(i);
+                if (t == null) continue;
+                foreach (var r in t.GetComponentsInChildren<Renderer>())
+                    if (r.enabled) { r.enabled = false; hidden.Add(r); }
+            }
+            return hidden;
+        }
+
+        /// <summary>Head centre height of a player model (Animator head bone, else bounds top minus 0.12 m).</summary>
+        private static float HeadHeight(Transform p)
+        {
+            var animator = p.GetComponentInChildren<Animator>();
+            if (animator != null && animator.isHuman)
+            {
+                var h = animator.GetBoneTransform(HumanBodyBones.Head);
+                if (h != null) return h.position.y + 0.09f;
+            }
+            float top = 1.8f;
+            var rs = p.GetComponentsInChildren<Renderer>();
+            if (rs.Length > 0)
+            {
+                var b = rs[0].bounds;
+                for (int i = 1; i < rs.Length; i++) b.Encapsulate(rs[i].bounds);
+                top = Mathf.Clamp(b.max.y, 1.5f, 2.1f);
+            }
+            return top - 0.12f;
+        }
+
+        /// <summary>Greedy pick of outfield players covering different skin tones and hair styles (keeper last).</summary>
+        private static List<int> PickVariedLooks(string[] ids, int count, int want)
+        {
+            var picked = new List<int>();
+            var skins = new HashSet<int>();
+            var hairs = new HashSet<HairStyle>();
+            int per = MatchSetup.PlayersPerTeam;
+            for (int pass = 0; pass < 3 && picked.Count < want - 1; pass++)
+            {
+                for (int id = 0; id < count && picked.Count < want - 1; id++)
+                {
+                    if (id == 0 || id == per || picked.Contains(id)) continue;
+                    var look = PlayerLook.ForPlayer(LookId(ids, id));
+                    bool newSkin = !skins.Contains(look.SkinIndex), newHair = !hairs.Contains(look.Hair);
+                    if ((pass == 0 && !(newSkin && newHair)) || (pass == 1 && !(newSkin || newHair))) continue;
+                    picked.Add(id); skins.Add(look.SkinIndex); hairs.Add(look.Hair);
+                }
+            }
+            picked.Add(0);
+            return picked;
         }
 
         /// <summary>Holds the sim (without the pause menu) for one frame, renders with another camera mode, saves, restores.</summary>
