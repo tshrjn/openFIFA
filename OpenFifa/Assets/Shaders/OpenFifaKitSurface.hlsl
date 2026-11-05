@@ -164,7 +164,7 @@ void KitComputeSkinnedSpace(inout KitSpace k, float4 body0, float4 body1)
     half socks = KitSoftStep(_BodyLimbLimits.w, legT, soft) * (1.0 - boots);
 
     // Torso: neckline (dipping slightly at the front, rising over the trapezius), shirt, shorts below the waist.
-    float collarY = -0.008 - 0.014 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.05, 0.0);
+    float collarY = -0.012 - 0.03 * saturate(kp.z / rad.y) + 0.5 * max(abs(kp.x) - 0.055, 0.0);
     half neckSkin = KitSoftStep(collarY, kp.y, soft * 0.5);
     half torsoShorts = (1.0 - KitSoftStep(hem, kp.y, soft)) * (1.0 - neckSkin);
     half torsoShirt = (1.0 - neckSkin) * (1.0 - torsoShorts);

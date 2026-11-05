@@ -7,6 +7,7 @@ set -euo pipefail
 NAME="$1"; DESC="$2"; shift 2
 HERE="$(cd "$(dirname "$0")" && pwd)"; ROOT="${LOOKS_ROOT:-$HOME/GameDev/review/looks-loop}"
 IT="$ROOT/iters/$NAME"; mkdir -p "$ROOT/iters"
+python3 "$HERE/test_verdict.py" >/dev/null 2>&1 || { echo "verdict tests fail: python3 $HERE/test_verdict.py"; exit 1; }
 "$HERE/render.sh" "$IT" "$@"
 SHA=$(git -C "$HERE" rev-parse --short HEAD)$(git -C "$HERE" diff --quiet HEAD -- ../../OpenFifa || echo "+dirty")
 [ -f "$ROOT/log.tsv" ] || printf 'time\titer\tsha\tkeep\tvotes\tcand_face\tcand_hair\tcand_skin\tcand_body\tcand_overall\tbest_overall\tdesc\n' > "$ROOT/log.tsv"

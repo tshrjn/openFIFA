@@ -11,6 +11,7 @@ if [ $((RANDOM % 2)) = 0 ]; then A="$CAND"; B="$BEST"; echo cand=A > "$OUT/order
 # Blind: the judges see anonymous copies (A_faces.png, ...) in a neutral directory, run there, and never see
 # iteration names, paths or the order file. Their raw output is copied back to $OUT afterwards.
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/looks-judge-XXXXXX")"
+trap 'rm -rf "$WORK"' EXIT
 SHEETS=(faces angles bodies backs ingame)
 IMGS=(); LIST=""
 for s in "${SHEETS[@]}"; do
@@ -66,5 +67,4 @@ PY
 }
 for n in claude gpt gemini; do ( "run_$n"; extract "$OUT/$n.raw" "$OUT/$n.json" || rm -f "$OUT/$n.json" ) & done
 wait
-rm -rf "$WORK"
 python3 "$HERE/verdict.py" "$OUT"
