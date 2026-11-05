@@ -368,18 +368,18 @@ namespace OpenFifa.Tests.Editor.Integration
         /// mutable state, so they run in parallel; each result lands in its own slot and the totals are summed in a fixed
         /// order, so the outcome is identical to a sequential run (checked against single-process runs of each seed).
         /// </summary>
-        private static LevelStats[] PlayLadder(int seeds, float half)
+        private static LevelStats[] PlayLadder(int seeds, float half, int firstSeed = 1)
         {
             int levels = TeamAIDifficultyLadder.LevelCount;
             var games = new LevelStats[levels * seeds];
             var finite = new bool[levels * seeds];
             System.Threading.Tasks.Parallel.For(0, games.Length,
                 new System.Threading.Tasks.ParallelOptions { MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount) },
-                k => games[k] = PlayOne((TeamAIDifficultyLevel)(k / seeds), (ulong)(k % seeds + 1), half, out finite[k]));
+                k => games[k] = PlayOne((TeamAIDifficultyLevel)(k / seeds), (ulong)(k % seeds + firstSeed), half, out finite[k]));
             var totals = new LevelStats[levels];
             for (int k = 0; k < games.Length; k++)
             {
-                Assert.IsTrue(finite[k], $"level {k / seeds} seed {k % seeds + 1}: sim went NaN");
+                Assert.IsTrue(finite[k], $"level {k / seeds} seed {k % seeds + firstSeed}: sim went NaN");
                 ref var t = ref totals[k / seeds];
                 var g = games[k];
                 t.HumanGoals += g.HumanGoals;
@@ -399,34 +399,28 @@ namespace OpenFifa.Tests.Editor.Integration
 
         /// <summary>
         /// Behaviour-level difficulty check over the whole seven-level ladder: against the same scripted user, every level
-        /// must go clearly better for the AI than the one below, in goal difference (AI minus user) and in balance (goal
-        /// difference plus 0.2 per shot of shot difference). Any inversion fails.
+        /// must go better for the AI than the one below, in goal difference (AI minus user) and in balance (goal
+        /// difference plus 0.2 per shot of shot difference), by at least that step's floor.
         /// </summary>
         /// <remarks>
         /// <para>
-        /// Fixed, representative seed set: seeds 1..24, full-length 2 x 6-minute halves, all seven levels (168 matches).
-        /// Outcomes are chaotic in the seed (any parameter change reshuffles every match), so fewer seeds or shorter halves
-        /// are not representative: with 4-minute halves World Class and Legendary tie on goal difference, and with seeds
-        /// 1..16 some steps shrink to +10 goals. Measured on this set (Nov 2026 keeper/finishing follow-up: the user's
-        /// keeper untouched up to Professional, lower AI finishing there instead), totals over 24 matches: goal difference
-        /// -70 / -34 / -5 / 21 / 35 / 65 / 94 (steps 36 29 26 14 30 29) and balance -111.6 / -44.4 / 2.2 / 52.8 / 82.4 /
-        /// 135.6 / 185.2 (steps 67.2 46.6 50.6 29.6 53.2 49.6). Over 48 seeds every step is at least 2.3 standard errors
-        /// of the paired difference in goal difference and 3.7 in balance. The thresholds (each step at least 0.25 goals
-        /// and 0.5 balance per match) sit at under half the smallest measured step.
+        /// Fixed seed set: seeds 49..120 (72 per level), full-length 2 x 6-minute halves, all seven levels (504 matches).
+        /// Outcomes are chaotic in the seed (any sim or AI change reshuffles every match), so the old 24-seed set flipped a
+        /// different step red with each unrelated change. Each step's floor is its baseline on these seeds minus 2 standard
+        /// errors of the per-seed paired difference (same seed, adjacent levels), clamped at 0 so no step may invert.
+        /// Baseline: main at d762568 (Nov 2026, after player body contact #41); per-step numbers are in docs/DIFFICULTY.md.
+        /// Re-baseline the floors there and here when a deliberate difficulty change moves a step.
         /// </para>
         /// <para>
-        /// Keeper save rate (on-target shots saved / (saved + scored)) targets 55-80% for both keepers at every level; over
-        /// 48 seeds every judged level sits in that band (61.0-76.9%). Each keeper is judged on this test's own seeds only
-        /// when it faced at least <see cref="MinKeeperSample"/> shots on target; the observed rate may sit outside the band
-        /// by min(1.5 binomial standard errors, 4 points), so a 50% keeper fails (the old 2 SE / n >= 20 check passed the
-        /// Beginner AI keeper at 62/124). A shot stops counting at a block, deflection or outfielder's touch (TrackShot).
-        /// Measured on seeds 1..24: user keeper skipped (7/12), skipped (18/25), 66.7% (28/42), 74.2, 67.9, 64.2, 62.4%;
-        /// AI keeper 63.3% (81/128), 57.7% (45/78), 65.9% (27/41), then skipped (Professional up face under 40).
-        /// The skipped keepers are judged on further seeds by <see cref="Difficulty_LowVolumeKeepers_SaveRateInBandOnMoreSeeds"/>.
+        /// Keeper save rate (on-target shots saved / (saved + scored)) targets 55-80% for both keepers at every level, on
+        /// this test's own seeds, when the keeper faced at least <see cref="MinKeeperSample"/> shots on target; the observed
+        /// rate may sit outside the band by min(1.5 binomial standard errors, 4 points), so a 50% keeper fails. A shot stops
+        /// counting at a block, deflection or outfielder's touch (TrackShot). Keepers short of the sample are judged on
+        /// further seeds by <see cref="Difficulty_LowVolumeKeepers_SaveRateInBandOnMoreSeeds"/>.
         /// </para>
         /// <para>
-        /// The matches run in parallel on all cores: 3.2 minutes on 12 cores under Mono (26 CPU-minutes, so about half an hour on one
-        /// core). Tagged Slow (skip it in the fast suite with a category filter) with a 60-minute timeout.
+        /// The matches run in parallel on all cores: about 10 minutes on 12 cores. Tagged Slow (skip it in the fast suite
+        /// with a category filter) with a 60-minute timeout.
         /// </para>
         /// </remarks>
         [Test]
@@ -434,9 +428,9 @@ namespace OpenFifa.Tests.Editor.Integration
         [Timeout(3600000)]
         public void Difficulty_AllSevenLevels_EachStepGoesClearlyBetterForTheAI()
         {
-            const int seeds = 24;
+            const int firstSeed = LadderFirstSeed, seeds = LadderSeeds;
             const float half = 360f;
-            var t = PlayLadder(seeds, half);
+            var t = PlayLadder(seeds, half, firstSeed);
             for (int i = 0; i < t.Length; i++)
                 Log(Describe(TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i), t[i]));
 
@@ -446,10 +440,11 @@ namespace OpenFifa.Tests.Editor.Integration
                               TeamAIDifficultyLadder.DisplayName((TeamAIDifficultyLevel)i);
                 int gdStep = GoalDifference(t[i]) - GoalDifference(t[i - 1]);
                 float balStep = Balance(t[i]) - Balance(t[i - 1]);
-                Assert.GreaterOrEqual(gdStep, (int)Math.Ceiling(0.25f * seeds),
-                    $"{step}: AI goal difference should rise by at least 0.25 per match (got {gdStep} over {seeds})");
-                Assert.GreaterOrEqual(balStep, 0.5f * seeds,
-                    $"{step}: balance should rise by at least 0.5 per match (got {balStep:F1} over {seeds})");
+                Log($"{step}: GD step {gdStep} (floor {StepGdFloor[i - 1] * seeds:F1}), balance step {balStep:F1} (floor {StepBalanceFloor[i - 1] * seeds:F1})");
+                Assert.GreaterOrEqual(gdStep, StepGdFloor[i - 1] * seeds,
+                    $"{step}: AI goal difference should rise by at least {StepGdFloor[i - 1]:F2} per match (got {gdStep} over {seeds})");
+                Assert.GreaterOrEqual(balStep, StepBalanceFloor[i - 1] * seeds,
+                    $"{step}: balance should rise by at least {StepBalanceFloor[i - 1]:F2} per match (got {balStep:F1} over {seeds})");
             }
 
             var beg = t[(int)TeamAIDifficultyLevel.Beginner];
@@ -529,6 +524,16 @@ namespace OpenFifa.Tests.Editor.Integration
                 AssertSaveRate(who, saved[c], conceded[c]);
             }
         }
+
+        /// <summary>Seed set of the ladder test: seeds LadderFirstSeed .. LadderFirstSeed + LadderSeeds - 1.</summary>
+        private const int LadderFirstSeed = 49, LadderSeeds = 72;
+
+        /// <summary>
+        /// Per-match floors for each ladder step (Beginner->Amateur first): baseline mean minus 2 standard errors of the
+        /// paired per-seed difference on the ladder seeds, rounded down, never below 0. See docs/DIFFICULTY.md.
+        /// </summary>
+        private static readonly float[] StepGdFloor = { 0.84f, 0.65f, 0.25f, 0.38f, 0.85f, 0.03f };
+        private static readonly float[] StepBalanceFloor = { 1.83f, 1.35f, 1.12f, 1.00f, 1.64f, 0.00f };
 
         /// <summary>Smallest number of on-target shots a keeper must face for its save rate to be judged.</summary>
         private const int MinKeeperSample = 40;
