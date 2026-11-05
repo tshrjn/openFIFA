@@ -51,12 +51,14 @@ namespace OpenFifa.Gameplay
                 else Object.DestroyImmediate(old.gameObject);
             }
             if (!NeedsMesh(style)) return null;
+            var material = GetMaterial(colour);
+            if (material == null) return null;
 
             var go = new GameObject("HairCap");
             go.transform.SetParent(head, false);
             go.AddComponent<MeshFilter>().sharedMesh = GetMesh(style);
             var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = GetMaterial(colour);
+            mr.sharedMaterial = material;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.On;
             return mr;
         }
@@ -78,7 +80,8 @@ namespace OpenFifa.Gameplay
         {
             Color32 key = colour;
             if (Materials.TryGetValue(key, out var m) && m != null) return m;
-            var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (shader == null) return null;
             m = new Material(shader) { name = "Hair_" + ColorUtility.ToHtmlStringRGB(colour), hideFlags = HideFlags.DontSave };
             if (m.HasProperty(BaseColorId)) m.SetColor(BaseColorId, colour);
             if (m.HasProperty(SmoothnessId)) m.SetFloat(SmoothnessId, 0.28f);

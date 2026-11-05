@@ -69,7 +69,6 @@ namespace OpenFifa.Gameplay
 
         private Material _material;
         private Texture2D _printTexture;
-        private byte[] _printScratch;
         private string _printKey;
         private FullJerseyConfig _currentConfig;
         private KitDefinition _currentKit;
@@ -331,14 +330,14 @@ namespace OpenFifa.Gameplay
 
             // Resources/Kits/OpenFifaKit.mat references the shader so it is included in player builds.
             var template = kitMaterialTemplate != null ? kitMaterialTemplate : Resources.Load<Material>(KitShaderIds.MaterialResourcePath);
-            if (template != null && template.shader != null && template.shader.isSupported)
+            if (template != null && IsUsable(template.shader))
             {
                 _material = new Material(template);
             }
             else
             {
                 var shader = Shader.Find(KitShaderIds.ShaderName);
-                if (shader == null || !shader.isSupported)
+                if (!IsUsable(shader))
                 {
                     if (!_loggedMissingShader)
                     {
@@ -348,6 +347,18 @@ namespace OpenFifa.Gameplay
                     return false;
                 }
                 _material = new Material(shader);
+            }
+
+            if (_material.FindPass("ForwardLit") < 0)
+            {
+                if (!_loggedMissingShader)
+                {
+                    Debug.LogWarning($"[JerseyRenderer] Shader '{KitShaderIds.ShaderName}' has no ForwardLit pass (failed to compile?); keeping the existing material.");
+                    _loggedMissingShader = true;
+                }
+                DestroySafely(_material);
+                _material = null;
+                return false;
             }
 
             _material.name = $"Kit_{gameObject.name}";
@@ -375,6 +386,9 @@ namespace OpenFifa.Gameplay
             if (mappingMode == KitMappingMode.SkinnedBody)
             {
                 // Every skinned part and sub-mesh (body + joints) shares this player's one kit material.
+                // Mannequin prints are seen at broadcast distance: half-size atlas saves ~1.5 MB per player.
+                nameNumberTextureWidth = Mathf.Min(nameNumberTextureWidth, 512);
+                nameNumberTextureHeight = Mathf.Min(nameNumberTextureHeight, 256);
                 _bodyRenderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
                 foreach (var r in _bodyRenderers) AssignToAllSlots(r);
                 return true;
@@ -396,6 +410,13 @@ namespace OpenFifa.Gameplay
             _material.SetVector(KitShaderIds.BodyLimbLimits, limits);
             if (gloves) _material.SetColor(KitShaderIds.GloveColor, ToColor(glove));
         }
+
+        /// <summary>
+        /// A shader is usable when it is supported here and compiled (a shader that failed to compile is replaced by
+        /// Unity's error shader). EnsureMaterial also requires the kit's ForwardLit pass.
+        /// </summary>
+        public static bool IsUsable(Shader shader) =>
+            shader != null && shader.isSupported && shader.name != "Hidden/InternalErrorShader";
 
         private void AssignToAllSlots(Renderer r)
         {
@@ -428,8 +449,9 @@ namespace OpenFifa.Gameplay
                 ((int)style).ToString(), "|", outlineWidth.ToString("F3"), "|", showFrontNumber ? "1" : "0", "|",
                 nameNumberTextureWidth.ToString(), "x", nameNumberTextureHeight.ToString());
 
+            // Print textures are uploaded non-readable (no CPU copy kept), so new text needs a fresh texture.
             if (_printTexture == null || _printTexture.width != nameNumberTextureWidth
-                || _printTexture.height != nameNumberTextureHeight)
+                || _printTexture.height != nameNumberTextureHeight || (key != _printKey && !_printTexture.isReadable))
             {
                 DestroyTexture(ref _printTexture);
                 _printTexture = KitPrintTextureBuilder.CreatePrintTexture(nameNumberTextureWidth, nameNumberTextureHeight);
@@ -440,7 +462,7 @@ namespace OpenFifa.Gameplay
             {
                 var printLayout = KitPrintLayoutLogic.Build(playerName, number, layout, style, outlineWidth,
                     showFrontNumber, nameNumberTextureWidth, nameNumberTextureHeight);
-                KitPrintTextureBuilder.Write(_printTexture, printLayout, ref _printScratch);
+                KitPrintTextureBuilder.WriteAndRelease(_printTexture, printLayout);
                 _printKey = key;
             }
 

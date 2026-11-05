@@ -16,7 +16,7 @@ namespace OpenFifa.Editor
     /// </summary>
     public sealed class KitBodyMapPostprocessor : AssetPostprocessor
     {
-        public const uint Version = 4;
+        public const uint Version = 5;
 
         /// <summary>Mesh UV channel holding (armT, legT, armWeight, legWeight).</summary>
         public const int LimbChannel = 2;
@@ -46,13 +46,14 @@ namespace OpenFifa.Editor
             if (!IsOurs) return;
             var importer = assetImporter as ModelImporter;
             var human = importer != null ? importer.humanDescription.human : null;
-            context.DependsOnSourceAsset(BodyMaterialPath);
+            context.DependsOnArtifact(BodyMaterialPath);
+            bool verbose = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("OPENFIFA_KITBODY_DUMP"));
             var bodyMaterial = AssetDatabase.LoadAssetAtPath<Material>(BodyMaterialPath);
             foreach (var smr in root.GetComponentsInChildren<SkinnedMeshRenderer>(true))
             {
                 string result = Bake(root.transform, smr, human);
                 if (result == null) continue;
-                Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
+                if (verbose) Debug.Log($"[KitBodyMap] {assetPath} / {smr.name}: {result}");
                 if (bodyMaterial != null && smr.sharedMesh != null
                     && smr.sharedMesh.HasVertexAttribute(UnityEngine.Rendering.VertexAttribute.TexCoord3))
                 {
@@ -175,7 +176,8 @@ namespace OpenFifa.Editor
             mesh.SetUVs(LimbChannel, uv2);
             mesh.SetUVs(BodyChannel, uv3);
 
-            // Optional dump for offline inspection: OPENFIFA_KITBODY_DUMP=<dir> writes one CSV per mesh.
+            // Optional dump for offline inspection: OPENFIFA_KITBODY_DUMP=<dir> writes one CSV per mesh and logs the
+            // bake summary (head profile included) for each model.
             string dumpDir = Environment.GetEnvironmentVariable("OPENFIFA_KITBODY_DUMP");
             if (!string.IsNullOrEmpty(dumpDir)) Dump(dumpDir, smr, mesh, verts, body0, body1, bones, limbs);
 

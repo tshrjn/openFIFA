@@ -75,7 +75,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             if (_litFallback == null)
             {
-                var shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
+                var shader = Shader.Find("Universal Render Pipeline/Lit");
                 if (shader == null) return;
                 _litFallback = new Material(shader) { name = "PlayerTintFallback", hideFlags = HideFlags.DontSave };
             }
@@ -86,7 +86,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 for (int i = 0; i < mats.Length; i++)
                 {
                     if (mats[i] != null && mats[i].shader != null && mats[i].shader.name != KitShaderIds.ShaderName
-                        && mats[i].shader.isSupported) continue;
+                        && JerseyRenderer.IsUsable(mats[i].shader)) continue;
                     mats[i] = _litFallback;
                     changed = true;
                 }

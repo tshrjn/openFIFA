@@ -53,6 +53,17 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
+        public void Build_MannequinAtlas512x256_BackPrintStaysLegible()
+        {
+            // Skinned mannequins use a 512x256 atlas (256 px per panel): the back number must still be ~100 px tall
+            // and the name tall enough to rasterize cleanly.
+            var layout = KitPrintLayoutLogic.Build("DRAVOCROFT", 10, KitNameLayout.Arched, KitFontStyle.Block, 0.25f, true, 512, 256);
+            Assert.GreaterOrEqual(layout.GlyphsOf(KitPrintElement.BackNumber)[0].InkHeight, 96f);
+            Assert.GreaterOrEqual(layout.GlyphsOf(KitPrintElement.BackName)[0].InkHeight, 14f);
+            Assert.AreEqual(10, layout.GlyphsOf(KitPrintElement.BackName).Count);
+        }
+
+        [Test]
         public void Build_NameAboveNumber_OnBackPanel()
         {
             var layout = Build("HALE", 1);
