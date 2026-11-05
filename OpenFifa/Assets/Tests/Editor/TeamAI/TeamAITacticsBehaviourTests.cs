@@ -383,7 +383,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
         /// <summary>
         /// The press is visible in the numbers and is not bought with fouls: HighPress allows the fewest opponent passes
         /// per tackle or interception (fouls excluded), ParkTheBus the most, and HighPress commits at most 1.5x the
-        /// fouls of a balanced side. Measured (8 seeds, 4-minute halves): PPDA without fouls 3.09 / 4.27 / 11.45,
+        /// fouls per defensive action of a balanced side. Measured (8 seeds, 4-minute halves): PPDA without fouls 3.09 / 4.27 / 11.45,
         /// fouls 48 / 35 / 27 (HighPress / Balanced / ParkTheBus); this test's
         /// 6 seeds of 3-minute halves gave 3.74 / 5.06 / 9.98 and fouls 27 / 24 / 14.
         /// </summary>
@@ -399,7 +399,12 @@ namespace OpenFifa.Tests.Editor.TeamAI
                                      $"fouls {press.Fouls} / {bal.Fouls} / {bus.Fouls}");
             Assert.Less(press.Ppda, bal.Ppda * 0.85f, "high press should allow clearly fewer passes per defensive action");
             Assert.Less(bal.Ppda, bus.Ppda, "park the bus should press least");
-            Assert.LessOrEqual(press.Fouls, 1.5f * bal.Fouls + 2f, "the press should not be won by fouling");
+            // Fouls per defensive action: a pressing side makes more challenges, so it is the rate (not the count) that
+            // must stay close to a balanced side's.
+            float pressRate = press.Fouls / (float)System.Math.Max(1, press.Actions);
+            float balRate = bal.Fouls / (float)System.Math.Max(1, bal.Actions);
+            System.Console.WriteLine($"fouls per defensive action: HighPress {pressRate:F3} ({press.Fouls}/{press.Actions}), Balanced {balRate:F3} ({bal.Fouls}/{bal.Actions})");
+            Assert.LessOrEqual(pressRate, 1.5f * balRate + 0.01f, "the press should not be won by fouling");
         }
 
         [Test]
@@ -465,6 +470,7 @@ namespace OpenFifa.Tests.Editor.TeamAI
             Assert.Less(bus, poss, "park the bus should score less than a possession side");
             Assert.Greater(press, bal, "a high press should score more than a balanced side");
             Assert.Greater(press, bus * 1.4f, "a high press should score far more than park the bus");
+            Assert.GreaterOrEqual(poss, bal * 0.95f, "a possession side should be among the productive styles, not below balanced");
         }
 
         // ------------------------------------------------------------------ box defending

@@ -140,7 +140,9 @@ namespace OpenFifa.Core
         GKSweep = 21,
         GKClaim = 22,
         GKDistribute = 23,
-        SetPieceTaker = 24
+        SetPieceTaker = 24,
+        /// <summary>A marked forward comes short toward the ball to receive (then spins in behind if followed).</summary>
+        CheckRun = 25
     }
 
     /// <summary>
