@@ -391,6 +391,7 @@ namespace OpenFifa.Gameplay
                 nameNumberTextureHeight = Mathf.Min(nameNumberTextureHeight, 256);
                 _bodyRenderers = GetComponentsInChildren<SkinnedMeshRenderer>(true);
                 foreach (var r in _bodyRenderers) AssignToAllSlots(r);
+                if (AthleteBody.IsAthlete(gameObject)) AthleteBody.ApplyHeadParams(_material);
                 return true;
             }
 

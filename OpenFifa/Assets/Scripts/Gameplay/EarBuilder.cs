@@ -36,6 +36,7 @@ namespace OpenFifa.Gameplay
                 if (Application.isPlaying) Object.Destroy(old.gameObject);
                 else Object.DestroyImmediate(old.gameObject);
             }
+            if (AthleteBody.IsAthlete(model)) return null; // the athlete head has modelled ears
             var material = GetMaterial(skin);
             if (material == null) return null;
             var go = new GameObject("Ears");

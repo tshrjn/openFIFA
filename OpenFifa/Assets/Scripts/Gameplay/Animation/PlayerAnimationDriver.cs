@@ -703,6 +703,12 @@ namespace OpenFifa.Gameplay
 
         // ------------------------------------------------------------------ locomotion
 
+        /// <summary>
+        /// Ground distance this body's feet cover per locomotion cycle relative to the UAL2 mannequin the gait table was
+        /// measured on (1 = mannequin). Set at spawn, e.g. <see cref="AthleteBody.GaitScale"/> for the Blender athlete.
+        /// </summary>
+        public float GaitScale { get; set; } = 1f;
+
         private void DriveLocomotion(float dt, Vector3 pos, Vector3 vel, float yaw, float gaitStrafe, float gaitForward)
         {
             float speed = Halted ? 0f : vel.magnitude;
@@ -751,7 +757,9 @@ namespace OpenFifa.Gameplay
             // Rate from the blend the tree shows NOW (damped), so the feet match the ground through every transition.
             float shownF = animator.GetFloat(ForwardHash), shownS = animator.GetFloat(StrafeHash);
             float shown = Mathf.Sqrt(shownF * shownF + shownS * shownS);
-            float rate = speed < _gaitSolver.IdleSpeed ? (_idle != null ? _idle.IdleRate : 1f) : _gaitSolver.RateFor(speed, shown);
+            // The tree position is in the gait table's m/s (clips measured on the UAL2 mannequin); on another body the same
+            // blend covers GaitScale times that ground speed, so the rate is solved against the scaled speed.
+            float rate = speed < _gaitSolver.IdleSpeed ? (_idle != null ? _idle.IdleRate : 1f) : _gaitSolver.RateFor(speed, shown * GaitScale);
             if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
                 rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
             animator.SetFloat(LocoRateHash, rate);
