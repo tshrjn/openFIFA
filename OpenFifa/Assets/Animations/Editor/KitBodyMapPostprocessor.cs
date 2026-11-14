@@ -40,10 +40,7 @@ namespace OpenFifa.Editor
         // After QuaterniusImportPostprocessor (default order 0).
         public override int GetPostprocessOrder() => 50;
 
-        private bool IsOurs =>
-            assetPath.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) &&
-            (assetPath.StartsWith(QuaterniusImportPostprocessor.AnimationsRoot, StringComparison.Ordinal) ||
-             assetPath.StartsWith(QuaterniusImportPostprocessor.CharactersRoot, StringComparison.Ordinal));
+        private bool IsOurs => QuaterniusImportPostprocessor.IsCharacterModel(assetPath);
 
         private void OnPostprocessModel(GameObject root)
         {

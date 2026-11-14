@@ -56,6 +56,13 @@ namespace OpenFifa.Gameplay
 
             var go = new GameObject("HairCap");
             go.transform.SetParent(head, false);
+            if (AthleteBody.IsAthlete(model))
+            {
+                // Cap meshes are built in mannequin head-bone space: carry them onto the athlete head frame.
+                AthleteBody.MannequinHeadToAthlete(out var p, out var r);
+                go.transform.localPosition = p;
+                go.transform.localRotation = r;
+            }
             go.AddComponent<MeshFilter>().sharedMesh = GetMesh(style);
             var mr = go.AddComponent<MeshRenderer>();
             mr.sharedMaterial = material;

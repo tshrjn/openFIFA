@@ -19,6 +19,19 @@ namespace OpenFifa.Editor
         public const string AnimationsRoot = "Assets/Animations/Quaternius/";
         public const string CharactersRoot = "Assets/Art/Characters/Quaternius/";
 
+        /// <summary>
+        /// Blender-built athlete bodies (tools/blender/athlete_body.py, MakeHuman CC0 base mesh, Unreal-style
+        /// "game_engine" skeleton in T-pose). Same character import settings as <see cref="CharactersRoot"/>.
+        /// </summary>
+        public const string AthleteRoot = "Assets/Art/Characters/Athlete/";
+
+        /// <summary>True for every model folder these postprocessors own.</summary>
+        public static bool IsCharacterModel(string path) =>
+            path.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) &&
+            (path.StartsWith(AnimationsRoot, StringComparison.Ordinal) ||
+             path.StartsWith(CharactersRoot, StringComparison.Ordinal) ||
+             path.StartsWith(AthleteRoot, StringComparison.Ordinal));
+
         /// <summary>Library clips used as actions, with the action whose profile holds their contact time.</summary>
         private static readonly Dictionary<string, AnimActionKind> ActionClips = new Dictionary<string, AnimActionKind>
         {
@@ -26,10 +39,7 @@ namespace OpenFifa.Editor
             { "OverhandThrow", AnimActionKind.GoalkeeperThrow },
         };
 
-        private bool IsOurs =>
-            assetPath.EndsWith(".fbx", StringComparison.OrdinalIgnoreCase) &&
-            (assetPath.StartsWith(AnimationsRoot, StringComparison.Ordinal) ||
-             assetPath.StartsWith(CharactersRoot, StringComparison.Ordinal));
+        private bool IsOurs => IsCharacterModel(assetPath);
 
         private void OnPreprocessModel()
         {
@@ -47,6 +57,25 @@ namespace OpenFifa.Editor
             // Quaternius exports in metres; keep 1:1 so the 1.8 m mannequin matches the sim capsule.
             importer.globalScale = 1f;
             importer.useFileScale = true;
+        }
+
+        /// <summary>
+        /// Screen-relative heights where the athlete LODs switch (Athlete_LOD0/1/2 from tools/blender/athlete_body.py).
+        /// LOD0 for close-ups, LOD1 at broadcast distance, LOD2 for far players; the last LOD never culls (a player
+        /// must not vanish at the far touchline).
+        /// </summary>
+        public static readonly float[] AthleteLodHeights = { 0.22f, 0.05f, 0f };
+
+        private void OnPostprocessModel(GameObject root)
+        {
+            if (!assetPath.StartsWith(AthleteRoot, StringComparison.Ordinal)) return;
+            var group = root.GetComponentInChildren<LODGroup>();
+            if (group == null) return;
+            var lods = group.GetLODs();
+            for (int i = 0; i < lods.Length && i < AthleteLodHeights.Length; i++)
+                lods[i].screenRelativeTransitionHeight = AthleteLodHeights[i];
+            group.SetLODs(lods);
+            group.RecalculateBounds();
         }
 
         private void OnPreprocessAnimation()

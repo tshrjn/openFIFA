@@ -535,10 +535,18 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 var right = Vector3.Cross(Vector3.up, fwd);
                 float headY = HeadHeight(p);
                 var hidden = HideOtherPlayers(id, count);
-                var face = new Vector3(p.position.x, headY, p.position.z);
+                var face = AthleteFacePoint(p, out var athleteFace) ? athleteFace : new Vector3(p.position.x, headY, p.position.z);
                 var body = p.position + Vector3.up * 0.95f;
                 unityCam.fieldOfView = 26f;
                 camT.position = face + fwd * 1.15f + Vector3.up * 0.03f; camT.LookAt(face);
+                if (AthleteFacePoint(p, out _))
+                {
+                    // The head pose read before the close-up can be stale (the animator was culled while the player was
+                    // off screen): let the pose update with the camera on the player, then aim at the fresh head centre.
+                    yield return null; yield return null;
+                    AthleteFacePoint(p, out face);
+                    camT.position = face + fwd * 1.15f + Vector3.up * 0.03f; camT.LookAt(face);
+                }
                 yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_face_p{n}.png"));
                 camT.position = face + (fwd * 0.7f + right * 0.5f).normalized * 1.15f; camT.LookAt(face);
                 yield return new WaitForEndOfFrame(); Save(Path.Combine(OutputDir, $"looks_face34_p{n}.png"));
@@ -606,6 +614,22 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     if (r.enabled) { r.enabled = false; hidden.Add(r); }
             }
             return hidden;
+        }
+
+        /// <summary>
+        /// Face framing point for the Blender athlete body: its measured head centre (head-bone space, follows head
+        /// pitch and lean) less 3 cm, the same point relative to the head centre as the mannequin framing below.
+        /// </summary>
+        private static bool AthleteFacePoint(Transform p, out Vector3 point)
+        {
+            point = default;
+            if (!AthleteBody.IsAthlete(p.gameObject)) return false;
+            var animator = p.GetComponentInChildren<Animator>();
+            var h = animator != null && animator.isHuman ? animator.GetBoneTransform(HumanBodyBones.Head) : null;
+            if (h == null) return false;
+            point = h.TransformPoint(new Vector3(AthleteHeadSpace.CentreBoneX, AthleteHeadSpace.CentreBoneY, AthleteHeadSpace.CentreBoneZ))
+                    + Vector3.up * (0.09f - MannequinHeadSpace.CentreBoneY);
+            return true;
         }
 
         /// <summary>Head centre height of a player model (Animator head bone, else bounds top minus 0.12 m).</summary>

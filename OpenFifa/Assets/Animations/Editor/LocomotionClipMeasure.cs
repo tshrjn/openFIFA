@@ -30,6 +30,16 @@ namespace OpenFifa.Editor
             public float LeanDeg;           // mean trunk pitch forward (hips -> head) from vertical
         }
 
+        /// <summary>Model the clips are sampled on: UAL2, or OPENFIFA_MEASURE_MODEL (e.g. the athlete body FBX).</summary>
+        public static string MeasureModelPath
+        {
+            get
+            {
+                string v = Environment.GetEnvironmentVariable("OPENFIFA_MEASURE_MODEL");
+                return string.IsNullOrEmpty(v) ? FootballAnimationBuilder.Ual2Path : v;
+            }
+        }
+
         public static readonly string[] Clips =
         {
             "Walk_Loop", "Jog_Fwd_Loop", "Sprint_Loop", "Walk_Formal_Loop", "Crouch_Fwd_Loop", "Idle_Loop",
@@ -76,7 +86,7 @@ namespace OpenFifa.Editor
         public static Result Measure(AnimationClip clip, bool lateral = false)
         {
             var result = new Result { Clip = clip.name, Length = clip.length, AverageSpeed = clip.averageSpeed.magnitude };
-            var model = AssetDatabase.LoadAssetAtPath<GameObject>(FootballAnimationBuilder.Ual2Path);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(MeasureModelPath);
             if (model == null) return result;
             GameObject go = UnityEngine.Object.Instantiate(model);
             go.hideFlags = HideFlags.HideAndDontSave;
@@ -140,7 +150,7 @@ namespace OpenFifa.Editor
         /// </summary>
         public static string RuntimeFacingReport()
         {
-            var model = AssetDatabase.LoadAssetAtPath<GameObject>(FootballAnimationBuilder.Ual2Path);
+            var model = AssetDatabase.LoadAssetAtPath<GameObject>(MeasureModelPath);
             var ctrl = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(FootballAnimationBuilder.ControllerPath);
             if (model == null || ctrl == null) return "runtime facing: model or controller missing";
             GameObject go = UnityEngine.Object.Instantiate(model);
