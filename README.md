@@ -32,9 +32,9 @@ Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebas
 > **This is not just a game. It's an experiment in building complex software with AI coding agents.**
 
 <p align="center">
-  <img src="screenshots/gameplay_hero.png" alt="OpenFootball Gameplay - Night Stadium" width="720"/>
+  <a href="docs/media/hero.jpg"><img src="docs/media/goal.gif" alt="OpenFootball gameplay: an attack ending in a goal, broadcast camera" width="720"/></a>
   <br/>
-  <em>Rush mode: 4v4 night match with broadcast HUD, stadium floodlights, and FIFA-style controls</em>
+  <em>7 seconds of an AI-vs-AI match ending in a goal, recorded on 2026-11-05 from a <code>main</code> build. No download yet: today you play it by opening the project in Unity 6 (see <a href="#getting-started">Getting Started</a>).</em>
 </p>
 
 ---
