@@ -362,6 +362,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
             BroadcastCamera.HalfLength = pitch.HalfLength;
             BroadcastCamera.HalfWidth = pitch.HalfWidth;
             FitBroadcastCameraToStand();
+            if (_stadium != null)
+            {
+                // Dugouts / tunnel canopy are hidden while they fill the bottom of the broadcast frame.
+                var culler = cam.GetComponent<NearSideOccluderCuller>() ?? cam.gameObject.AddComponent<NearSideOccluderCuller>();
+                culler.Stadium = _stadium;
+                culler.Rig = BroadcastCamera;
+            }
 
             _ball = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             _ball.name = "Ball";
@@ -408,9 +415,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
             // Fog solved for the far touchline (near ~34 m, far ~98 m from the camera) instead of the close-camera
             // presets; precipitation reaches past the far touchline even at the camera's widest yaw.
             float pitchWidth = 2f * BroadcastCamera.HalfWidth;
-            WeatherVisuals.FogReferenceDistance = BroadcastFog.FarTouchlineDistance(BroadcastCamera.BroadcastHeight,
-                BroadcastCamera.BroadcastSetback, pitchWidth);
-            WeatherVisuals.FarReach = (BroadcastCamera.BroadcastSetback + pitchWidth)
+            // The camera rides between its far and near setbacks: solve for the farthest far-touchline distance.
+            WeatherVisuals.FogReferenceDistance = BroadcastFog.FarTouchlineDistance(BroadcastCamera.BroadcastRigHeight,
+                BroadcastCamera.BroadcastNearSetback, pitchWidth);
+            WeatherVisuals.FarReach = (BroadcastCamera.BroadcastNearSetback + pitchWidth)
                                       / Mathf.Cos(Mathf.Clamp(BroadcastCamera.MaxYawDegrees, 0f, 60f) * Mathf.Deg2Rad);
             var q = BroadcastLighting.Quality;
             _weatherParticleMaterial = CreateWeatherParticleMaterial();
@@ -765,6 +773,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         // ------------------------------------------------------------------ match
 
+        /// <summary>Session camera yaw at kick-off: the broadcast camera looking straight across (-X), sim convention.</summary>
+        public static readonly float KickoffCameraYaw = Mathf.Atan2(-1f, 0f);
+
         /// <summary>Session options for a level with the currently selected clubs (deterministic for a given seed).</summary>
         public SinglePlayerMatchOptions BuildOptions(TeamAIDifficultyLevel level, out Color homeColor, out Color awayColor)
         {
@@ -776,7 +787,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 Config = new MatchSimConfig { HalfDurationSeconds = HalfSeconds },
                 Weather = Weather,
                 Surface = SurfaceOverride != PitchSurface.Normal ? SurfaceOverride : (PitchSurface?)null,
-                CameraYaw = BroadcastCamera != null ? BroadcastCamera.YawRadians : -Mathf.PI * 0.5f,
+                // Straight across the pitch from the +X side, not the camera's live yaw: the capture probe replays the
+                // match from these options, and a live yaw (which depends on camera geometry and on how many frames
+                // ran first) would make the recorded match depend on presentation. Live play updates it every frame.
+                CameraYaw = KickoffCameraYaw,
             };
             homeColor = new Color(0.75f, 0.1f, 0.15f);
             awayColor = new Color(0.95f, 0.95f, 0.97f);
@@ -888,6 +902,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             SubtitleUntil = 0f;
             _marker.gameObject.SetActive(false);
             BroadcastCamera.Player = null;
+            BroadcastCamera.ShotLive = false;
+            BroadcastCamera.GoalStoppageSide = 0;
         }
 
         /// <summary>Same clubs and level, next seed (deterministic: an LCG step of the current seed).</summary>
@@ -1017,6 +1033,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 bool offsideCut = Offside != null && Offside.CameraCut != null && Offside.CameraCut.IsCut;
                 if (!PinCameraYaw && !offsideCut) Session.CameraYaw = BroadcastCamera.YawRadians;
                 BroadcastCamera.AttackDirection = BroadcastFraming.AttackDirection(Session.Sim);
+                // Goal presentation (read-only): shot zoom near goal, goal camera in the pause after a goal.
+                BroadcastCamera.ShotLive = Session.Sim.State.ShotLive;
+                // Only a goal (kick-off pending): an indirect free kick or throw-in straight into the net is a goal kick.
+                BroadcastCamera.GoalStoppageSide = Session.Sim.Phase == SimMatchPhase.Stoppage
+                    && Session.Sim.State.PendingRestart == RestartType.KickOff ? Session.Sim.State.Ball.InNet : 0;
+                UpdateGoalCameraSkip();
                 _commentary?.SetCrowdIntensity(_excitement);
                 // Time.deltaTime is scaled: the offside slow motion / freeze steps fewer (or no) ticks per frame;
                 // the tick sequence itself is unchanged.
@@ -1097,6 +1119,32 @@ namespace OpenFifa.Gameplay.SinglePlayer
         }
 
         private ProceduralStadium _stadium;
+        private readonly OffsideSkipGate _goalCamSkip = new OffsideSkipGate(GoalCamera.GoalCamSkipGraceSeconds);
+        private bool _goalCamSkipArmed;
+        private float _goalCamSkipElapsed;
+
+        /// <summary>
+        /// The goal camera is skippable with any new button, key, click or tap (held input from the shot does not
+        /// count, nor anything in the first <see cref="GoalCamera.GoalCamSkipGraceSeconds"/>).
+        /// </summary>
+        private void UpdateGoalCameraSkip()
+        {
+            if (BroadcastCamera == null || !BroadcastCamera.GoalCameraActive)
+            {
+                _goalCamSkipArmed = false;
+                return;
+            }
+            ulong down = OffsidePresentation.SkipControlsDown();
+            if (!_goalCamSkipArmed)
+            {
+                _goalCamSkipArmed = true;
+                _goalCamSkipElapsed = 0f;
+                _goalCamSkip.Begin(down);
+                return;
+            }
+            _goalCamSkipElapsed += Time.unscaledDeltaTime;
+            if (_goalCamSkip.Update(down, _goalCamSkipElapsed)) BroadcastCamera.SkipGoalCamera();
+        }
 
         /// <summary>
         /// The broadcast camera rides above the main (near) stand. Lift it until, over its whole dolly range, it is
@@ -1107,9 +1155,10 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             if (_stadium == null || _stadium.Layout == null || BroadcastCamera == null) return;
             var stand = _stadium.Layout.MainStand;
-            float far = BroadcastCamera.BroadcastSetback;
-            float near = far - SinglePlayerCamera.DollyIn * BroadcastCamera.HalfWidth;
-            float h = BroadcastCamera.BroadcastHeight;
+            // Depth range the rig rides over (BroadcastRig.Setback): far-side play to near-side play.
+            float near = Mathf.Min(BroadcastCamera.BroadcastFarSetback, BroadcastCamera.BroadcastNearSetback);
+            float far = Mathf.Max(BroadcastCamera.BroadcastFarSetback, BroadcastCamera.BroadcastNearSetback);
+            float h = BroadcastCamera.BroadcastRigHeight;
             for (int k = 0; k < 40; k++)
             {
                 bool ok = true;
@@ -1119,7 +1168,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 if (ok) break;
                 h += 0.5f;
             }
-            BroadcastCamera.BroadcastHeight = h;
+            BroadcastCamera.BroadcastRigHeight = h;
         }
         private float _excitement = CrowdBaseline;
         /// <summary>Crowd excitement at rest and how fast it settles back (per second).</summary>

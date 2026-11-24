@@ -250,7 +250,7 @@ namespace OpenFifa.Gameplay
         /// button (not the sticks), left/right mouse, any keyboard key, and a one-frame pulse for a touch in phase
         /// Began. The gate turns these into "new press" edges, so held input never skips.
         /// </summary>
-        private static ulong SkipControlsDown()
+        internal static ulong SkipControlsDown()
         {
             ulong m = 0;
             var gamepad = Gamepad.current;

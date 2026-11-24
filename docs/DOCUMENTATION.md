@@ -42,6 +42,44 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-24 Session — Broadcast camera rig, near-side occlusion, radar fade, goal camera
+
+**Status**: Completed (branch `feature/broadcast-camera-hud`)
+**Changes**:
+- `Core/Presentation/BroadcastRig.cs` (new): broadcast pose. Fixed height (25 m, raised by the stand fit if needed),
+  depth behind the near touchline follows the framed point across the pitch (33 m for near-touchline play, 16 m for
+  far-touchline play), tilt clamped to 22-30 deg, vertical FOV 27 deg. The old fixed 28 m / 19 m rig tilted ~9 deg on
+  far-side play and ~38 deg (near overhead) on near-side play. Mid-pitch players are ~42 px tall at 720p.
+- `Core/Presentation/BroadcastView.cs` (new): engine-free pinhole projection (Unity conventions) for tests and
+  presentation logic.
+- `Core/Presentation/NearSideOcclusion.cs` + `Gameplay/Stadium/NearSideOccluderCuller.cs` (new): dugouts and the
+  tunnel canopy are separate renderers now (`ProceduralStadium.NearSideOccluders`, +3 draw calls) and are hidden while
+  one covers more than 8% of the broadcast frame height (shown again under 5%). Near ad boards stay.
+- `Core/Presentation/HudRadarFade.cs` (new) + `SinglePlayerHudCanvas`: the radar fades to 15% while the ball or the
+  controlled player (feet to head) projects under it, 0.25 s fades.
+- `Core/Presentation/GoalCamera.cs` (new) + `SinglePlayerCamera`: smooth zoom-in (FOV x0.78) while a shot is live
+  within 32 m of a goal line (full at 14 m), held 1.2 s; in the dead-ball pause after a goal, a hard cut to a pitchside
+  camera on the byline beside the goal (14 m out, 1.5 m behind the line, 5 m up, looking down, FOV 34 deg), then a hard
+  cut back with the follow eased in. Any new input skips it. No replay.
+- `Core/Presentation/StadiumSkyline.cs` (new): the stadium skyline (corner fill rims, roof fronts; above it there is no
+  geometry, only the clear colour) and an inside-geometry test. The first goal camera (2 m up, level, 40 deg) showed
+  the open corner behind the goal as a dark slab; tests now require the skyline above the frame and the near frustum
+  clear of stadium geometry and the goal frame.
+- `SinglePlayerCamera` uses presentation time (`PresentationClock`): unchanged live; in captures the follow, zoom and
+  goal camera now run at the capture frame rate instead of wall-clock time.
+
+**Decisions**: The sim-facing yaw (`YawRadians`, which maps the stick to the pitch) stays the broadcast yaw during
+the goal camera. The session's initial `CameraYaw` is now the fixed straight-across value
+(`SinglePlayerMatchController.KickoffCameraYaw`) instead of the camera's live yaw: the capture probe replays the match
+from those options, so the live yaw (camera geometry, frames rendered before the probe) decided which match a capture
+recorded, and a one-ulp difference reshuffles a whole scripted match. Captures of a seed therefore show a different
+match than captures made before this change; the sim itself is unchanged (ladder numbers identical).
+Everything else is presentation only.
+
+**Known Issues**: No snapshot-based goal replay yet (the goal camera is a live angle on the celebration).
+
+**Tests**: `Tests/Editor/Presentation/BroadcastCameraRigTests.cs` (FID_PRESENTATION).
+
 ## 2026-11-04 Session — Kits, skin and heads on the single-player mannequins
 
 - **Body map bake** (`Animations/Editor/KitBodyMapPostprocessor.cs`, maths in `Core/KitBodyMapBaker.cs`): on import of the
