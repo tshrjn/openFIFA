@@ -449,17 +449,21 @@ namespace OpenFifa.Tests.Editor.TeamAI
         }
 
         /// <summary>
-        /// A defensive style must not be the strongest attack. At Ultimate against the scripted user (16 seeds of
+        /// A defensive style must not be the strongest attack. At Ultimate against the scripted user (48 seeds of
         /// 6-minute halves): park the bus scores least, high press most and clearly more than balanced. Measured over
         /// 48 seeds: ParkTheBus 145, Possession 196, Balanced 203, HighPress 274 (before the calibration ParkTheBus
         /// scored 178 to Balanced's 105 over 24 seeds, the most of any style).
+        /// 16 seeds were within seed noise (about 9 goals per style total): main itself fails the possession check on seeds
+        /// 17-48 (Possession 142 v Balanced 151), and the keeper dive-reach change (match-feel PR) flipped HighPress v
+        /// Balanced on seeds 1-16 (76 v 80) while seeds 17-48 kept the order (186 v 146). Over 48 seeds: main ParkTheBus
+        /// 157, Balanced 222, Possession 222, HighPress 271; with the dive reach 142 / 226 / 217 / 262.
         /// </summary>
         [Test]
         [Category("Slow")]
-        [Timeout(3600000)]
+        [Timeout(10800000)]
         public void StyleGoalsFor_FollowIntent_ParkTheBusLeast_HighPressMost()
         {
-            const int seeds = 16;
+            const int seeds = 48;
             var level = TeamAIDifficultyLevel.Ultimate;
             int bus = AIGoalsFor(TeamAIStyle.ParkTheBus, level, seeds);
             int bal = AIGoalsFor(TeamAIStyle.Balanced, level, seeds);

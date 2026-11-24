@@ -74,7 +74,7 @@
       ]
     },
     {
-      "id": "on_the_ball", "event": "OnTheBall", "voice": "pbp", "priority": 12, "interruptible": true, "cooldown": 3.5, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "id": "on_the_ball", "event": "OnTheBall", "voice": "pbp", "priority": 12, "interruptible": true, "cooldown": 5, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
       "lines": [
         "{name}",
         "{name}...",
@@ -617,7 +617,15 @@
         "Nobody tracked the runner. Basic, but costly.",
         "You'll see that one on the highlights tonight.",
         "It started with a simple ball out from the back. Patience pays.",
-        "The confidence will flow now."
+        "The confidence will flow now.",
+        "That's the moment the game has been waiting for.",
+        "A bit of quality settles it. Nothing complicated.",
+        "Watch the run off the shoulder. That's where it was won.",
+        "They've worked the ball into the right areas all half.",
+        "Sometimes you just have to be clinical, and that was.",
+        "Good players make it look simple. That was simple.",
+        "The full-back was caught too narrow. They punished it.",
+        "He knew exactly where the keeper was before he hit it."
       ]
     },
     {
@@ -1034,6 +1042,149 @@
         "The other dressing room will be devastated.",
         "Late goals like that define a season.",
         "Look at the bench. Pure joy."
+      ]
+    },
+    {
+      "id": "build_up.switch", "event": "SwitchOfPlay", "voice": "pbp", "priority": 22, "interruptible": true, "cooldown": 16, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "Switched right across the pitch.",
+        "A big diagonal to change the angle.",
+        "They move it from one flank to the other.",
+        "Long ball across, and the play opens up.",
+        "That stretches them. All the way across.",
+        "Out of the crowd and onto the far side.",
+        "Across to {name}",
+        "Raked across to {name}",
+        "{name} picks it up on the far side.",
+        "{name} has acres of space out there.",
+        "Swept wide to {name}",
+        "{name} takes it down on the opposite flank."
+      ]
+    },
+    {
+      "id": "build_up.progressive", "event": "ProgressivePass", "voice": "pbp", "priority": 21, "interruptible": true, "cooldown": 12, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "That's a ball that breaks the lines.",
+        "Played forward with purpose.",
+        "Straight through the middle of them.",
+        "Into the final third now.",
+        "Forward they go.",
+        "A vertical pass, and they're on the move.",
+        "Up to {name}",
+        "Forward to {name}",
+        "{name} receives between the lines.",
+        "{name} turns and runs at them.",
+        "Driven forward into {name}",
+        "{name} takes it on the half-turn."
+      ]
+    },
+    {
+      "id": "build_up.dribble", "event": "DribblePast", "voice": "pbp", "priority": 23, "interruptible": true, "cooldown": 10, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "Beats his man!",
+        "Gone past him with ease.",
+        "He's left the defender for dead.",
+        "A drop of the shoulder, and he's through.",
+        "Twisting and turning in there.",
+        "Lovely footwork to get away.",
+        "{name} skips past the challenge.",
+        "{name} goes on his own.",
+        "Wonderful feet from {name}",
+        "{name} sends him the wrong way.",
+        "Away from his marker goes {name}",
+        "{name} glides past."
+      ]
+    },
+    {
+      "id": "build_up.press", "event": "PressWon", "voice": "pbp", "priority": 24, "interruptible": true, "cooldown": 15, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "Won back high up the pitch!",
+        "The press works. They've pinched it.",
+        "Hunted down and robbed in their own half.",
+        "Forced into a mistake there.",
+        "That's what happens when you press as a team.",
+        "Turned over in a dangerous area.",
+        "{name} nicks it!",
+        "Pinched by {name}",
+        "{name} steals it high up.",
+        "Great pressure from {name}",
+        "{name} hunts it down and wins it.",
+        "Snapped up by {name}"
+      ]
+    },
+    {
+      "id": "build_up.possession", "event": "PossessionSpell", "voice": "pbp", "priority": 18, "interruptible": true, "cooldown": 30, "maxCrowd": 0.75, "tone": "neutral", "nameTone": "neutral",
+      "lines": [
+        "They've had the ball for a long while now.",
+        "A patient spell of possession, this.",
+        "Nobody can get near the ball at the moment.",
+        "Keeping it, keeping it, waiting for the gap.",
+        "The opposition are chasing shadows.",
+        "Round and round it goes. Very composed.",
+        "{team} are well on top of this spell.",
+        "{team} happy to keep the ball for now.",
+        "Total control from {team}",
+        "This spell belongs to {team}"
+      ]
+    },
+    {
+      "id": "analyst.goal.header", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "header",
+      "lines": [
+        "He attacked that ball. You have to want it more than the defender.",
+        "The delivery was perfect, and the header was even better.",
+        "Look at the timing of the jump. He hung in the air.",
+        "Nobody picked him up at the back post. Costly.",
+        "Power and direction. A proper centre-forward's header.",
+        "Those set-piece hours on the training ground pay off.",
+        "He got across his man at the near post. Brave.",
+        "The keeper's stranded. Nothing he can do about that header.",
+        "Great leap. The defender never got off the ground.",
+        "Aimed back across goal. That's the hardest one for a keeper."
+      ]
+    },
+    {
+      "id": "analyst.goal.long_range", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "long_range",
+      "lines": [
+        "Why not? Give it a go from there.",
+        "He's caught that absolutely perfectly.",
+        "The keeper never moved. Sheer power.",
+        "Nobody closed him down. You can't give a player that much time.",
+        "That's a strike you dream about as a kid.",
+        "Dipping and swerving. Keepers hate those.",
+        "Technique like that is practised a thousand times.",
+        "He saw the space and just let fly.",
+        "Right into the top corner. Unstoppable.",
+        "From that distance, it takes real belief."
+      ]
+    },
+    {
+      "id": "analyst.goal.counter", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "counter",
+      "lines": [
+        "From one end to the other in seconds.",
+        "That's a textbook counter-attack.",
+        "They were caught with too many bodies forward.",
+        "Win it, break, finish. Ruthless.",
+        "The pace of that break was frightening.",
+        "That's what you get for leaving the door open at the back.",
+        "Three passes and it's in the net. Devastating.",
+        "They were defending one moment and celebrating the next.",
+        "Look at the support runs. Everyone bombed forward.",
+        "The transition was electric."
+      ]
+    },
+    {
+      "id": "analyst.goal.tap_in", "event": "Goal", "voice": "analyst", "priority": 60, "interruptible": false, "tone": "neutral", "situation": "tap_in",
+      "lines": [
+        "The hard work was done before that. He just had to be there.",
+        "Striker's instinct. In the right place at the right time.",
+        "That's all about anticipation. He read it first.",
+        "The defenders switched off for a second, and that's enough.",
+        "It's a tap-in, but you still have to make the run.",
+        "The cross across the face did all the damage.",
+        "He gambled on it coming through, and it did.",
+        "Poacher's goal. They all count.",
+        "The keeper did well to get anything on the first one.",
+        "Simple finish, but look at the movement to get there."
       ]
     }
   ]

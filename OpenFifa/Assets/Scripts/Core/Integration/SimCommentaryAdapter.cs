@@ -15,6 +15,12 @@ namespace OpenFifa.Core
         public const float TapInMetres = 6f;
         /// <summary>A goal within this many seconds of winning the ball in the own half is a counter.</summary>
         public const float CounterSeconds = 10f;
+        /// <summary>A completed pass that travels at least this far across the pitch is a switch of play.</summary>
+        public const float SwitchMetres = 25f;
+        /// <summary>A completed pass that gains at least this much ground toward goal (ending in the attacking half) is progressive.</summary>
+        public const float ProgressiveMetres = 18f;
+        /// <summary>Uninterrupted possession for this long is a possession spell (one call per spell).</summary>
+        public const float PossessionSpellSeconds = 20f;
 
         private readonly MatchSim _sim;
         private readonly string[] _names;
@@ -36,6 +42,20 @@ namespace OpenFifa.Core
         private RestartType _lastRestartTaken;
         /// <summary>The restart the pending shot was struck from (None in open play), read when the Shot event fires.</summary>
         private RestartType _shotRestart;
+        // Build-up tracking: where the current pass was struck, and how long the side on the ball has kept it.
+        private SimVec3 _passOrigin;
+        private SimTeam _passOriginTeam = SimTeam.None;
+        private bool _passWasThrough;
+        private SimTeam _spellTeam = SimTeam.None;
+        private float _spellStart;
+        private bool _spellCalled;
+        // The last won tackle: its winner is not called again as a "press" for the same ball.
+        private int _tackleWinner = -1;
+        private int _tackleTick = -1000;
+        // Dribble tracking: the goal-side marker the carrier is running at, and when that was seen.
+        private int _dribbler = -1;
+        private int _dribbleMarker = -1;
+        private int _dribbleMarkerTick;
 
         /// <param name="playerNames">Spoken names (roster KnownAs) per sim id; null entries are allowed.</param>
         /// <param name="playerIds">Roster ids per sim id; may be null.</param>
@@ -79,6 +99,9 @@ namespace OpenFifa.Core
                         break;
                     case MatchEventType.Pass:
                         if (e.Team != _passTeam) { _passTeam = e.Team; _passCount = 0; }
+                        _passOrigin = e.Position;
+                        _passOriginTeam = e.Team;
+                        _passWasThrough = e.Action == IntentAction.ThroughPass;
                         if (e.Action == IntentAction.ThroughPass) Add(CommentaryEventType.ThroughBall, e, now, e.PlayerId);
                         break;
                     case MatchEventType.PassCompleted:
@@ -89,17 +112,47 @@ namespace OpenFifa.Core
                             var c = Add(CommentaryEventType.PassSequence, e, now, e.PlayerId);
                             c.PassCount = _passCount;
                         }
-                        // Receiver on the ball: name calls carry the build-up (the engine rate-limits them).
-                        else Add(CommentaryEventType.OnTheBall, e, now, e.PlayerId).PassCount = _passCount;
+                        else
+                        {
+                            // Receiver on the ball: describe the pass when it changed the picture (switch, ball forward
+                            // into the attacking half, a long spell on the ball), else a name call. The engine falls back to
+                            // the name call when a build-up category is on cooldown, so the build-up keeps its voice.
+                            var c = Add(BuildUpType(e), e, now, e.PlayerId);
+                            c.PassCount = _passCount;
+                        }
+                        _passOriginTeam = SimTeam.None;
+                        break;
+                    case MatchEventType.DribbleTouch:
+                        TrackDribble(e, now);
+                        break;
+                    case MatchEventType.WrongFooted:
+                        // Player = the beaten defender, other = the carrier who beat him.
+                        if (e.OtherPlayerId >= 0)
+                        {
+                            var d = Add(CommentaryEventType.DribblePast, e, now, e.OtherPlayerId, e.PlayerId);
+                            d.Team = e.Team == SimTeam.Home ? 1 : 0;
+                            d.TeamName = _teamNames[d.Team];
+                        }
                         break;
                     case MatchEventType.Interception:
                     case MatchEventType.PossessionChange:
                         if (e.Team != _passTeam) { _passTeam = e.Team; _passCount = 0; }
                         if (e.Team != _wonBallTeam || e.Type == MatchEventType.Interception)
                         {
+                            bool turnover = e.Team != _wonBallTeam && _wonBallTeam != SimTeam.None;
                             _wonBallTeam = e.Team;
                             _wonBallTime = (float)(s.Tick * _sim.Dt);
                             _wonBallInOwnHalf = _sim.AttackCoord(e.Team, e.Position) < 0f;
+                            // Won back in the attacking third: the press worked.
+                            bool justTackled = e.PlayerId == _tackleWinner && s.Tick - _tackleTick <= _sim.Config.SecondsToTicks(2f);
+                            if (turnover && !justTackled && _sim.AttackCoord(e.Team, e.Position) > _sim.Config.Pitch.HalfLength / 3f && e.PlayerId >= 0)
+                                Add(CommentaryEventType.PressWon, e, now, e.PlayerId);
+                        }
+                        if (e.Team != _spellTeam)
+                        {
+                            _spellTeam = e.Team;
+                            _spellStart = (float)(s.Tick * _sim.Dt);
+                            _spellCalled = false;
                         }
                         break;
                     case MatchEventType.Shot:
@@ -136,7 +189,12 @@ namespace OpenFifa.Core
                         AddGoal(e, now);
                         break;
                     case MatchEventType.Tackle:
-                        if (e.Detail == 1) Add(CommentaryEventType.Tackle, e, now, e.PlayerId);
+                        if (e.Detail == 1)
+                        {
+                            Add(CommentaryEventType.Tackle, e, now, e.PlayerId);
+                            _tackleWinner = e.PlayerId;
+                            _tackleTick = s.Tick;
+                        }
                         break;
                     case MatchEventType.Foul:
                         _shotPending = false;
@@ -162,6 +220,72 @@ namespace OpenFifa.Core
                 }
             }
             return _out;
+        }
+
+        /// <summary>
+        /// A carrier beats his man: on a dribble touch, the nearest opponent goal-side of him (within 3 m ahead) is noted;
+        /// when a later touch by the same carrier, within 2.5 s, finds that defender more than a metre behind the ball and
+        /// still close (he was gone past rather than avoided), it is a DribblePast. Skill moves that wrong-foot a defender
+        /// are called from their own event.
+        /// </summary>
+        private void TrackDribble(in MatchEvent e, double now)
+        {
+            var s = _sim.State;
+            int id = e.PlayerId;
+            if (id < 0 || id >= MatchSimState.PlayerCount) return;
+            var team = e.Team;
+            float carrier = _sim.AttackCoord(team, s.Players[id].Position);
+            if (id == _dribbler && _dribbleMarker >= 0 && s.Tick - _dribbleMarkerTick <= _sim.Config.SecondsToTicks(2.5f))
+            {
+                var m = s.Players[_dribbleMarker].Position;
+                float rel = _sim.AttackCoord(team, m) - carrier;
+                if (rel < -1f && SimMath.FlatDistance(m, s.Players[id].Position) < 4.5f)
+                {
+                    var c = Add(CommentaryEventType.DribblePast, e, now, id, _dribbleMarker);
+                    c.Team = team == SimTeam.Away ? 1 : 0;
+                    c.TeamName = _teamNames[c.Team];
+                    _dribbleMarker = -1;
+                    return;
+                }
+            }
+            if (id != _dribbler) { _dribbler = id; _dribbleMarker = -1; }
+            int best = -1;
+            float bestD = 3f;
+            for (int j = 0; j < MatchSimState.PlayerCount; j++)
+            {
+                ref readonly var q = ref s.Players[j];
+                if (q.Team == team || q.SentOff) continue;
+                float rel = _sim.AttackCoord(team, q.Position) - carrier;
+                if (rel < 0.3f || rel > 3f) continue;
+                float d = SimMath.FlatDistance(q.Position, s.Players[id].Position);
+                if (d < bestD) { bestD = d; best = j; }
+            }
+            if (best >= 0 && best != _dribbleMarker) { _dribbleMarker = best; _dribbleMarkerTick = s.Tick; }
+        }
+
+        /// <summary>The build-up event for a completed pass that is not a sequence milestone (OnTheBall when nothing stands out).</summary>
+        private CommentaryEventType BuildUpType(in MatchEvent e)
+        {
+            float t = (float)(_sim.State.Tick * _sim.Dt);
+            if (e.Team != _spellTeam)
+            {
+                _spellTeam = e.Team;
+                _spellStart = t;
+                _spellCalled = false;
+            }
+            if (_passOriginTeam == e.Team)
+            {
+                if (SimMath.Abs(e.Position.X - _passOrigin.X) >= SwitchMetres) return CommentaryEventType.SwitchOfPlay;
+                float from = _sim.AttackCoord(e.Team, _passOrigin), to = _sim.AttackCoord(e.Team, e.Position);
+                // A through ball already had its own call when it was played.
+                if (to - from >= ProgressiveMetres && to > 0f && !_passWasThrough) return CommentaryEventType.ProgressivePass;
+            }
+            if (!_spellCalled && t - _spellStart >= PossessionSpellSeconds)
+            {
+                _spellCalled = true;
+                return CommentaryEventType.PossessionSpell;
+            }
+            return CommentaryEventType.OnTheBall;
         }
 
         private CommentaryEvent Add(CommentaryEventType type, in MatchEvent e, double now, int player, int other = -1)

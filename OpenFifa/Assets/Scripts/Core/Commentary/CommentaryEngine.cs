@@ -118,6 +118,12 @@ namespace OpenFifa.Core
         public CommentaryUtterance CurrentAnalyst => _analyst;
         public CommentaryConfig Config => _config;
 
+        /// <summary>
+        /// Lines heard earlier in this play session (optional, shared across matches). With it, a line used in an earlier
+        /// match counts as used: fresh lines are preferred, then the one heard longest ago.
+        /// </summary>
+        public CommentaryLineMemory SessionMemory { get; set; }
+
         /// <summary>Rendered-audio index (optional). Set it before the match; see <see cref="ICommentaryClipCatalog"/>.</summary>
         public ICommentaryClipCatalog Catalog
         {
@@ -156,6 +162,12 @@ namespace OpenFifa.Core
                     return false;
             }
         }
+
+        /// <summary>Open-play build-up descriptions (switches, progressive passes, dribbles, pressing, possession spells).</summary>
+        public static bool IsBuildUpEvent(CommentaryEventType t) =>
+            t == CommentaryEventType.SwitchOfPlay || t == CommentaryEventType.ProgressivePass ||
+            t == CommentaryEventType.DribblePast || t == CommentaryEventType.PressWon ||
+            t == CommentaryEventType.PossessionSpell;
 
         public static bool IsLivePlayEvent(CommentaryEventType t)
         {
@@ -205,8 +217,11 @@ namespace OpenFifa.Core
             }
             else if (IsStoppageEvent(e.Type)) IsStoppage = true;
 
-            // Lead voice.
+            // Lead voice. A build-up event whose own categories are on cooldown (or missing) is still a reception: it
+            // falls back to the name call, so a switch or a progressive pass is never quieter than a plain pass.
             var cat = ChooseCategory(e, CommentaryVoice.PlayByPlay, contexts, now, CrowdIntensity, false);
+            if (cat == null && IsBuildUpEvent(e.Type) && e.PlayerName != null)
+                cat = ChooseCategory(e, CommentaryVoice.PlayByPlay, contexts, now, CrowdIntensity, false, CommentaryEventType.OnTheBall);
             if (cat != null && cat.Priority < _config.AnalystYieldPriority && (_analyst != null || _pendingAnalyst.IsSet))
                 cat = null; // a name call never cuts the co-commentator
             if (cat != null)
@@ -402,6 +417,7 @@ namespace OpenFifa.Core
             if (line == null) return null;
             _categoryLastUsed[p.Category.Id] = now;
             _lineLastUsed[line.Id] = now;
+            SessionMemory?.Note(line.Id);
 
             var voice = p.Category.Voice;
             CommentaryClip lineClip = line.NameOnly ? null : new CommentaryClip(line.ClipId, line.Text, voice, line.Tone, false);
@@ -464,25 +480,30 @@ namespace OpenFifa.Core
 
             var fresh = _fresh;
             fresh.Clear();
+            var memory = SessionMemory;
             foreach (var l in fits)
-                if (!_lineLastUsed.TryGetValue(l.Id, out double t) || now - t >= _config.LineRepeatWindow) fresh.Add(l);
+                if ((!_lineLastUsed.TryGetValue(l.Id, out double t) || now - t >= _config.LineRepeatWindow) &&
+                    (memory == null || !memory.Heard(l.Id)))
+                    fresh.Add(l);
             if (fresh.Count > 0) return fresh[_rng.Next(fresh.Count)];
 
-            // Everything fitting was used recently: take the least recently used (first in bank order on ties).
+            // Everything fitting was used recently (this match, or earlier in the session): take the least recently
+            // used, ranked by the session memory when there is one, else by this match's clock (first in bank order on
+            // ties).
             CommentaryLine best = null;
             double bestT = double.PositiveInfinity;
             foreach (var l in fits)
             {
-                double t = _lineLastUsed[l.Id];
+                double t = memory != null ? memory.LastUse(l.Id) : _lineLastUsed[l.Id];
                 if (t < bestT) { bestT = t; best = l; }
             }
             return best;
         }
 
         private CommentaryCategory ChooseCategory(CommentaryEvent e, CommentaryVoice voice, List<string> contexts,
-            double now, float crowd, bool liveOnly)
+            double now, float crowd, bool liveOnly, CommentaryEventType? asType = null)
         {
-            var all = _bank.ForCached(e.Type, voice);
+            var all = _bank.ForCached(asType ?? e.Type, voice);
             if (all.Count == 0) return null;
             string situation = e.Type == CommentaryEventType.Goal ? SituationName(e.Situation) : null;
 

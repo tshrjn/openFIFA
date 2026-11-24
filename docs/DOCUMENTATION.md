@@ -42,6 +42,32 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-24 Session — Match feel: kit clash, commentary density and variety, diving saves
+
+**Status**: Completed (PR feature/match-feel)
+**Changes**:
+- Kits: `Core/KitBroadcastContrast.cs` (CIEDE2000 on a "broadcast look": pattern-blended shirt, chroma reduced and more so
+  for dark colours, shirts 75% / shorts 25%; clash under 22). `KitLibraryLogic.ResolveMatchKitsContrasting` (used by
+  `MatchKitBinder`) now keeps the away Home kit unless it clashes, then Away, then Third, else the most contrasting kit;
+  `MatchKitSelection.Contrast` records the score. The old luminance-gap rule moved Arsenal into off-white against Man
+  City's sky blue (contrast 11); red v sky blue scores 29 and is kept. Over all 380 Premier League pairings 56 were
+  under the threshold before, 2 after (best kit chosen and flagged). Tests: `KitBroadcastContrastTests` (FID_KITS).
+- Commentary: captures went quiet because `FastForwardTo` stepped with `StepOnce` (commentary stamped with sim time)
+  and then resumed on the real clock, so time ran backwards for the engine; `SinglePlayerMatchSession.FastForward`
+  keeps one clock. New build-up events and `build_up.*` categories (switch of play, progressive pass, dribble past a
+  man, press won, possession spell) with cooldowns and a name-call fallback; `on_the_ball` cooldown 3.5 -> 5 s;
+  `LullSeconds` 11 -> 8. 106 new clips rendered with Kokoro (release commentary-audio-v2). See docs/COMMENTARY.md.
+- Analyst variety: `CommentaryLineMemory` shared across a session's matches, `MatchSeed` mixes seed, clubs and match
+  index; analyst goal categories for header, long range, counter and tap-in, and 8 more generic goal lines.
+- Saves: `GkDiveReachRange` 1.6 -> 2.1 (stretch penalty and standing bonus now in `SimActionConfig`). Dives per match
+  0.88 -> 1.27 AI v AI (27% -> 36% of saves), 0.88 -> 1.19 v the scripted bot; ladder and keeper band tests pass
+  (numbers in docs/DIFFICULTY.md). The AI keeper facing the scripted bot almost never dives because the bot shoots
+  at the middle of the goal; the bot was left alone because the ladder baselines are measured against it.
+**Known Issues**: two PL pairings (LEE v NFO, NFO v ARS) have no kit above the contrast threshold (about 21); every
+save still plays the sideways GkDive clip, even a ball at the keeper's chest (no catch/gather clip yet).
+**Next**: a standing catch / gather animation for saves within standing reach; a smarter shot aim for the scripted bot
+if the ladder is ever re-baselined.
+
 ## 2026-11-24 Session — Broadcast camera rig, near-side occlusion, radar fade, goal camera
 
 **Status**: Completed (branch `feature/broadcast-camera-hud`)
