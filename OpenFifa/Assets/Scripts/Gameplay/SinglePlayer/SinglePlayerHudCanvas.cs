@@ -72,6 +72,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private readonly RectTransform[] _radarDot = new RectTransform[MatchSimState.PlayerCount];
         private readonly Image[] _radarDotImg = new Image[MatchSimState.PlayerCount];
         private RectTransform _radarBall, _radarHalo;
+        // Radar auto-fade while the ball or the controlled player is under it (HudRadarFade).
+        private CanvasGroup _radarGroup;
+        private float _radarAlpha = 1f;
+        private readonly Vector3[] _radarCorners = new Vector3[4];
+        private Camera _radarCam;
+        /// <summary>Current radar opacity multiplier (1 = normal, <see cref="HudRadarFade.CoveredAlpha"/> = faded).</summary>
+        public float RadarAlpha => _radarAlpha;
 
         // Subtitle.
         private RectTransform _subtitle;
@@ -212,6 +219,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void BuildRadar(RectTransform root)
         {
             _radar = MakeRect(root, "Radar", new Vector2(0.5f, 0f), new Vector2(0f, BottomInset), new Vector2(RadarWidth, RadarHeight));
+            _radarGroup = _radar.gameObject.AddComponent<CanvasGroup>();
+            _radarGroup.blocksRaycasts = false;
+            _radarGroup.interactable = false;
             var back = Img(_radar, "Back", Vector2.zero, new Vector2(RadarWidth, RadarHeight), new Color(0.02f, 0.12f, 0.05f, RadarOpacity));
             back.raycastTarget = false;
             var line = new Color(1f, 1f, 1f, 0.35f);
@@ -437,6 +447,41 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (_radarHalo.gameObject.activeSelf != halo) _radarHalo.gameObject.SetActive(halo);
             if (halo) _radarHalo.anchoredPosition = RadarPoint(st.Players[controlled].Position, pitch);
             _radarBall.anchoredPosition = RadarPoint(st.Ball.Position, pitch);
+            UpdateRadarFade();
+        }
+
+        /// <summary>
+        /// Fades the radar down while the ball or the controlled player (feet to head) projects under it, so near-side
+        /// play is never hidden; fades back once play moves away. Screen-space overlay canvas: corners are pixels.
+        /// </summary>
+        private void UpdateRadarFade()
+        {
+            var rig = _c.BroadcastCamera;
+            if (_radarCam == null && rig != null) _radarCam = rig.GetComponent<Camera>();
+            var cam = _radarCam != null ? _radarCam : Camera.main;
+            bool covered = false;
+            if (cam != null && rig != null)
+            {
+                _radar.GetWorldCorners(_radarCorners);
+                float minX = _radarCorners[0].x, minY = _radarCorners[0].y, maxX = _radarCorners[2].x, maxY = _radarCorners[2].y;
+                float margin = HudRadarFade.MarginPx720 * Screen.height / RefHeight;
+                if (rig.Ball != null)
+                {
+                    Vector3 b = cam.WorldToScreenPoint(rig.Ball.position);
+                    covered = b.z > 0f && HudRadarFade.Covers(minX, minY, maxX, maxY, b.x, b.y, margin);
+                }
+                if (!covered && rig.Player != null && !_c.AiVsAi)
+                {
+                    Vector3 feet = cam.WorldToScreenPoint(rig.Player.position);
+                    Vector3 head = cam.WorldToScreenPoint(rig.Player.position + Vector3.up * 1.85f);
+                    covered = feet.z > 0f && HudRadarFade.CoversSpan(minX, minY, maxX, maxY, feet.x, feet.y, head.y, margin);
+                }
+            }
+            // The goal camera is a close, low shot: keep the radar out of it too.
+            if (rig != null && rig.GoalCameraActive) covered = true;
+            float dt = (float)PresentationClock.FrameSeconds(Time.captureDeltaTime, Time.unscaledDeltaTime);
+            _radarAlpha = HudRadarFade.Step(_radarAlpha, covered, dt);
+            if (_radarGroup.alpha != _radarAlpha) _radarGroup.alpha = _radarAlpha;
         }
 
         private static Vector2 RadarPoint(SimVec3 pos, PitchSpec pitch)

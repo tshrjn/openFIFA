@@ -30,6 +30,14 @@ namespace OpenFifa.Gameplay
         public StadiumLayout Layout { get; private set; }
         public int TriangleCount { get; private set; }
         public int DrawCalls { get; private set; }
+
+        /// <summary>
+        /// Near-side furniture the broadcast camera looks past (dugouts, tunnel canopy): one renderer each, in the order
+        /// of <see cref="NearSideOcclusion.Occluders"/>, so <see cref="NearSideOccluderCuller"/> can hide the piece that
+        /// fills the bottom of the frame.
+        /// </summary>
+        public IReadOnlyList<Renderer> NearSideOccluders => _nearOccluders;
+        private readonly List<Renderer> _nearOccluders = new List<Renderer>();
         public float Excitement => _target;
 
         private Material _structure, _lamp, _halo;
@@ -170,6 +178,8 @@ namespace OpenFifa.Gameplay
         // ------------------------------------------------------------------ build
 
         private StadiumMeshBuffer _misc, _roof, _lamps, _halos;
+        private readonly List<StadiumMeshBuffer> _nearParts = new List<StadiumMeshBuffer>();
+        private readonly List<string> _nearNames = new List<string>();
         private StadiumMeshBuffer[] _ledBufs;
 
         private void BuildInternal(StadiumLayout layout, Color home, Color away, uint seed)
@@ -204,6 +214,11 @@ namespace OpenFifa.Gameplay
 
             Emit("Roofs", ShadowCastingMode.Off, true, (_roof, _structure));
             Emit("Stadium Misc", ShadowCastingMode.Off, true, (_misc, _structure));
+            for (int i = 0; i < _nearParts.Count; i++)
+            {
+                var go = Emit(_nearNames[i], ShadowCastingMode.Off, true, (_nearParts[i], _structure));
+                _nearOccluders.Add(go != null ? go.GetComponent<Renderer>() : null);
+            }
             var ledParts = new (StadiumMeshBuffer, Material)[_led.Length];
             for (int g = 0; g < _led.Length; g++) ledParts[g] = (_ledBufs[g], _led[g]);
             Emit("LED Boards", ShadowCastingMode.Off, false, ledParts);
@@ -211,7 +226,7 @@ namespace OpenFifa.Gameplay
             Emit("Light Halos", ShadowCastingMode.Off, false, (_halos, _halo));
         }
 
-        private void Emit(string name, ShadowCastingMode shadows, bool receive, params (StadiumMeshBuffer buf, Material mat)[] parts)
+        private GameObject Emit(string name, ShadowCastingMode shadows, bool receive, params (StadiumMeshBuffer buf, Material mat)[] parts)
         {
             var bufs = new List<StadiumMeshBuffer>();
             var mats = new List<Material>();
@@ -222,7 +237,7 @@ namespace OpenFifa.Gameplay
                 mats.Add(p.mat);
                 TriangleCount += p.buf.TriangleCount;
             }
-            if (bufs.Count == 0) return;
+            if (bufs.Count == 0) return null;
             var mesh = StadiumMeshBuffer.Combine(name, bufs.ToArray());
             _meshes.Add(mesh);
             var go = new GameObject(name);
@@ -235,6 +250,7 @@ namespace OpenFifa.Gameplay
             r.lightProbeUsage = LightProbeUsage.Off;
             r.reflectionProbeUsage = ReflectionProbeUsage.Off;
             DrawCalls += bufs.Count;
+            return go;
         }
 
         private Vector3 W(StandSide s, float d, float a, float h)
@@ -632,24 +648,37 @@ namespace OpenFifa.Gameplay
             var glass = C(StadiumCell.Glass);
             var white = C(StadiumCell.White);
             float d0 = sp.DugoutFront, d1 = sp.DugoutFront + sp.DugoutDepth, hh = sp.DugoutHeight;
+            // Each piece gets its own mesh (same material) so the broadcast camera can hide just the one in the way.
+            int n = 0;
             foreach (var ac in Layout.DugoutCentres)
             {
+                var b = NearPart("Dugout " + n++);
                 float a0 = ac - sp.DugoutWidth * 0.5f, a1 = ac + sp.DugoutWidth * 0.5f;
-                Box(_misc, s, d1 - 0.12f, d1, a0, a1, 0f, hh, glass, front: true, back: true, top: false, ends: false);
-                Box(_misc, s, d0 - 0.2f, d1, a0, a1, hh, hh + 0.15f, white, bottom: true);
-                Box(_misc, s, d0, d1 - 0.12f, a0, a0 + 0.08f, 0f, hh, glass, top: false);
-                Box(_misc, s, d0, d1 - 0.12f, a1 - 0.08f, a1, 0f, hh, glass, top: false);
-                Box(_misc, s, d1 - 0.75f, d1 - 0.12f, a0 + 0.2f, a1 - 0.2f, 0f, 0.48f, C(StadiumCell.Bench), back: false);
-                Box(_misc, s, d1 - 0.3f, d1 - 0.12f, a0 + 0.2f, a1 - 0.2f, 0.48f, 1.05f, C(StadiumCell.Bench), back: false, ends: false);
+                Box(b, s, d1 - 0.12f, d1, a0, a1, 0f, hh, glass, front: true, back: true, top: false, ends: false);
+                Box(b, s, d0 - 0.2f, d1, a0, a1, hh, hh + 0.15f, white, bottom: true);
+                Box(b, s, d0, d1 - 0.12f, a0, a0 + 0.08f, 0f, hh, glass, top: false);
+                Box(b, s, d0, d1 - 0.12f, a1 - 0.08f, a1, 0f, hh, glass, top: false);
+                Box(b, s, d1 - 0.75f, d1 - 0.12f, a0 + 0.2f, a1 - 0.2f, 0f, 0.48f, C(StadiumCell.Bench), back: false);
+                Box(b, s, d1 - 0.3f, d1 - 0.12f, a0 + 0.2f, a1 - 0.2f, 0.48f, 1.05f, C(StadiumCell.Bench), back: false, ends: false);
             }
             // Players' tunnel canopy from the stand front towards the pitch.
             Layout.TunnelSpan(out float t0, out float t1);
             var p = Layout.MainStand;
             float c0 = sp.DugoutFront + 0.3f, c1 = p.MinDepth, th = sp.TunnelHeight;
-            Box(_misc, s, c0, c1, t0 - 0.15f, t1 + 0.15f, th, th + 0.15f, white, back: false, bottom: true);
-            Box(_misc, s, c0, c1, t0 - 0.15f, t0, 0f, th, glass, back: false);
-            Box(_misc, s, c0, c1, t1, t1 + 0.15f, 0f, th, glass, back: false);
+            var canopy = NearPart("Tunnel Canopy");
+            Box(canopy, s, c0, c1, t0 - 0.15f, t1 + 0.15f, th, th + 0.15f, white, back: false, bottom: true);
+            Box(canopy, s, c0, c1, t0 - 0.15f, t0, 0f, th, glass, back: false);
+            Box(canopy, s, c0, c1, t1, t1 + 0.15f, 0f, th, glass, back: false);
+            // The tunnel floor stays: it is flat and never in the way.
             FaceH(_misc, s, 0.015f, c0, c1, t0, t1, true, C(StadiumCell.ConcreteDark));
+        }
+
+        private StadiumMeshBuffer NearPart(string name)
+        {
+            var b = new StadiumMeshBuffer();
+            _nearParts.Add(b);
+            _nearNames.Add(name);
+            return b;
         }
 
         private void BuildPylons()

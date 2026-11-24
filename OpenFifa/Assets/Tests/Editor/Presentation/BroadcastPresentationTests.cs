@@ -10,8 +10,8 @@ namespace OpenFifa.Tests.Editor.Presentation
     [Category("FID_PRESENTATION")]
     public class BroadcastPresentationTests
     {
-        // SinglePlayerCamera broadcast defaults.
-        private const float Fov = 27f, Height = 19f, Setback = 28f, HalfWidth = 34f, DollyIn = 0.15f;
+        // SinglePlayerCamera broadcast defaults (BroadcastRig).
+        private const float Fov = BroadcastRig.DefaultFov, Height = BroadcastRig.DefaultHeight, HalfWidth = 34f;
 
         [Test]
         public void PitchUpDegrees_AimedPoint_LandsAtRequestedScreenFraction()
@@ -55,7 +55,7 @@ namespace OpenFifa.Tests.Editor.Presentation
         {
             foreach (float x in new[] { -10f, 0f, 8f })
             {
-                float camX = HalfWidth + Setback - Math.Max(0f, x) * DollyIn;
+                float camX = HalfWidth + BroadcastRig.Setback(x, HalfWidth, BroadcastRig.DefaultNearSetback, BroadcastRig.DefaultFarSetback);
                 float d = (float)Math.Sqrt((camX - x) * (camX - x) + Height * Height);
                 float px = BroadcastFraming.Pixels(1.8f, d, Fov, 720f);
                 Assert.That(px, Is.InRange(35f, 50f), "play at x = " + x);
@@ -69,7 +69,7 @@ namespace OpenFifa.Tests.Editor.Presentation
             Assert.AreEqual(1.5f, BroadcastFraming.BallScale(5f, 7.5f, 3f), 1e-5f);
             Assert.AreEqual(3f, BroadcastFraming.BallScale(1f, 7.5f, 3f), 1e-5f);
             // The ball (0.22 m) at the far touchline from the broadcast camera reaches the 7.5 px target.
-            float d = (float)Math.Sqrt(96f * 96f + Height * Height);
+            float d = (float)Math.Sqrt(Math.Pow(2f * HalfWidth + BroadcastRig.DefaultFarSetback, 2) + Height * Height);
             float px = BroadcastFraming.Pixels(0.22f, d, Fov, 720f);
             Assert.That(px * BroadcastFraming.BallScale(px, 7.5f, 3f), Is.GreaterThanOrEqualTo(7.5f - 1e-3f));
         }
