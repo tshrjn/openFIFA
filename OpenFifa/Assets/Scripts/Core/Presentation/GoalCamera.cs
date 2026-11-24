@@ -1,0 +1,125 @@
+using System;
+
+namespace OpenFifa.Core
+{
+    /// <summary>
+    /// Presentation-only goal framing for the broadcast camera (reads sim state, never writes it):
+    /// <list type="bullet">
+    /// <item>a smooth zoom-in (narrower FOV) while a shot is live close to goal, held briefly after it ends;</item>
+    /// <item>a goal camera: during the dead-ball pause after a goal, a hard cut to a low side angle beside the goal
+    /// the ball went into, then a hard cut back to the live broadcast framing. Skippable.</item>
+    /// </list>
+    /// </summary>
+    public static class GoalCamera
+    {
+        /// <summary>FOV multiplier at full shot zoom (27 deg -> ~21 deg).</summary>
+        public const float ShotZoomFovScale = 0.78f;
+        /// <summary>Zoom starts this far from the goal line (m) and is full at <see cref="ShotZoomFullMetres"/>.</summary>
+        public const float ShotZoomStartMetres = 32f, ShotZoomFullMetres = 14f;
+        /// <summary>Seconds the zoom holds after the shot ends (save, block, goal) before easing out.</summary>
+        public const float ShotZoomHoldSeconds = 1.2f;
+        /// <summary>Smoothing time of the zoom (s).</summary>
+        public const float ShotZoomSmoothSeconds = 0.45f;
+
+        /// <summary>
+        /// Goal camera: low on the byline beside the goal (pitchside camera position), <see cref="GoalCamSide"/> m to the
+        /// near (+X) side of the centre of the goal, <see cref="GoalCamBehind"/> m behind the goal line, looking into the
+        /// goalmouth from the front corner; FOV in degrees.
+        /// </summary>
+        public const float GoalCamSide = 14f, GoalCamBehind = 1.5f, GoalCamHeight = 2f, GoalCamLookOut = 2.5f, GoalCamFov = 40f;
+        /// <summary>Longest goal camera hold (s, presentation time) if the restart pause runs long.</summary>
+        public const float GoalCamMaxSeconds = 4f;
+        /// <summary>Input is ignored for this long after the cut (held buttons from the shot do not skip it).</summary>
+        public const float GoalCamSkipGraceSeconds = 0.3f;
+
+        /// <summary>
+        /// Target zoom amount 0..1 from the distance of the ball to the nearer goal line, while a shot is live (or
+        /// within the hold after it): 0 beyond <see cref="ShotZoomStartMetres"/>, 1 inside <see cref="ShotZoomFullMetres"/>,
+        /// smoothstep between.
+        /// </summary>
+        public static float ShotZoomAmount(bool shotActive, float ballZ, float halfLength)
+        {
+            if (!shotActive) return 0f;
+            float toLine = halfLength - Math.Abs(ballZ);
+            if (toLine >= ShotZoomStartMetres) return 0f;
+            if (toLine <= ShotZoomFullMetres) return 1f;
+            float t = (ShotZoomStartMetres - toLine) / (ShotZoomStartMetres - ShotZoomFullMetres);
+            return t * t * (3f - 2f * t);
+        }
+
+        /// <summary>FOV for a zoom amount 0..1.</summary>
+        public static float ZoomedFov(float baseFov, float amount)
+        {
+            amount = amount < 0f ? 0f : (amount > 1f ? 1f : amount);
+            return baseFov * (1f - (1f - ShotZoomFovScale) * amount);
+        }
+
+        /// <summary>
+        /// Goal camera pose for a goal at <paramref name="goalSign"/> (+1 = the +Z goal): low on the byline beside the
+        /// goal, looking across the goalmouth (the line of sight passes in front of the near post, not through the side
+        /// netting) at the ball in the net and the players around it.
+        /// </summary>
+        public static void Pose(int goalSign, float ballX, float halfWidth, float halfLength,
+            out float px, out float py, out float pz, out float lx, out float ly, out float lz)
+        {
+            int s = goalSign >= 0 ? 1 : -1;
+            px = Math.Min(GoalCamSide, halfWidth);
+            py = GoalCamHeight;
+            pz = s * (halfLength + GoalCamBehind);
+            lx = Math.Max(-3f, Math.Min(3f, ballX)) * 0.3f;
+            ly = 1f;
+            lz = s * (halfLength - GoalCamLookOut);
+        }
+
+        /// <summary>
+        /// Goal camera state: <c>true</c> while the camera should hold the goal angle. Starts on the first frame of the
+        /// dead-ball pause after a goal (<paramref name="ballInNet"/> != 0 during a stoppage); ends when the pause ends,
+        /// after <see cref="GoalCamMaxSeconds"/>, or when skipped.
+        /// </summary>
+        public sealed class Director
+        {
+            private bool _active, _doneForThisGoal;
+            private float _elapsed;
+            public int GoalSign { get; private set; }
+            public bool Active => _active;
+            public float Elapsed => _elapsed;
+
+            /// <summary>Per frame. Returns true on the frame the cut starts.</summary>
+            public bool Update(bool goalStoppage, int ballInNet, float dt)
+            {
+                if (!goalStoppage || ballInNet == 0)
+                {
+                    _doneForThisGoal = false;
+                    _active = false;
+                    return false;
+                }
+                if (_active)
+                {
+                    _elapsed += dt > 0f ? dt : 0f;
+                    if (_elapsed >= GoalCamMaxSeconds) { _active = false; _doneForThisGoal = true; }
+                    return false;
+                }
+                if (_doneForThisGoal) return false;
+                _active = true;
+                _elapsed = 0f;
+                GoalSign = ballInNet > 0 ? 1 : -1;
+                return true;
+            }
+
+            /// <summary>Ends the goal camera for this goal (skip input).</summary>
+            public void Skip()
+            {
+                if (!_active) return;
+                _active = false;
+                _doneForThisGoal = true;
+            }
+
+            public void Reset()
+            {
+                _active = false;
+                _doneForThisGoal = false;
+                _elapsed = 0f;
+            }
+        }
+    }
+}

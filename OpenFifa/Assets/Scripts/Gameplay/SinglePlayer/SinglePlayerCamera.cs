@@ -13,6 +13,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
     /// so that point sits <see cref="BroadcastFraming.BallScreenFromTop"/> down the screen, which keeps the near-side
     /// grass from filling the bottom of the frame. The smoothed framing never trails the ball by more than
     /// <see cref="MaxBallOffset"/> (a hard dead-zone edge), so a fast break or a goalmouth scramble cannot leave shot.
+    ///
+    /// Rig (<see cref="BroadcastRig"/>): fixed height; the camera rides back towards the main stand when play is on
+    /// the near side and forward when it is on the far side, and its tilt is clamped to 22-30 deg, so it never swings
+    /// towards overhead on near-side play and players stay a steady size. Goals (<see cref="GoalCamera"/>): a smooth
+    /// zoom-in while a shot is live near goal, and a hard cut to a low byline camera beside the goal during the pause
+    /// after a goal (skippable, <see cref="SkipGoalCamera"/>), then a hard cut back with the follow eased in.
+    /// Presentation only: nothing here feeds the sim except <see cref="YawRadians"/>, which stays the broadcast yaw
+    /// during the goal camera.
     /// </summary>
     /// <remarks>
     /// Execution order: runs after the match controller (-50, which places the ball and sizes its visual in its own
@@ -37,11 +45,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
         [Tooltip("Controlled player, blended in a little.")] public Transform Player;
         public float HalfWidth = 34f;
         public float HalfLength = 52.5f;
-        // Broadcast ("tele") framing, closer to FC's default camera than the old 24 m high / 34 deg view, where players
-        // were ~25 px tall at 720p. New field names so values serialised by older scenes are not picked up.
-        [Tooltip("Broadcast camera height (m).")] public float BroadcastHeight = 19f;
-        [Tooltip("Broadcast camera distance back from the near touchline (m).")] public float BroadcastSetback = 28f;
-        [Tooltip("Broadcast vertical field of view (deg).")] public float BroadcastFov = 27f;
+        // Broadcast ("tele") framing. New field names so values serialised by older scenes are not picked up.
+        [Tooltip("Broadcast camera height (m); the stand fit may raise it.")] public float BroadcastRigHeight = BroadcastRig.DefaultHeight;
+        [Tooltip("Broadcast camera depth behind the near touchline with play on the near touchline (m).")]
+        public float BroadcastNearSetback = BroadcastRig.DefaultNearSetback;
+        [Tooltip("Broadcast camera depth behind the near touchline with play on the far touchline (m).")]
+        public float BroadcastFarSetback = BroadcastRig.DefaultFarSetback;
+        [Tooltip("Broadcast vertical field of view (deg).")] public float BroadcastRigFov = BroadcastRig.DefaultFov;
         [Tooltip("Seconds of ball travel (along the pitch) the framing leads by.")] public float LeadSeconds = 0.5f;
         [Tooltip("Largest lead (m).")] public float MaxLead = 6f;
         [Tooltip("Smoothing time of the framed point (s).")] public float FollowDamping = 0.3f;
@@ -50,8 +60,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
         [Tooltip("Ball height on screen as a fraction from the top.")] public float BallFromTop = BroadcastFraming.BallScreenFromTop;
         /// <summary>Set each frame by the match: +1/-1 = the team in possession attacks +Z/-Z, 0 = loose ball (keeps the last lead).</summary>
         public int AttackDirection { get; set; }
-        /// <summary>How far the camera moves in towards the near touchline per metre the play is on the near side.</summary>
-        public const float DollyIn = 0.15f;
+        /// <summary>Set each frame by the match: a shot is live (drives the zoom-in near goal).</summary>
+        public bool ShotLive { get; set; }
+        /// <summary>Set each frame by the match: +1/-1 = dead-ball pause after a goal in the +Z/-Z goal, 0 = otherwise.</summary>
+        public int GoalStoppageSide { get; set; }
+        /// <summary>True while the goal camera holds the byline angle.</summary>
+        public bool GoalCameraActive => _goalCam.Active;
+        /// <summary>Fired when the goal camera cuts in (true) and back (false).</summary>
+        public event System.Action<bool> GoalCameraChanged;
         [Tooltip("Largest broadcast yaw towards a goal (deg).")] public float MaxYawDegrees = 25f;
         /// <summary>Which goal the GoalArea mode looks at (+1 = +Z).</summary>
         public int GoalSide = 1;
@@ -62,11 +78,38 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private Vector3 _lastBall;
         private float _ballVz, _carryVx, _carryVz, _lead, _leadVel, _attackLead, _attackLeadVel, _attackSign;
         private float _sinceResume = float.MaxValue;
+        private float _zoom, _zoomVel, _sinceShot = float.MaxValue;
+        private readonly GoalCamera.Director _goalCam = new GoalCamera.Director();
+        private float _broadcastYaw = float.NaN;
 
-        /// <summary>Camera yaw in radians, same convention as the sim (0 = +Z, +pi/2 = +X).</summary>
-        public float YawRadians => Mathf.Atan2(transform.forward.x, transform.forward.z);
+        /// <summary>
+        /// Camera yaw in radians, same convention as the sim (0 = +Z, +pi/2 = +X). In broadcast mode this is the
+        /// broadcast yaw even while the goal camera holds another angle, so the stick mapping never jumps.
+        /// </summary>
+        public float YawRadians => CameraMode == Mode.Broadcast && !float.IsNaN(_broadcastYaw)
+            ? _broadcastYaw
+            : Mathf.Atan2(transform.forward.x, transform.forward.z);
 
-        private void LateUpdate() => UpdateNow(Time.unscaledDeltaTime, false);
+        /// <summary>Ends the goal camera now (any input); hard cut back to the live broadcast framing.</summary>
+        public void SkipGoalCamera()
+        {
+            if (!_goalCam.Active) return;
+            _goalCam.Skip();
+            EndGoalCamera();
+        }
+
+        private void EndGoalCamera()
+        {
+            ResumeFollow();
+            GoalCameraChanged?.Invoke(false);
+        }
+
+        /// <summary>
+        /// Presentation time: real time live, the fixed capture frame time when recording (wall-clock time in a slow
+        /// capture made the follow snap and timed the goal camera out after a few frames).
+        /// </summary>
+        private void LateUpdate() =>
+            UpdateNow((float)PresentationClock.FrameSeconds(Time.captureDeltaTime, Time.unscaledDeltaTime), false);
 
         public void Snap() => UpdateNow(0f, true);
 
@@ -142,6 +185,17 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 _focus.y = 0f;
             }
 
+            // Shot zoom (smooth, held briefly after the shot ends) and the goal camera director. Presentation time.
+            bool snapNow = snap || dt <= 0f;
+            if (ShotLive || GoalStoppageSide != 0) _sinceShot = 0f;
+            else if (_sinceShot < float.MaxValue) _sinceShot += Mathf.Max(0f, dt);
+            float zoomTarget = GoalCamera.ShotZoomAmount(_sinceShot <= GoalCamera.ShotZoomHoldSeconds, ball.z, HalfLength);
+            if (snapNow) { _zoom = zoomTarget; _zoomVel = 0f; }
+            else _zoom = BroadcastFraming.SmoothDamp(_zoom, zoomTarget, ref _zoomVel, GoalCamera.ShotZoomSmoothSeconds, dt);
+            bool goalWasActive = _goalCam.Active;
+            if (_goalCam.Update(GoalStoppageSide != 0, GoalStoppageSide, Mathf.Max(0f, dt))) GoalCameraChanged?.Invoke(true);
+            else if (goalWasActive && !_goalCam.Active) EndGoalCamera();
+
             Vector3 pos;
             Vector3 look;
             switch (CameraMode)
@@ -169,21 +223,32 @@ namespace OpenFifa.Gameplay.SinglePlayer
                     transform.SetPositionAndRotation(pos, Quaternion.Euler(90f, -90f, 0f));
                     return;
                 default:
-                    // Fixed gantry line behind the near touchline that slides along the pitch; it dollies in a little
-                    // when play is near the camera. It aims at the framed point, then pitches up (below) so that point
-                    // sits a little below the centre of the frame.
-                    cam.fieldOfView = BroadcastFov;
-                    // The gantry stops short of the ends, so near a goal the camera turns a little towards it (yaw is
-                    // clamped to MaxYawDegrees) instead of sliding out over the stand.
-                    pos = new Vector3(HalfWidth + BroadcastSetback - Mathf.Max(0f, _focus.x) * DollyIn, BroadcastHeight,
-                        Mathf.Clamp(_focus.z, -(HalfLength - 14f), HalfLength - 14f));
-                    look = new Vector3(_focus.x, 0f, _focus.z);
-                    float maxDz = Mathf.Tan(MaxYawDegrees * Mathf.Deg2Rad) * Mathf.Max(1f, pos.x - look.x);
-                    look.z = pos.z + Mathf.Clamp(look.z - pos.z, -maxDz, maxDz);
-                    transform.position = pos;
-                    transform.LookAt(look);
-                    transform.rotation *= Quaternion.Euler(-BroadcastFraming.PitchUpDegrees(BroadcastFov, BallFromTop), 0f, 0f);
+                {
+                    // Gantry behind the near touchline that slides along the pitch (stopping short of the ends, where
+                    // the camera turns towards the goal) and rides back/forward with the play across the pitch, at a
+                    // fixed height. Tilt puts the framed point BallFromTop down the frame, clamped to 22-30 deg.
+                    float fov = GoalCamera.ZoomedFov(BroadcastRigFov, _zoom);
+                    BroadcastRig.Pose(_focus.x, _focus.z, HalfWidth, HalfLength, BroadcastRigHeight, BroadcastNearSetback,
+                        BroadcastFarSetback, fov, BallFromTop, MaxYawDegrees,
+                        out float cx, out float cy, out float cz, out float yawDeg, out float pitchDeg);
+                    // Sim-facing yaw: atan2 of the horizontal aim in single precision, exactly as the old rig's
+                    // atan2(forward) gave it, so a straight-across camera reports the same yaw bit for bit (the capture
+                    // probe builds its session from it; a one-ulp change reshuffles the whole bot match).
+                    BroadcastRig.HorizontalAim(cx, cz, _focus.x, _focus.z, MaxYawDegrees, out float across, out float aimDz);
+                    _broadcastYaw = Mathf.Atan2(-across, aimDz);
+                    if (_goalCam.Active)
+                    {
+                        GoalCamera.Pose(_goalCam.GoalSign, ball.x, HalfWidth, HalfLength,
+                            out float gx, out float gy, out float gz, out float lx, out float ly, out float lz);
+                        cam.fieldOfView = GoalCamera.GoalCamFov;
+                        transform.position = new Vector3(gx, gy, gz);
+                        transform.LookAt(new Vector3(lx, ly, lz));
+                        return;
+                    }
+                    cam.fieldOfView = fov;
+                    transform.SetPositionAndRotation(new Vector3(cx, cy, cz), Quaternion.Euler(pitchDeg, yawDeg, 0f));
                     return;
+                }
             }
             transform.position = pos;
             transform.LookAt(look);
