@@ -64,6 +64,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public bool ShotLive { get; set; }
         /// <summary>Set each frame by the match: +1/-1 = dead-ball pause after a goal in the +Z/-Z goal, 0 = otherwise.</summary>
         public int GoalStoppageSide { get; set; }
+        /// <summary>The game is paused: the goal camera holds and its timer stops (set by the match controller).</summary>
+        public bool Paused { get; set; }
         /// <summary>True while the goal camera holds the byline angle.</summary>
         public bool GoalCameraActive => _goalCam.Active;
         /// <summary>Fired when the goal camera cuts in (true) and back (false).</summary>
@@ -193,7 +195,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (snapNow) { _zoom = zoomTarget; _zoomVel = 0f; }
             else _zoom = BroadcastFraming.SmoothDamp(_zoom, zoomTarget, ref _zoomVel, GoalCamera.ShotZoomSmoothSeconds, dt);
             bool goalWasActive = _goalCam.Active;
-            if (_goalCam.Update(GoalStoppageSide != 0, GoalStoppageSide, Mathf.Max(0f, dt))) GoalCameraChanged?.Invoke(true);
+            if (_goalCam.Update(GoalStoppageSide != 0, GoalStoppageSide, Mathf.Max(0f, dt), Paused)) GoalCameraChanged?.Invoke(true);
             else if (goalWasActive && !_goalCam.Active) EndGoalCamera();
 
             Vector3 pos;

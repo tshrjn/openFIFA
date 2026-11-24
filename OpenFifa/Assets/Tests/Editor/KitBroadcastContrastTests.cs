@@ -200,6 +200,68 @@ namespace OpenFifa.Tests.Editor
             Assert.LessOrEqual(unresolved, 2);
         }
 
+        // ---- team colours for the stadium / crowd / HUD (SinglePlayerMatchController) ----
+
+        private static readonly SimpleColor DefHome = new SimpleColor(0.75f, 0.1f, 0.15f), DefAway = new SimpleColor(0.95f, 0.95f, 0.97f);
+
+        private static string Hex(SimpleColor c) => KitColorUtility.ToHex(c);
+
+        /// <summary>The old stadium rule: plain RGB L1 distance under 0.35 = clash.</summary>
+        private static float RgbL1(SimpleColor a, SimpleColor b) => System.Math.Abs(a.R - b.R) + System.Math.Abs(a.G - b.G) + System.Math.Abs(a.B - b.B);
+
+        [Test]
+        public void TeamColours_NoKits_SkyBlueVersusWhite_AwayTakesItsChangeColour()
+        {
+            // RGB L1 between these is ~0.9 (the old stadium rule kept the away side white); on the broadcast they clash.
+            Assert.Greater(RgbL1(KitColorUtility.ParseOrDefault("#7DB3DD", DefHome), KitColorUtility.ParseOrDefault("#EDEBE3", DefAway)), 0.35f);
+            KitBroadcastContrast.TeamColours(null, "#7DB3DD", "#EDEBE3", "#EF4347", DefHome, DefAway, out var home, out var away);
+            Assert.AreEqual("#7DB3DD", Hex(home));
+            Assert.AreEqual("#EF4347", Hex(away), "sky blue v white: the away side switches to its change colour");
+        }
+
+        [Test]
+        public void TeamColours_NoKits_NavyVersusMaroon_AwayTakesItsChangeColour()
+        {
+            Assert.Greater(RgbL1(KitColorUtility.ParseOrDefault("#1B3F8F", DefHome), KitColorUtility.ParseOrDefault("#7A2639", DefAway)), 0.35f);
+            KitBroadcastContrast.TeamColours(null, "#1B3F8F", "#7A2639", "#FFFFFF", DefHome, DefAway, out _, out var away);
+            Assert.AreEqual("#FFFFFF", Hex(away));
+        }
+
+        [Test]
+        public void TeamColours_NoKits_RedVersusSkyBlue_KeepsThePrimary_AndBadHexFallsBack()
+        {
+            KitBroadcastContrast.TeamColours(null, "#EF4347", "#7DB3DD", "#FFFFFF", DefHome, DefAway, out var home, out var away);
+            Assert.AreEqual("#EF4347", Hex(home));
+            Assert.AreEqual("#7DB3DD", Hex(away), "clearly different: no switch");
+            KitBroadcastContrast.TeamColours(null, "nope", null, null, DefHome, DefAway, out home, out away);
+            Assert.AreEqual(Hex(DefHome), Hex(home));
+            Assert.AreEqual(Hex(DefAway), Hex(away));
+        }
+
+        [Test]
+        public void TeamColours_WithResolvedKits_AreTheKitsWorn_ForEveryShippedPairing()
+        {
+            int disagreedWithOldRule = 0;
+            foreach (var h in Clubs)
+            foreach (var a in Clubs)
+            {
+                if (h == a) continue;
+                var sel = Library(h, a).ResolveMatchKitsContrasting(h.Id, a.Id);
+                KitBroadcastContrast.TeamColours(sel, h.PrimaryColour, a.PrimaryColour, a.AwayColour, DefHome, DefAway,
+                    out var home, out var away);
+                string pair = h.ShortName + " v " + a.ShortName;
+                Assert.AreEqual(sel.HomeKit.PrimaryColor.ToUpperInvariant(), Hex(home), pair);
+                Assert.AreEqual(sel.AwayKit.PrimaryColor.ToUpperInvariant(), Hex(away), pair);
+                // The old stadium rule (club colours, RGB L1 < 0.35) and the kit actually worn picked different sides.
+                var hc = KitColorUtility.ParseOrDefault(h.PrimaryColour, DefHome);
+                var ac = KitColorUtility.ParseOrDefault(a.PrimaryColour, DefAway);
+                bool oldSwitched = RgbL1(hc, ac) < 0.35f;
+                if (oldSwitched != (sel.AwayVariant != KitVariant.Home)) disagreedWithOldRule++;
+            }
+            System.Console.WriteLine($"old RGB stadium rule disagreed with the worn kit in {disagreedWithOldRule} of 380 pairings");
+            Assert.Greater(disagreedWithOldRule, 0, "the old rule did disagree with the kits (this is what the fix is for)");
+        }
+
         [Test]
         public void ResolveMatchKitsContrasting_NoAwayKits_KeepsTheBasicSelection()
         {
