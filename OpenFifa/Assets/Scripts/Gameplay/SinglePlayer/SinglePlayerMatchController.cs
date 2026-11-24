@@ -946,7 +946,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 BroadcastCamera.AttackDirection = BroadcastFraming.AttackDirection(Session.Sim);
                 // Goal presentation (read-only): shot zoom near goal, goal camera in the pause after a goal.
                 BroadcastCamera.ShotLive = Session.Sim.State.ShotLive;
-                BroadcastCamera.GoalStoppageSide = Session.Sim.Phase == SimMatchPhase.Stoppage ? Session.Sim.State.Ball.InNet : 0;
+                // Only a goal (kick-off pending): an indirect free kick or throw-in straight into the net is a goal kick.
+                BroadcastCamera.GoalStoppageSide = Session.Sim.Phase == SimMatchPhase.Stoppage
+                    && Session.Sim.State.PendingRestart == RestartType.KickOff ? Session.Sim.State.Ball.InNet : 0;
                 UpdateGoalCameraSkip();
                 _commentary?.SetCrowdIntensity(_excitement);
                 // Time.deltaTime is scaled: the offside slow motion / freeze steps fewer (or no) ticks per frame;
