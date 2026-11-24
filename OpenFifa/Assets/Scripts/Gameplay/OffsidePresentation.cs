@@ -56,7 +56,9 @@ namespace OpenFifa.Gameplay
         public IOffsideBannerView BannerView { get => _bannerView; set => _bannerView = value; }
         public OffsidePresentationConfig Config => _config;
         public OffsidePitchFrame Frame => _frame;
-        /// <summary>Elapsed unscaled seconds of the current sequence (0 when idle).</summary>
+        /// <summary>The decision being (or last) presented; null before the first.</summary>
+        public OffsideDecision Decision => _decision;
+        /// <summary>Elapsed presentation seconds of the current sequence (0 when idle; see <see cref="FrameSeconds"/>).</summary>
         public float Elapsed => _timeline != null ? _timeline.Elapsed : 0f;
         /// <summary>The current (or last) sequence's timeline; null before the first.</summary>
         public OffsidePresentationTimeline Timeline => _timeline;
@@ -99,6 +101,7 @@ namespace OpenFifa.Gameplay
             linesGo.transform.SetParent(transform, false);
             _lines = linesGo.AddComponent<OffsideLineOverlay>();
             _lines.Initialize(frame, _config);
+            _lines.ViewCamera = targetCamera;
 
             _cameraCut = gameObject.AddComponent<OffsideCameraCut>();
             _cameraCut.Initialize(targetCamera, suspendCameraDriver, frame, _config);
@@ -158,9 +161,17 @@ namespace OpenFifa.Gameplay
                 return;
             }
 
-            Handle(_timeline.Advance(Time.unscaledDeltaTime));
+            Handle(_timeline.Advance(FrameSeconds()));
             if (_lines != null && _lines.IsVisible) _lines.SetReveal(_timeline.GetLineReveal());
         }
+
+        /// <summary>
+        /// Presentation seconds this frame: the fixed capture frame time under Time.captureFramerate (captures render far
+        /// slower than real time, so wall-clock time would end the whole sequence within a frame or two), else unscaled
+        /// real time (unaffected by the slow motion and freeze). See <see cref="PresentationClock"/>.
+        /// </summary>
+        public static float FrameSeconds() =>
+            (float)PresentationClock.FrameSeconds(Time.captureDeltaTime, Time.unscaledDeltaTime);
 
         private void Handle(IReadOnlyList<OffsideCue> cues)
         {

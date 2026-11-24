@@ -29,7 +29,10 @@ namespace OpenFifa.Gameplay
         [SerializeField] private Color _attackerLineColor = new Color(1f, 0.25f, 0.2f, 0.95f);
         [SerializeField] private Color _defenderLineColor = new Color(0.2f, 0.85f, 1f, 0.95f);
         [SerializeField] private Color _gapBandColor = new Color(1f, 0.25f, 0.2f, 0.18f);
-        [SerializeField] private float _lineWidth = 0.09f;
+        [Tooltip("World width of each line (m); see also the minimum on-screen width.")]
+        [SerializeField] private float _lineWidth = OffsideLineWidth.DefaultBaseWidth;
+        [Tooltip("Lines are never thinner on screen than this fraction of the view height (0 = world width only).")]
+        [SerializeField] private float _lineMinScreenFraction = OffsideLineWidth.DefaultMinScreenFraction;
         [Tooltip("Height above the grass (markings sit at ~0.065 m).")]
         [SerializeField] private float _lineHeight = 0.075f;
         [Tooltip("Optional material for the lines (vertex-coloured, transparent). Leave empty to build one at runtime.")]
@@ -63,6 +66,7 @@ namespace OpenFifa.Gameplay
         public Color DefenderLineColor => _defenderLineColor;
         public Color GapBandColor => _gapBandColor;
         public float LineWidth => _lineWidth;
+        public float LineMinScreenFraction => _lineMinScreenFraction;
         public float LineHeight => _lineHeight;
         public Material LineMaterialOverride => _lineMaterialOverride;
         public float CameraHeight => _cameraHeight;

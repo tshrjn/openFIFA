@@ -86,6 +86,17 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public SimOffsideDecisionSource OffsideSource { get; } = new SimOffsideDecisionSource();
         /// <summary>The offside presentation is in its freeze-frame (players hold their pose, the sim steps nothing).</summary>
         public bool OffsideHold { get; private set; }
+        /// <summary>
+        /// The freeze-frame shows the moment the ball was played (players and ball posed from
+        /// <see cref="OffsidePassHistory"/>), not the moment the offender touched it.
+        /// </summary>
+        public bool OffsidePassPoseShown { get; private set; }
+        /// <summary>Sim tick the offside freeze-frame shows (-1 when none).</summary>
+        public int OffsidePassPoseTick { get; private set; } = -1;
+        /// <summary>Recent sim positions per tick, for the offside freeze-frame at the pass moment.</summary>
+        public OffsidePassMomentHistory OffsidePassHistory { get; } = new OffsidePassMomentHistory();
+        private int _passPoseSlot = -1;
+        private OffsideDecision _offsideDecision;
         /// <summary>Capture/review: -spForceOffside (see <see cref="SinglePlayerCapture"/>). Inert in normal play.</summary>
         public bool ForceOffsideCapture { get; set; }
 
@@ -214,15 +225,86 @@ namespace OpenFifa.Gameplay.SinglePlayer
             var info = OffsideBannerInfo.From(content, HomeColour, AwayColour);
             Debug.Log($"[{ProductName}] offside: {decision.OffenderTeam} #{content.ShirtNumber} {content.PlayerName} " +
                       $"(sim id {decision.OffenderId}) attacker z {decision.AttackerLineX:F2}, defender z {decision.DefenderLineX:F2}");
-            Offside.Play(decision, info, null);
+            if (Offside.Play(decision, info, null)) _offsideDecision = decision;
         }
 
         private void HandleOffsideCue(OffsideCue cue)
         {
             // The presentation sets Time.timeScale (slow motion, then 0); this mirrors the freeze onto the players so
             // they hold their pose like any other held frame. Restored at TimeRestore, or by Complete on a skip.
-            if (cue == OffsideCue.FreezeStart) OffsideHold = true;
-            else if (cue == OffsideCue.TimeRestore || cue == OffsideCue.Complete) OffsideHold = false;
+            if (cue == OffsideCue.FreezeStart)
+            {
+                OffsideHold = true;
+                BeginPassPose();
+            }
+            else if (cue == OffsideCue.TimeRestore || cue == OffsideCue.Complete)
+            {
+                OffsideHold = false;
+                EndPassPose();
+            }
+        }
+
+        /// <summary>
+        /// The freeze cuts back to the moment the ball was played: the lines are drawn from the players' positions at the
+        /// pass, so the frozen picture has to be that moment too (by the offender's touch the sim has already stopped
+        /// play for the free kick). Players and ball are posed from the per-tick history in LateUpdate (after the
+        /// animation drivers, which do not move anything while time is frozen); TimeRestore hands them back to the sim.
+        /// Without a history entry for the pass (it happened before a capture's fast-forward window) the live frame stays.
+        /// </summary>
+        private void BeginPassPose()
+        {
+            _passPoseSlot = -1;
+            OffsidePassPoseTick = -1;
+            if (_offsideDecision != null && OffsidePassHistory.TryFindPassMoment(_offsideDecision, out int slot, out int tick))
+            {
+                _passPoseSlot = slot;
+                OffsidePassPoseTick = tick;
+                Debug.Log($"[{ProductName}] offside freeze-frame: pass moment tick {tick} " +
+                          $"(now {(Session != null ? Session.Sim.Tick : -1)})");
+            }
+            else
+            {
+                Debug.LogWarning($"[{ProductName}] offside freeze-frame: pass moment not in history, showing the live frame");
+            }
+            OffsidePassPoseShown = _passPoseSlot >= 0;
+            ApplyPassPose();
+        }
+
+        private void EndPassPose()
+        {
+            OffsidePassPoseShown = false;
+            _passPoseSlot = -1;
+            // The drivers only move players when time runs; put everyone back on the live sim at once.
+            SyncLiveTransforms();
+        }
+
+        private void ApplyPassPose()
+        {
+            if (!OffsidePassPoseShown || Session == null) return;
+            for (int id = 0; id < MatchSimState.PlayerCount; id++)
+            {
+                if (_players[id] == null) continue;
+                OffsidePassHistory.GetPlayer(_passPoseSlot, id, out var pos, out float facing, out bool sentOff);
+                if (sentOff) continue;
+                _players[id].SetPositionAndRotation(new Vector3(pos.X, 0f, pos.Z),
+                    Quaternion.Euler(0f, PlayerAnimationDriver.SimYawToDegrees(facing), 0f));
+            }
+            var b = OffsidePassHistory.GetBall(_passPoseSlot);
+            _ball.position = new Vector3(b.X, Mathf.Max(_ballRadius, b.Y), b.Z);
+        }
+
+        private void SyncLiveTransforms()
+        {
+            if (Session == null) return;
+            var s = Session.Sim.State;
+            for (int id = 0; id < MatchSimState.PlayerCount; id++)
+            {
+                if (_players[id] == null) continue;
+                var p = s.Players[id];
+                _players[id].SetPositionAndRotation(new Vector3(p.Position.X, 0f, p.Position.Z),
+                    Quaternion.Euler(0f, PlayerAnimationDriver.SimYawToDegrees(p.Facing), 0f));
+            }
+            SyncVisuals();
         }
 
         private void BuildEnvironment()
@@ -784,6 +866,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
             if (Session == null) return;
             if (Offside != null) Offside.Skip(); // never leave time frozen or the camera cut in
             OffsideHold = false;
+            OffsidePassPoseShown = false;
+            _offsideDecision = null;
+            OffsidePassHistory.Clear();
             if (_playersRoot != null) Destroy(_playersRoot.gameObject);
             _playersRoot = null;
             Array.Clear(_players, 0, _players.Length);
@@ -830,7 +915,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public void FastForwardTo(int tick)
         {
             if (Session == null) return;
-            while (Session.Sim.Tick < tick && !Session.IsFinished) Session.StepOnce(null);
+            while (Session.Sim.Tick < tick && !Session.IsFinished)
+            {
+                Session.StepOnce(null);
+                OffsidePassHistory.Record(Session.Sim.State); // an offside right after the skip still finds its pass
+            }
             SyncVisuals();
             UpdateControlledMarker();
             BroadcastCamera.Snap();
@@ -932,6 +1021,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 // Time.deltaTime is scaled: the offside slow motion / freeze steps fewer (or no) ticks per frame;
                 // the tick sequence itself is unchanged.
                 Session.Advance(Time.deltaTime, null, _realClock);
+                OffsidePassHistory.Record(Session.Sim.State);
                 var frameEvents = Session.FrameEvents;
                 for (int i = 0; i < frameEvents.Count; i++) OffsideSource.Process(frameEvents[i]);
 
@@ -1000,6 +1090,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void LateUpdate()
         {
             if (Session == null) return;
+            if (OffsideHold) ApplyPassPose(); // after the drivers and SyncVisuals, before the marker and ball visuals
             UpdateControlledMarker();
             UpdateBallVisual();
             UpdateNetFade();

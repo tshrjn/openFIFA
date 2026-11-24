@@ -62,10 +62,107 @@ namespace OpenFifa.Tests.Editor
             Assert.IsNotNull(attacker);
             Assert.IsNotNull(defender);
             Assert.AreEqual(attackerZ, attacker.GetPosition(0).z, Eps);
-            Assert.AreEqual(attackerZ, attacker.GetPosition(1).z, Eps);
+            Assert.AreEqual(attackerZ, Last(attacker).z, Eps);
             Assert.AreEqual(defenderZ, defender.GetPosition(0).z, Eps);
             Assert.AreEqual(34f, attacker.GetPosition(0).x, Eps);
-            Assert.AreEqual(-34f, attacker.GetPosition(1).x, Eps);
+            Assert.AreEqual(-34f, Last(attacker).x, Eps);
+        }
+
+        private static Vector3 Last(LineRenderer r) => r.GetPosition(r.positionCount - 1);
+
+        [Test]
+        public void LineOverlay_VertexAlpha_OpaqueAlongTheLine()
+        {
+            // Regression: with only its two end points, a LineRenderer samples the gradient at the fully transparent
+            // touchline ends only, so every line drew at alpha 0 and the VAR lines never showed.
+            var lines = _root.AddComponent<OffsideLineOverlay>();
+            lines.Initialize(OffsidePitchFrame.ForSimPitch(PitchSpec.Standard), _config);
+            lines.Show(-29.71f, -28.69f);
+            lines.SetReveal(1f);
+            foreach (var r in _root.GetComponentsInChildren<LineRenderer>(true))
+            {
+                if (!r.enabled) continue;
+                Assert.That(r.positionCount, Is.GreaterThanOrEqualTo(3), r.name);
+                float total = Vector3.Distance(r.GetPosition(0), Last(r));
+                float maxAlpha = 0f;
+                for (int i = 0; i < r.positionCount; i++)
+                {
+                    float t = Vector3.Distance(r.GetPosition(0), r.GetPosition(i)) / total;
+                    maxAlpha = Mathf.Max(maxAlpha, r.colorGradient.Evaluate(t).a);
+                }
+                Assert.That(maxAlpha, Is.GreaterThan(0.1f), r.name + ": no point of the line is visible");
+            }
+        }
+
+        [Test]
+        public void LineOverlay_HasAMaterial_ForAllThreeRenderers()
+        {
+            var lines = _root.AddComponent<OffsideLineOverlay>();
+            lines.Initialize(OffsidePitchFrame.ForSimPitch(PitchSpec.Standard), _config);
+            Assert.IsNotNull(lines.LineMaterial, "no line material: the lines would not draw");
+            Assert.That(lines.LineMaterial.renderQueue, Is.GreaterThan((int)UnityEngine.Rendering.RenderQueue.Transparent));
+            lines.Show(-29.71f, -28.69f);
+            lines.SetReveal(1f);
+            foreach (var r in _root.GetComponentsInChildren<LineRenderer>(true))
+                if (r.enabled) Assert.IsNotNull(r.sharedMaterial, r.name);
+        }
+
+        [Test]
+        public void LineOverlay_FromTheCutCamera_LinesAtLeastMinimumScreenWidth()
+        {
+            // The broadcast cut: 14 m up, 6 m beyond the near touchline, at the lines' depth, 50 deg FOV.
+            var camGo = new GameObject("CutCam");
+            camGo.transform.SetParent(_root.transform, false);
+            var cam = camGo.AddComponent<Camera>();
+            cam.fieldOfView = _config.CameraFieldOfView;
+            var frame = OffsidePitchFrame.ForSimPitch(PitchSpec.Standard);
+            frame.CameraPose(-29.2f, _config.CameraHeight, _config.CameraSideOffset,
+                out float px, out float py, out float pz, out float lx, out float ly, out float lz);
+            camGo.transform.SetPositionAndRotation(new Vector3(px, py, pz),
+                Quaternion.LookRotation(new Vector3(lx - px, ly - py, lz - pz), Vector3.up));
+
+            var lines = _root.AddComponent<OffsideLineOverlay>();
+            lines.Initialize(frame, _config);
+            lines.ViewCamera = cam;
+            lines.Show(-29.71f, -28.69f);
+            lines.SetReveal(1f);
+
+            lines.GetLineEndpoints(-29.71f, 1f, out var start, out var end);
+            float nearMin = MinWorldWidth(cam, start), farMin = MinWorldWidth(cam, end);
+            Assert.That(lines.AttackerStartWidth, Is.GreaterThanOrEqualTo(Mathf.Max(_config.LineWidth, nearMin) - Eps));
+            Assert.That(lines.AttackerEndWidth, Is.GreaterThanOrEqualTo(Mathf.Max(_config.LineWidth, farMin) - Eps));
+            Assert.Greater(lines.AttackerEndWidth, lines.AttackerStartWidth, "the far touchline end is wider in world");
+            Assert.That(lines.DefenderEndWidth, Is.GreaterThanOrEqualTo(farMin - Eps));
+        }
+
+        private float MinWorldWidth(Camera cam, Vector3 p) =>
+            2f * Vector3.Distance(cam.transform.position, p) * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad)
+            * _config.LineMinScreenFraction;
+
+        [TestCase(-0.57f, 0.87f)] // c5: the offside at the halfway line (both lines either side of it)
+        [TestCase(0f, 0.4f)]      // attacker exactly on the halfway line
+        public void LineOverlay_AtHalfwayLine_BothLinesDrawnAtTheirOwnDepth(float attackerZ, float defenderZ)
+        {
+            var lines = _root.AddComponent<OffsideLineOverlay>();
+            lines.Initialize(OffsidePitchFrame.ForSimPitch(PitchSpec.Standard), _config);
+            lines.Show(attackerZ, defenderZ);
+            lines.SetReveal(1f);
+
+            var renderers = _root.GetComponentsInChildren<LineRenderer>(true);
+            var attacker = System.Array.Find(renderers, r => r.name == "OffsideAttackerLine");
+            var defender = System.Array.Find(renderers, r => r.name == "OffsideDefenderLine");
+            Assert.IsTrue(attacker.enabled && defender.enabled);
+            Assert.AreEqual(attackerZ, attacker.GetPosition(0).z, Eps);
+            Assert.AreEqual(defenderZ, defender.GetPosition(0).z, Eps);
+            // Above the pitch markings (~0.065 m), so the white halfway line does not hide them.
+            Assert.That(attacker.GetPosition(0).y, Is.GreaterThan(0.065f));
+            Assert.That(Last(defender).y, Is.GreaterThan(0.065f));
+            // Parallel: both run the full width at constant depth.
+            Assert.AreEqual(attacker.GetPosition(0).z, Last(attacker).z, Eps);
+            Assert.AreEqual(defender.GetPosition(0).z, Last(defender).z, Eps);
+            Assert.AreEqual(Mathf.Abs(attacker.GetPosition(0).x - Last(attacker).x), 68f, Eps);
+            // Line centres are further apart than one line width: two distinct lines, not one.
+            Assert.Greater(Mathf.Abs(attackerZ - defenderZ), _config.LineWidth);
         }
 
         [Test]
