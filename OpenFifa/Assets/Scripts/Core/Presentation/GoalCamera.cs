@@ -22,11 +22,17 @@ namespace OpenFifa.Core
         public const float ShotZoomSmoothSeconds = 0.45f;
 
         /// <summary>
-        /// Goal camera: low on the byline beside the goal (pitchside camera position), <see cref="GoalCamSide"/> m to the
-        /// near (+X) side of the centre of the goal, <see cref="GoalCamBehind"/> m behind the goal line, looking into the
-        /// goalmouth from the front corner; FOV in degrees.
+        /// Goal camera: on the byline beside the goal, <see cref="GoalCamSide"/> m to the near (+X) side of the centre of
+        /// the goal, <see cref="GoalCamBehind"/> m behind the goal line and <see cref="GoalCamHeight"/> m up, looking down
+        /// into the goalmouth (aim point <see cref="GoalCamLookOut"/> m in front of the line at
+        /// <see cref="GoalCamLookHeight"/>); FOV in degrees.
+        /// The first version sat 2 m up looking level with a 40 deg FOV: the open stadium corner behind the goal (no
+        /// geometry above the corner fill, so the clear colour) filled the top-left of the frame. This framing keeps the
+        /// whole stadium skyline (corner fill rims, roof fronts) above the top of the frame
+        /// (<see cref="StadiumSkyline"/>, tested).
         /// </summary>
-        public const float GoalCamSide = 14f, GoalCamBehind = 1.5f, GoalCamHeight = 2f, GoalCamLookOut = 2.5f, GoalCamFov = 40f;
+        public const float GoalCamSide = 14f, GoalCamBehind = 1.5f, GoalCamHeight = 5f, GoalCamLookOut = 4f,
+            GoalCamLookHeight = -1f, GoalCamFov = 34f;
         /// <summary>Longest goal camera hold (s, presentation time) if the restart pause runs long.</summary>
         public const float GoalCamMaxSeconds = 4f;
         /// <summary>Input is ignored for this long after the cut (held buttons from the shot do not skip it).</summary>
@@ -55,8 +61,8 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Goal camera pose for a goal at <paramref name="goalSign"/> (+1 = the +Z goal): low on the byline beside the
-        /// goal, looking across the goalmouth (the line of sight passes in front of the near post, not through the side
+        /// Goal camera pose for a goal at <paramref name="goalSign"/> (+1 = the +Z goal): on the byline beside the goal,
+        /// looking down across the goalmouth (the line of sight passes in front of the near post, not through the side
         /// netting) at the ball in the net and the players around it.
         /// </summary>
         public static void Pose(int goalSign, float ballX, float halfWidth, float halfLength,
@@ -67,7 +73,7 @@ namespace OpenFifa.Core
             py = GoalCamHeight;
             pz = s * (halfLength + GoalCamBehind);
             lx = Math.Max(-3f, Math.Min(3f, ballX)) * 0.3f;
-            ly = 1f;
+            ly = GoalCamLookHeight;
             lz = s * (halfLength - GoalCamLookOut);
         }
 

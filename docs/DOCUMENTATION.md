@@ -58,8 +58,13 @@ Possible next steps:
 - `Core/Presentation/HudRadarFade.cs` (new) + `SinglePlayerHudCanvas`: the radar fades to 15% while the ball or the
   controlled player (feet to head) projects under it, 0.25 s fades.
 - `Core/Presentation/GoalCamera.cs` (new) + `SinglePlayerCamera`: smooth zoom-in (FOV x0.78) while a shot is live
-  within 32 m of a goal line (full at 14 m), held 1.2 s; in the dead-ball pause after a goal, a hard cut to a low byline
-  camera beside the goal, then a hard cut back with the follow eased in. Any new input skips it. No replay.
+  within 32 m of a goal line (full at 14 m), held 1.2 s; in the dead-ball pause after a goal, a hard cut to a pitchside
+  camera on the byline beside the goal (14 m out, 1.5 m behind the line, 5 m up, looking down, FOV 34 deg), then a hard
+  cut back with the follow eased in. Any new input skips it. No replay.
+- `Core/Presentation/StadiumSkyline.cs` (new): the stadium skyline (corner fill rims, roof fronts; above it there is no
+  geometry, only the clear colour) and an inside-geometry test. The first goal camera (2 m up, level, 40 deg) showed
+  the open corner behind the goal as a dark slab; tests now require the skyline above the frame and the near frustum
+  clear of stadium geometry and the goal frame.
 - `SinglePlayerCamera` uses presentation time (`PresentationClock`): unchanged live; in captures the follow, zoom and
   goal camera now run at the capture frame rate instead of wall-clock time.
 

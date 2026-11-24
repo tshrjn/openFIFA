@@ -310,7 +310,7 @@ namespace OpenFifa.Tests.Editor.Presentation
                 float behind = side * pz - HalfLength;
                 Assert.That(behind, Is.InRange(0.5f, layout.Spec.BoardSetback - 1f));
                 Assert.That(Math.Abs(px), Is.InRange(7.32f * 0.5f + 3f, HalfWidth));
-                Assert.That(py, Is.InRange(1f, 3f));
+                Assert.That(py, Is.InRange(3f, 6f), "low pitchside camera, above the players' heads");
                 float dx = lx - px, dy = ly - py, dz = lz - pz;
                 float yaw = (float)(Math.Atan2(dx, dz) * 180.0 / Math.PI);
                 float pitch = (float)(Math.Atan2(-dy, Math.Sqrt(dx * dx + dz * dz)) * 180.0 / Math.PI);
@@ -332,6 +332,74 @@ namespace OpenFifa.Tests.Editor.Presentation
                 Assert.IsTrue(view.Project(-postHalf, 2.44f, goalLine, out _, out float gv0));
                 Assert.IsTrue(view.Project(-postHalf, 0f, goalLine, out _, out float gv1));
                 Assert.Greater(Math.Abs(gv1 - gv0), 2f * Math.Abs(bv1 - bv0), "goal height on screen vs broadcast");
+            }
+        }
+
+        private static BroadcastView GoalView(int side, float ballX, out float px, out float py, out float pz)
+        {
+            GoalCamera.Pose(side, ballX, HalfWidth, HalfLength, out px, out py, out pz, out float lx, out float ly, out float lz);
+            float dx = lx - px, dy = ly - py, dz = lz - pz;
+            float yaw = (float)(Math.Atan2(dx, dz) * 180.0 / Math.PI);
+            float pitch = (float)(Math.Atan2(-dy, Math.Sqrt(dx * dx + dz * dz)) * 180.0 / Math.PI);
+            return new BroadcastView(px, py, pz, yaw, pitch, GoalCamera.GoalCamFov, Aspect);
+        }
+
+        [Test]
+        public void GoalCamPose_StadiumSkylineAboveFrame_NoEmptyCornerInShot()
+        {
+            // Above the corner fill rims and the roof fronts there is no geometry (clear colour): the first goal camera
+            // showed the open corner behind the goal as a dark slab across the top-left of the frame.
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            var skyline = StadiumSkyline.Points(layout);
+            foreach (int side in new[] { 1, -1 })
+            foreach (float ballX in new[] { -6f, -2f, 0f, 2f, 6f })
+            {
+                var view = GoalView(side, ballX, out _, out _, out _);
+                Assert.That(StadiumSkyline.LowestInView(view, skyline), Is.LessThan(-0.02f), $"goal {side}, ball x {ballX}");
+            }
+        }
+
+        [Test]
+        public void StadiumSkyline_OldLevelGoalCam_WasDetected()
+        {
+            // Regression guard for the check itself: the first goal camera (2 m up, level, 40 deg) fails it.
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            float px = 14f, py = 2f, pz = HalfLength + 1.5f, lx = 0f, ly = 1f, lz = HalfLength - 2.5f;
+            float dx = lx - px, dy = ly - py, dz = lz - pz;
+            var view = new BroadcastView(px, py, pz, (float)(Math.Atan2(dx, dz) * 180.0 / Math.PI),
+                (float)(Math.Atan2(-dy, Math.Sqrt(dx * dx + dz * dz)) * 180.0 / Math.PI), 40f, Aspect);
+            Assert.Greater(StadiumSkyline.LowestInView(view, StadiumSkyline.Points(layout)), 0.1f);
+        }
+
+        [Test]
+        public void GoalCamPose_NearFrustumClearOfStadiumAndGoalFrame()
+        {
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            const float postHalf = 7.32f * 0.5f, crossbar = 2.44f, netDepth = 2.5f;
+            foreach (int side in new[] { 1, -1 })
+            {
+                var view = GoalView(side, 0f, out float px, out float py, out float pz);
+                Assert.IsFalse(StadiumSkyline.InsideSolid(layout, px, py, pz), "camera inside stadium geometry");
+                // Points of the frustum from 0.3 m to 8 m out, over a 5 x 5 grid of the frame.
+                double yaw = view.YawDegrees * Math.PI / 180.0, pitch = view.PitchDegrees * Math.PI / 180.0;
+                double th = Math.Tan(GoalCamera.GoalCamFov * 0.5 * Math.PI / 180.0);
+                double fx = Math.Sin(yaw) * Math.Cos(pitch), fy = -Math.Sin(pitch), fz = Math.Cos(yaw) * Math.Cos(pitch);
+                double rx = Math.Cos(yaw), rz = -Math.Sin(yaw);
+                double ux = Math.Sin(yaw) * Math.Sin(pitch), uy = Math.Cos(pitch), uz = Math.Cos(yaw) * Math.Sin(pitch);
+                for (float depth = 0.3f; depth <= 8f; depth += 0.5f)
+                for (int i = 0; i <= 4; i++)
+                for (int j = 0; j <= 4; j++)
+                {
+                    double sx = (i / 2.0 - 1.0) * th * Aspect * depth, sy = (j / 2.0 - 1.0) * th * depth;
+                    float x = (float)(px + fx * depth + rx * sx + ux * sy);
+                    float y = (float)(py + fy * depth + uy * sy);
+                    float z = (float)(pz + fz * depth + rz * sx + uz * sy);
+                    string at = $"goal {side}: frustum point ({x:F1}, {y:F1}, {z:F1}) at {depth} m";
+                    Assert.IsFalse(StadiumSkyline.InsideSolid(layout, x, y, z), at + " inside stadium geometry");
+                    bool inGoal = Math.Abs(x) <= postHalf + 0.2f && y <= crossbar + 0.2f
+                                  && side * z >= HalfLength - 0.2f && side * z <= HalfLength + netDepth;
+                    Assert.IsFalse(inGoal, at + " inside the goal frame / net");
+                }
             }
         }
 
