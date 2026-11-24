@@ -34,7 +34,7 @@ namespace OpenFifa.Core
         /// <summary>
         /// Seconds of silence in live play before the engine fills it (a Lull event: colour, match situation). 0 disables.
         /// </summary>
-        public double LullSeconds { get; set; } = 11.0;
+        public double LullSeconds { get; set; } = 8.0;
         /// <summary>Chance (0..1) that a lull goes to the analyst rather than the lead voice (when it has lull lines).</summary>
         public double AnalystLullShare { get; set; } = 0.55;
         /// <summary>Analyst "live" lines (after a save, in a lull) need the lead voice quiet for this long first.</summary>

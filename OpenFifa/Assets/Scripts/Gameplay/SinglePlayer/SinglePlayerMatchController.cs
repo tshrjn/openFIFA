@@ -106,6 +106,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
 
         private CommentaryLineBank _commentaryBank;
         private CommentaryEngine _commentary;
+        /// <summary>Commentary lines said in this play session (all matches since launch).</summary>
+        private readonly CommentaryLineMemory _lineMemory = new CommentaryLineMemory();
+        private int _matchesStarted;
         private CommentaryAudioPlayer _commentaryAudio;
         private bool _wasPaused;
         /// <summary>Voiced commentary (clips in StreamingAssets/Commentary/audio); subtitles show either way.</summary>
@@ -857,9 +860,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Session = new SinglePlayerMatchSession(options);
             Input = new SinglePlayerInput(Session.Profile.PassAssist);
             Session.HumanSlots[0].Input = CreateHumanInput();
-            _commentary = _commentaryBank != null ? new CommentaryEngine(_commentaryBank, null, (uint)(Seed & 0xffffffff) | 1u) : null;
+            // Seeded by the fixture as well as the match seed, and sharing one line memory across the session, so the
+            // analyst does not repeat the last match's goal line.
+            _commentary = _commentaryBank != null
+                ? new CommentaryEngine(_commentaryBank, null,
+                    CommentaryLineMemory.MatchSeed(Seed, HomeClub?.Id, AwayClub?.Id, _matchesStarted++))
+                : null;
             if (_commentary != null)
             {
+                _commentary.SessionMemory = _lineMemory;
                 _commentary.Catalog = _commentaryAudio != null ? _commentaryAudio.Index : null;
                 Session.AttachCommentaryEngine(_commentary);
                 _commentaryAudio?.Preload(Names, options.TeamNames);
@@ -931,11 +940,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public void FastForwardTo(int tick)
         {
             if (Session == null) return;
-            while (Session.Sim.Tick < tick && !Session.IsFinished)
-            {
-                Session.StepOnce(null);
-                OffsidePassHistory.Record(Session.Sim.State); // an offside right after the skip still finds its pass
-            }
+            // Commentary keeps one monotonic clock across the skip (the engine sees the skipped minutes go by);
+            // an offside right after the skip still finds its pass.
+            _realClock = Session.FastForward(tick, _realClock, OffsidePassHistory.Record);
             SyncVisuals();
             UpdateControlledMarker();
             BroadcastCamera.Snap();

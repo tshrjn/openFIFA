@@ -110,8 +110,8 @@ namespace OpenFifa.Core
 
                 float speed = b.Velocity.Magnitude;
                 float p = 0.35f + 0.6f * SimPlayerAttributes.N(ka.GkReflexes)
-                          - SimMath.Max(0f, speed - 15f) * 0.02f - (lateral / reach) * 0.35f;
-                if (lateral <= _cfg.Actions.GkStandingReach) p += 0.2f;
+                          - SimMath.Max(0f, speed - 15f) * 0.02f - (lateral / reach) * _cfg.Actions.GkSaveStretchPenalty;
+                if (lateral <= _cfg.Actions.GkStandingReach) p += _cfg.Actions.GkSaveStandingBonus;
                 p = SimMath.Clamp(p, 0.03f, 0.97f);
                 if (_s.Rng.NextFloat() >= p)
                 {

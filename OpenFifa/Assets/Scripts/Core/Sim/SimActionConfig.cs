@@ -167,9 +167,18 @@ namespace OpenFifa.Core
 
         // ---- Goalkeeper. ----
         public float GkStandingReach = 0.9f;
-        public float GkDiveReachRange = 1.6f;
+        /// <summary>
+        /// Extra lateral reach of a full-stretch dive at GkDiving 99 (scaled by the rating). 2.1 gives an elite keeper
+        /// (diving ~78) about 2.5 m from his body centre, a real full-length dive; at 1.6 (2.15 m) nearly every shot placed
+        /// two metres or more from him was unreachable, so diving saves were rare (about a quarter of saves).
+        /// </summary>
+        public float GkDiveReachRange = 2.1f;
         public float GkMaxReachHeight = 2.5f;
         public float GkParrySpeedFactor = 0.35f;
+        /// <summary>Save chance lost at the full stretch of the dive (scaled by lateral / reach); see MatchSim.TrySaves.</summary>
+        public float GkSaveStretchPenalty = 0.35f;
+        /// <summary>Save chance added when the ball is within standing reach (a shot at the keeper).</summary>
+        public float GkSaveStandingBonus = 0.2f;
         /// <summary>
         /// Law 12: an opponent may not prevent the keeper releasing the ball from his hands. Opponents within this
         /// radius (m) of the ball when it leaves the keeper's hands cannot take it for <see cref="GkReleaseProtectSeconds"/>
