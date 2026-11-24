@@ -132,6 +132,53 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
+        public void Adapter_BallWonBackHighAfterTheirThrowIn_IsPressWon()
+        {
+            // Home wins the ball, Away gets a throw-in (possession changes hands with no PossessionChange event), then
+            // Home presses and wins it back in the attacking third: that is a turnover, so PressWon.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, 0f) } }, 1.0);
+            sim.State.Tick += 120;
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, PlayerId = 15, Team = SimTeam.Away, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 30f) } }, 3.0);
+            sim.State.Tick += 120;
+            var won = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(20f, 0f, 36f) } }, 5.0);
+            Assert.AreEqual(CommentaryEventType.PressWon, Only(won));
+        }
+
+        [Test]
+        public void Adapter_KickOffBySideThatEndedTheHalfOnTheBall_StartsANewPossessionSpell()
+        {
+            // Home won the ball 30 s before half time without a completed pass; Home also kicks off the second half.
+            // Its first pass after the kick-off is not "they've had the ball for a long while".
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int ticksPerSecond = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 6, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, -10f) } }, 1.0);
+            sim.State.Tick = 40 * ticksPerSecond;
+            var ko = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.KickOff, PlayerId = 9, Team = SimTeam.Home, Detail = (int)RestartType.KickOff } }, 41.0);
+            Assert.AreEqual(CommentaryEventType.KickOff, Only(ko));
+            sim.State.Tick = 42 * ticksPerSecond;
+            a.Convert(new List<MatchEvent> { Pass(9, new SimVec3(0f, 0f, 0f)) }, 42.0);
+            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 9, new SimVec3(3f, 0f, -4f)) }, 43.0)));
+        }
+
+        [Test]
+        public void Adapter_ThrowInToTheSideOnTheBall_RestartsThePossessionSpell()
+        {
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int ticksPerSecond = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 6, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, -10f) } }, 1.0);
+            sim.State.Tick = 18 * ticksPerSecond;
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 19.0);
+            sim.State.Tick = 25 * ticksPerSecond;
+            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f)) }, 25.0);
+            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f)) }, 26.0)),
+                "7 s since the throw-in is not a long spell");
+        }
+
+        [Test]
         public void Adapter_LongSpellOnTheBall_CallsPossessionSpellOncePerSpell()
         {
             var sim = NewSim();

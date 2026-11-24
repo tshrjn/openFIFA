@@ -40,8 +40,34 @@ namespace OpenFifa.Tests.Editor.Presentation
 
         // ------------------------------------------------------------------ tilt, height, framing
 
+        /// <summary>
+        /// Raw (unclamped) tilt range over the whole pitch for a rig: <paramref name="lo"/>..<paramref name="hi"/>, and
+        /// the most the 22-30 deg clamp has to correct it.
+        /// </summary>
+        private static float RawTiltRange(float near, float far, float height, out float lo, out float hi)
+        {
+            lo = float.MaxValue;
+            hi = float.MinValue;
+            foreach (float x in Xs())
+            foreach (float z in Zs())
+            {
+                float fx = Math.Max(-HalfWidth, Math.Min(HalfWidth, x));
+                float raw = BroadcastRig.RawPosePitchDegrees(fx, z, HalfWidth, HalfLength, height, near, far, Fov, FromTop, MaxYaw);
+                lo = Math.Min(lo, raw);
+                hi = Math.Max(hi, raw);
+            }
+            return Math.Max(Math.Max(0f, BroadcastRig.MinPitchDegrees - lo), Math.Max(0f, hi - BroadcastRig.MaxPitchDegrees));
+        }
+
+        /// <summary>
+        /// The 22-30 deg range of the clamped tilt is guaranteed by the clamp, so on its own it proves nothing about the
+        /// rig. What the geometry must do: the riding depth keeps the RAW tilt (before the clamp) within
+        /// <see cref="BroadcastRig.MaxClampCorrectionDegrees"/> of the range everywhere, so the clamp is a small trim
+        /// (the ball sits a little off its screen height, <see cref="Pose_BallAnywhereOnPitch_BallStaysWellInsideTheFrame"/>)
+        /// and not what holds the tilt steady. Measured: raw 14.4-35.2 deg at the default height and setbacks.
+        /// </summary>
         [Test]
-        public void Pose_BallAnywhereOnPitch_PitchBetween22And30Degrees()
+        public void Pose_BallAnywhereOnPitch_RawTiltNeedsOnlyASmallClampTrim()
         {
             foreach (float x in Xs())
             foreach (float z in Zs())
@@ -49,21 +75,53 @@ namespace OpenFifa.Tests.Editor.Presentation
                 float fx = Math.Max(-HalfWidth, Math.Min(HalfWidth, x));
                 BroadcastRig.Pose(fx, z, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw,
                     out _, out float cy, out _, out _, out float pitch);
-                Assert.That(pitch, Is.InRange(22f, 30f), $"ball at ({x}, {z})");
+                float raw = BroadcastRig.RawPosePitchDegrees(fx, z, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
+                Assert.AreEqual(Math.Max(BroadcastRig.MinPitchDegrees, Math.Min(BroadcastRig.MaxPitchDegrees, raw)), pitch, 1e-4f,
+                    $"Pose's tilt is the clamped raw tilt, ball at ({x}, {z})");
+                Assert.That(raw, Is.InRange(BroadcastRig.MinPitchDegrees - BroadcastRig.MaxClampCorrectionDegrees,
+                    BroadcastRig.MaxPitchDegrees + BroadcastRig.MaxClampCorrectionDegrees), $"raw tilt, ball at ({x}, {z})");
                 Assert.AreEqual(H, cy, 1e-5f, "camera height must not move with the play");
             }
+            float trim = RawTiltRange(Near, Far, H, out float lo, out float hi);
+            Console.WriteLine($"raw tilt {lo:F2}..{hi:F2} deg, largest clamp trim {trim:F2} deg");
+            // Mid-pitch play (the middle third across, the centre half along) is framed by the geometry, not the clamp.
+            float mid = BroadcastRig.RawPosePitchDegrees(HalfWidth / 3f, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
+            Assert.That(mid, Is.InRange(BroadcastRig.MinPitchDegrees, BroadcastRig.MaxPitchDegrees), "near-centre play needs no clamp");
+        }
+
+        /// <summary>
+        /// Regression guard: the check above must fail for a rig whose steady tilt would come only from the clamp. A
+        /// fixed-depth gantry (the old rig's single 28 m line; also a rig that stops riding, near = far) swings the raw
+        /// tilt far outside the range, more than the allowed trim.
+        /// </summary>
+        [Test]
+        public void RawTiltGuard_FixedDepthRig_WouldFail()
+        {
+            float riding = RawTiltRange(Near, Far, H, out float rLo, out float rHi);
+            float fixedOld = RawTiltRange(28f, 28f, H, out float fLo, out float fHi);
+            float fixedNear = RawTiltRange(Near, Near, H, out _, out _);
+            float fixedFar = RawTiltRange(Far, Far, H, out _, out _);
+            Console.WriteLine($"riding {rLo:F1}..{rHi:F1} (trim {riding:F1}); fixed 28 m {fLo:F1}..{fHi:F1} (trim {fixedOld:F1}); " +
+                              $"fixed {Near} m trim {fixedNear:F1}; fixed {Far} m trim {fixedFar:F1}");
+            Assert.LessOrEqual(riding, BroadcastRig.MaxClampCorrectionDegrees);
+            Assert.Greater(fixedOld, BroadcastRig.MaxClampCorrectionDegrees, "a fixed 28 m line relies on the clamp");
+            Assert.Greater(fixedNear, BroadcastRig.MaxClampCorrectionDegrees, "always at the near setback relies on the clamp");
+            Assert.Greater(fixedFar, BroadcastRig.MaxClampCorrectionDegrees, "always at the far setback relies on the clamp");
+            Assert.Less(rHi - rLo, fHi - fLo - 5f, "riding the depth narrows the raw tilt swing");
         }
 
         [Test]
         public void Pose_NearTouchlinePlay_NoSwingTowardsOverhead()
         {
-            // The old fixed 28 m / 19 m rig tilted ~38 deg at the near touchline and ~9 deg at the far one.
-            BroadcastRig.Pose(HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw,
-                out _, out _, out _, out _, out float nearPitch);
-            BroadcastRig.Pose(-HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw,
-                out _, out _, out _, out _, out float farPitch);
-            Assert.That(nearPitch - farPitch, Is.LessThanOrEqualTo(8f + 1e-4f));
-            Assert.That(nearPitch, Is.LessThanOrEqualTo(30f + 1e-4f));
+            // The old fixed 28 m / 19 m rig tilted ~38 deg at the near touchline and ~9 deg at the far one. Raw tilts,
+            // so this is the geometry, not the clamp (the clamped values differ by at most 8 deg by construction).
+            float near = BroadcastRig.RawPosePitchDegrees(HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
+            float far = BroadcastRig.RawPosePitchDegrees(-HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
+            Assert.That(near - far, Is.LessThanOrEqualTo(21.5f), $"raw near {near:F1} v far {far:F1}");
+            Assert.That(near, Is.LessThanOrEqualTo(BroadcastRig.MaxPitchDegrees + BroadcastRig.MaxClampCorrectionDegrees));
+            float oldNear = BroadcastRig.RawPosePitchDegrees(HalfWidth, 0f, HalfWidth, HalfLength, 19f, 28f, 28f, Fov, FromTop, MaxYaw);
+            float oldFar = BroadcastRig.RawPosePitchDegrees(-HalfWidth, 0f, HalfWidth, HalfLength, 19f, 28f, 28f, Fov, FromTop, MaxYaw);
+            Assert.Greater(oldNear - oldFar, 21.5f, $"the old rig ({oldNear:F1} v {oldFar:F1}) fails the same check");
         }
 
         [Test]
@@ -426,6 +484,61 @@ namespace OpenFifa.Tests.Editor.Presentation
             t.Update(true, 1, 0f);
             for (int i = 0; i < 300 && t.Active; i++) t.Update(true, 1, 1f / 60f);
             Assert.IsFalse(t.Active, "max hold");
+        }
+
+        [Test]
+        public void Director_PausedLongerThanMaxHold_GoalCameraHoldsAndResumesItsTimer()
+        {
+            var d = new GoalCamera.Director();
+            Assert.IsTrue(d.Update(true, 1, 0.016f));
+            d.Update(true, 1, 1f);
+            // A 10 s pause (presentation time keeps running): the goal camera holds and its timer stops.
+            for (int i = 0; i < 600; i++) Assert.IsFalse(d.Update(true, 1, 1f / 60f, paused: true));
+            Assert.IsTrue(d.Active, "a pause longer than the max hold must not end the goal camera");
+            Assert.AreEqual(1f, d.Elapsed, 1e-4f, "the timer does not advance while paused");
+            // After the pause the remaining ~3 s play out.
+            int frames = 0;
+            while (d.Active && frames < 1000) { d.Update(true, 1, 1f / 60f); frames++; }
+            Assert.That(frames / 60f, Is.InRange(GoalCamera.GoalCamMaxSeconds - 1f - 0.05f, GoalCamera.GoalCamMaxSeconds - 1f + 0.05f));
+        }
+
+        [Test]
+        public void SkipInput_PauseAndResumePresses_DoNotSkipTheGoalCamera()
+        {
+            const ulong esc = 1UL, a = 2UL;
+            const float dt = 1f / 60f;
+            var k = new GoalCamera.SkipInput();
+            Assert.IsFalse(k.Update(true, 0UL, false, dt), "arming frame");
+            for (int i = 0; i < 30; i++) Assert.IsFalse(k.Update(true, 0UL, false, dt)); // past the grace time
+            // Esc goes down: the controller toggles pause before the skip check, so this frame is already paused.
+            Assert.IsFalse(k.Update(true, esc, true, dt), "the pause press is not a skip");
+            Assert.IsFalse(k.Update(true, esc, true, dt));
+            Assert.IsFalse(k.Update(true, 0UL, true, dt));
+            Assert.IsFalse(k.Update(true, a, true, dt), "menu input while paused is not a skip");
+            Assert.IsFalse(k.Update(true, 0UL, true, dt));
+            // Esc again resumes: that frame is unpaused but the resume press is not a skip either.
+            Assert.IsFalse(k.Update(true, esc, false, dt), "the resume press is not a skip");
+            Assert.IsFalse(k.Update(true, esc, false, dt), "still held");
+            Assert.IsFalse(k.Update(true, 0UL, false, dt));
+            // A new press after the pause still skips.
+            Assert.IsTrue(k.Update(true, a, false, dt), "a fresh press after the pause skips");
+        }
+
+        [Test]
+        public void SkipInput_GraceTimerDoesNotRunWhilePaused()
+        {
+            const ulong a = 2UL;
+            const float dt = 1f / 60f;
+            var k = new GoalCamera.SkipInput();
+            k.Update(true, 0UL, false, dt);
+            k.Update(true, 0UL, false, dt);
+            for (int i = 0; i < 120; i++) k.Update(true, 0UL, true, dt);
+            k.Update(true, 0UL, false, dt);
+            Assert.That(k.Elapsed, Is.LessThan(GoalCamera.GoalCamSkipGraceSeconds), "two seconds of pause count for nothing");
+            Assert.IsFalse(k.Update(true, a, false, dt), "still inside the grace time");
+            // Re-arms for the next goal camera.
+            Assert.IsFalse(k.Update(false, 0UL, false, dt));
+            Assert.IsFalse(k.Update(true, a, false, dt), "held from before the cut");
         }
     }
 }

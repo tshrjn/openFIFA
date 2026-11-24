@@ -80,7 +80,8 @@ namespace OpenFifa.Core
         /// <summary>
         /// Goal camera state: <c>true</c> while the camera should hold the goal angle. Starts on the first frame of the
         /// dead-ball pause after a goal (<paramref name="ballInNet"/> != 0 during a stoppage); ends when the pause ends,
-        /// after <see cref="GoalCamMaxSeconds"/>, or when skipped.
+        /// after <see cref="GoalCamMaxSeconds"/> of unpaused presentation time, or when skipped. While the game is
+        /// paused it holds: the timer does not advance, so a long pause does not end it.
         /// </summary>
         public sealed class Director
         {
@@ -90,9 +91,13 @@ namespace OpenFifa.Core
             public bool Active => _active;
             public float Elapsed => _elapsed;
 
-            /// <summary>Per frame. Returns true on the frame the cut starts.</summary>
-            public bool Update(bool goalStoppage, int ballInNet, float dt)
+            /// <summary>
+            /// Per frame. Returns true on the frame the cut starts. <paramref name="paused"/>: the game is paused (the
+            /// state is frozen as it is; nothing starts, ends or times out).
+            /// </summary>
+            public bool Update(bool goalStoppage, int ballInNet, float dt, bool paused = false)
             {
+                if (paused) return false;
                 if (!goalStoppage || ballInNet == 0)
                 {
                     _doneForThisGoal = false;
@@ -125,6 +130,52 @@ namespace OpenFifa.Core
                 _active = false;
                 _doneForThisGoal = false;
                 _elapsed = 0f;
+            }
+        }
+
+        /// <summary>
+        /// Skip input for the goal camera: any NEW button, key, click or tap (<see cref="OffsideSkipGate"/> bitmask)
+        /// after <see cref="GoalCamSkipGraceSeconds"/> skips it. Pausing is not a skip: while paused, and on the frame
+        /// the game resumes, whatever is down is absorbed as "held" (the pause / resume press itself never skips), and
+        /// the grace timer does not advance.
+        /// </summary>
+        public sealed class SkipInput
+        {
+            private readonly OffsideSkipGate _gate = new OffsideSkipGate(GoalCamSkipGraceSeconds);
+            private bool _armed, _wasPaused;
+            private float _elapsed;
+
+            /// <summary>Seconds of unpaused time since the goal camera started.</summary>
+            public float Elapsed => _elapsed;
+
+            /// <summary>
+            /// Per frame. <paramref name="goalCamActive"/>: the goal camera is showing; <paramref name="down"/>: skip
+            /// controls down this frame; <paramref name="paused"/>: the game is paused (after this frame's pause toggle);
+            /// <paramref name="dt"/>: presentation seconds. True when this frame's input skips the goal camera.
+            /// </summary>
+            public bool Update(bool goalCamActive, ulong down, bool paused, float dt)
+            {
+                if (!goalCamActive)
+                {
+                    _armed = false;
+                    return false;
+                }
+                if (!_armed)
+                {
+                    _armed = true;
+                    _elapsed = 0f;
+                    _wasPaused = paused;
+                    _gate.Begin(down);
+                    return false;
+                }
+                if (paused || _wasPaused)
+                {
+                    _wasPaused = paused;
+                    _gate.Begin(down);
+                    return false;
+                }
+                _elapsed += dt > 0f ? dt : 0f;
+                return _gate.Update(down, _elapsed);
             }
         }
     }

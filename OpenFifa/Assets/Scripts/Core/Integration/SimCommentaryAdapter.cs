@@ -91,10 +91,12 @@ namespace OpenFifa.Core
                 {
                     case MatchEventType.KickOff: // the sim emits kick-offs as their own type, not RestartTaken
                         _lastRestartTaken = RestartType.KickOff;
+                        RestartPossession(e);
                         Add(CommentaryEventType.KickOff, e, now, e.PlayerId);
                         break;
                     case MatchEventType.RestartTaken:
                         _lastRestartTaken = (RestartType)e.Detail;
+                        RestartPossession(e);
                         Add(e.Detail == (int)RestartType.KickOff ? CommentaryEventType.KickOff : CommentaryEventType.PlayResumed, e, now, e.PlayerId);
                         break;
                     case MatchEventType.Pass:
@@ -261,6 +263,24 @@ namespace OpenFifa.Core
                 if (d < bestD) { bestD = d; best = j; }
             }
             if (best >= 0 && best != _dribbleMarker) { _dribbleMarker = best; _dribbleMarkerTick = s.Tick; }
+        }
+
+        /// <summary>
+        /// A restart (kick-off, throw-in, goal kick, corner, free kick) hands the ball to the taker's side without a
+        /// PossessionChange event: that side now has the ball (so a press that wins it back is a turnover again), the
+        /// counter-attack timer restarts without an own-half win (a set piece is not a counter), and a new possession
+        /// spell starts.
+        /// </summary>
+        private void RestartPossession(in MatchEvent e)
+        {
+            if (e.Team == SimTeam.None) return;
+            float t = (float)(_sim.State.Tick * _sim.Dt);
+            _wonBallTeam = e.Team;
+            _wonBallTime = t;
+            _wonBallInOwnHalf = false;
+            _spellTeam = e.Team;
+            _spellStart = t;
+            _spellCalled = false;
         }
 
         /// <summary>The build-up event for a completed pass that is not a sequence milestone (OnTheBall when nothing stands out).</summary>

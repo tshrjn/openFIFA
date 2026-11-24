@@ -812,9 +812,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 Names = names;
                 // Per sim id from each side's own sheet (two clubs can both field a No. 11: that is roster data, not a bug).
                 ShirtNumbers = MatchSheetNumbers.Build(hs, aws);
-                homeColor = ParseColour(HomeClub.PrimaryColour, homeColor);
-                awayColor = ParseColour(AwayClub.PrimaryColour, awayColor);
-                if (ColourDistance(homeColor, awayColor) < 0.35f) awayColor = ParseColour(AwayClub.AwayColour, awayColor);
+                // Stadium, crowd and HUD colours follow the kits actually worn (KitBroadcastContrast, the same rule
+                // that picks the away kit), not a separate RGB clash rule that could disagree with the pitch.
+                var kits = SinglePlayerKitDresser.Prepare(HomeClub, AwayClub) ? MatchKitBinder.Selection : null;
+                KitBroadcastContrast.TeamColours(kits, HomeClub.PrimaryColour, AwayClub.PrimaryColour, AwayClub.AwayColour,
+                    ToSimple(homeColor), ToSimple(awayColor), out var homeTint, out var awayTint);
+                homeColor = new Color(homeTint.R, homeTint.G, homeTint.B);
+                awayColor = new Color(awayTint.R, awayTint.G, awayTint.B);
             }
             else
             {
@@ -948,11 +952,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             BroadcastCamera.Snap();
         }
 
-        private static float ColourDistance(Color a, Color b) =>
-            Mathf.Abs(a.r - b.r) + Mathf.Abs(a.g - b.g) + Mathf.Abs(a.b - b.b);
-
-        private static Color ParseColour(string hex, Color fallback) =>
-            !string.IsNullOrEmpty(hex) && ColorUtility.TryParseHtmlString(hex, out var c) ? c : fallback;
+        private static SimpleColor ToSimple(Color c) => new SimpleColor(c.r, c.g, c.b);
 
         private void SpawnPlayers(Color home, Color away)
         {
@@ -1045,6 +1045,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 // Only a goal (kick-off pending): an indirect free kick or throw-in straight into the net is a goal kick.
                 BroadcastCamera.GoalStoppageSide = Session.Sim.Phase == SimMatchPhase.Stoppage
                     && Session.Sim.State.PendingRestart == RestartType.KickOff ? Session.Sim.State.Ball.InNet : 0;
+                // The goal camera holds through a pause (its timer stops; the pause key is not a skip).
+                BroadcastCamera.Paused = Session.Paused;
                 UpdateGoalCameraSkip();
                 _commentary?.SetCrowdIntensity(_excitement);
                 // Time.deltaTime is scaled: the offside slow motion / freeze steps fewer (or no) ticks per frame;
@@ -1126,31 +1128,18 @@ namespace OpenFifa.Gameplay.SinglePlayer
         }
 
         private ProceduralStadium _stadium;
-        private readonly OffsideSkipGate _goalCamSkip = new OffsideSkipGate(GoalCamera.GoalCamSkipGraceSeconds);
-        private bool _goalCamSkipArmed;
-        private float _goalCamSkipElapsed;
+        private readonly GoalCamera.SkipInput _goalCamSkip = new GoalCamera.SkipInput();
 
         /// <summary>
         /// The goal camera is skippable with any new button, key, click or tap (held input from the shot does not
-        /// count, nor anything in the first <see cref="GoalCamera.GoalCamSkipGraceSeconds"/>).
+        /// count, nor anything in the first <see cref="GoalCamera.GoalCamSkipGraceSeconds"/>). Pausing and resuming do
+        /// not skip it (<see cref="GoalCamera.SkipInput"/>); runs after this frame's pause toggle.
         /// </summary>
         private void UpdateGoalCameraSkip()
         {
-            if (BroadcastCamera == null || !BroadcastCamera.GoalCameraActive)
-            {
-                _goalCamSkipArmed = false;
-                return;
-            }
-            ulong down = OffsidePresentation.SkipControlsDown();
-            if (!_goalCamSkipArmed)
-            {
-                _goalCamSkipArmed = true;
-                _goalCamSkipElapsed = 0f;
-                _goalCamSkip.Begin(down);
-                return;
-            }
-            _goalCamSkipElapsed += Time.unscaledDeltaTime;
-            if (_goalCamSkip.Update(down, _goalCamSkipElapsed)) BroadcastCamera.SkipGoalCamera();
+            bool active = BroadcastCamera != null && BroadcastCamera.GoalCameraActive;
+            ulong down = active ? OffsidePresentation.SkipControlsDown() : 0UL;
+            if (_goalCamSkip.Update(active, down, Session.Paused, Time.unscaledDeltaTime)) BroadcastCamera.SkipGoalCamera();
         }
 
         /// <summary>

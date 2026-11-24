@@ -37,6 +37,35 @@ namespace OpenFifa.Core
         /// <summary>True when the two kits are too close to tell apart from the broadcast camera.</summary>
         public static bool Clashes(KitDefinitionData a, KitDefinitionData b) => Contrast(a, b) < MinContrast;
 
+        /// <summary>Broadcast contrast between two flat colours (a kit in one colour, shirt and shorts alike).</summary>
+        public static float ColourContrast(SimpleColor a, SimpleColor b) => DeltaE2000(BroadcastLab(a), BroadcastLab(b));
+
+        /// <summary>
+        /// Team colours for everything that is not a kit (stadium seats and banners, crowd, HUD), consistent with the
+        /// kits on the pitch. With a resolved <paramref name="kits"/> selection (both outfield kits), each side's colour
+        /// is the primary colour of the kit it actually wears (so an away side switched to its change kit is tinted in
+        /// the change kit's colour). Without kits (no library, the tint fallback) the same rule as
+        /// <see cref="KitLibraryLogic.ResolveMatchKitsContrasting"/> on plain colours: the away side keeps its primary
+        /// colour when it reaches <see cref="MinContrast"/> against the home colour, otherwise it takes its away colour
+        /// if that contrasts more. Unparseable colours fall back to the defaults.
+        /// </summary>
+        public static void TeamColours(MatchKitSelection kits, string homePrimaryHex, string awayPrimaryHex, string awayAltHex,
+            SimpleColor homeDefault, SimpleColor awayDefault, out SimpleColor home, out SimpleColor away)
+        {
+            if (kits != null && kits.HomeKit != null && kits.AwayKit != null)
+            {
+                home = Parse(kits.HomeKit.PrimaryColor, homeDefault);
+                away = Parse(kits.AwayKit.PrimaryColor, awayDefault);
+                return;
+            }
+            home = Parse(homePrimaryHex, homeDefault);
+            away = Parse(awayPrimaryHex, awayDefault);
+            float contrast = ColourContrast(home, away);
+            if (contrast >= MinContrast || string.IsNullOrEmpty(awayAltHex)) return;
+            var alt = Parse(awayAltHex, away);
+            if (ColourContrast(home, alt) > contrast + 1e-3f) away = alt;
+        }
+
         /// <summary>The shirt's colour from afar: primary mixed with secondary by pattern coverage (sRGB blend).</summary>
         public static SimpleColor ShirtColour(KitDefinitionData kit)
         {

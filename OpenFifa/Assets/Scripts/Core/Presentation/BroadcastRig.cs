@@ -43,10 +43,27 @@ namespace OpenFifa.Core
         /// </summary>
         public static float PitchDegrees(float height, float horizontalDistance, float verticalFovDegrees, float fromTop)
         {
-            float below = (float)(Math.Atan2(height, Math.Max(0.01f, horizontalDistance)) * 180.0 / Math.PI);
-            float pitch = below - BroadcastFraming.PitchUpDegrees(verticalFovDegrees, fromTop);
+            float pitch = RawPitchDegrees(height, horizontalDistance, verticalFovDegrees, fromTop);
             return pitch < MinPitchDegrees ? MinPitchDegrees : (pitch > MaxPitchDegrees ? MaxPitchDegrees : pitch);
         }
+
+        /// <summary>
+        /// The tilt the geometry asks for before the broadcast clamp: exactly <paramref name="fromTop"/> down the frame.
+        /// (<see cref="PitchDegrees"/> clamps this; the tests check the geometry on this unclamped value.)
+        /// </summary>
+        public static float RawPitchDegrees(float height, float horizontalDistance, float verticalFovDegrees, float fromTop)
+        {
+            float below = (float)(Math.Atan2(height, Math.Max(0.01f, horizontalDistance)) * 180.0 / Math.PI);
+            return below - BroadcastFraming.PitchUpDegrees(verticalFovDegrees, fromTop);
+        }
+
+        /// <summary>
+        /// Most the clamp may correct the raw tilt anywhere on the pitch (degrees). The riding depth keeps the raw tilt
+        /// within 14.35-35.22 deg at the default height/setbacks (so the clamp trims up to 7.65 deg on the far
+        /// touchline and 5.2 at the near corners); a fixed-depth gantry needs 9.8 (28 m), 10.2 (33 m) or 25.5 (16 m).
+        /// The ball then sits a little off <see cref="BroadcastFraming.BallScreenFromTop"/> but well inside the frame.
+        /// </summary>
+        public const float MaxClampCorrectionDegrees = 8f;
 
         /// <summary>
         /// Full solve for a framed point at <paramref name="focusX"/> (world X; the near touchline is +halfWidth):
@@ -82,6 +99,20 @@ namespace OpenFifa.Core
             yawDegrees = (float)(Math.Atan2(-across, dz) * 180.0 / Math.PI);
             float horizontal = (float)Math.Sqrt(across * across + dz * dz);
             pitchDegrees = PitchDegrees(height, horizontal, verticalFovDegrees, fromTop);
+        }
+
+        /// <summary>
+        /// The tilt <see cref="Pose"/> would use before the clamp, for the same framed point and rig (camera depth,
+        /// gantry end stop and yaw clamp included).
+        /// </summary>
+        public static float RawPosePitchDegrees(float focusX, float focusZ, float halfWidth, float halfLength, float height,
+            float nearSetback, float farSetback, float verticalFovDegrees, float fromTop, float maxYawDegrees)
+        {
+            float camX = halfWidth + Setback(focusX, halfWidth, nearSetback, farSetback);
+            float zLimit = Math.Max(0f, halfLength - GantryEndInset);
+            float camZ = focusZ < -zLimit ? -zLimit : (focusZ > zLimit ? zLimit : focusZ);
+            HorizontalAim(camX, camZ, focusX, focusZ, maxYawDegrees, out float across, out float dz);
+            return RawPitchDegrees(height, (float)Math.Sqrt(across * across + dz * dz), verticalFovDegrees, fromTop);
         }
 
         /// <summary>
