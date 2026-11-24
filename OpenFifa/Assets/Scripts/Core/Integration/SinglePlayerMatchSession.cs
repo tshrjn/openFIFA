@@ -351,6 +351,30 @@ namespace OpenFifa.Core
             return _frameEvents;
         }
 
+        /// <summary>
+        /// Steps the match up to <paramref name="tick"/> (or full time) without rendering, e.g. a capture skipping to its
+        /// window. Commentary is fed on a clock that starts at <paramref name="commentaryStart"/> and advances with sim time,
+        /// and the returned value is that clock after the last step: keep using it as the commentary clock, so the engine
+        /// never sees time run backwards. (Stepping with <see cref="StepOnce"/> stamps commentary with sim time instead; a
+        /// caller whose clock then resumes from an earlier real time leaves every cooldown and the current line "in the
+        /// future", and the commentators go quiet until the clock catches up.)
+        /// </summary>
+        public double FastForward(int tick, double commentaryStart)
+        {
+            double clock = commentaryStart;
+            double dt = Sim.Dt;
+            while (Sim.Tick < tick && !IsFinished)
+            {
+                _frameEvents.Clear();
+                _frameCommentary.Clear();
+                _frameCues.Clear();
+                clock += dt;
+                StepInternal(clock);
+            }
+            if (_commentaryEngine != null) _frameCues.AddRange(_commentaryEngine.Tick(clock));
+            return clock;
+        }
+
         /// <summary>Diagnostics: AI shot decisions latched (one per decision tick), released to the sim, and dropped (window never opened or the AI changed its mind).</summary>
         public int AIShotsLatched, AIShotsReleased, AIShotsDropped;
 

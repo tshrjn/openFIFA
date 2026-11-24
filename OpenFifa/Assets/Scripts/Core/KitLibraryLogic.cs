@@ -231,46 +231,46 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Like <see cref="ResolveMatchKits(string, string)"/>, but prefers a light-versus-dark pairing: when the
-        /// shirts' luminance differs by less than <paramref name="minLuminanceGap"/>, the away side switches to the
-        /// first non-clashing variant (Home, Away, Third) that reaches the gap, or else the one with the largest gap.
+        /// Match kits as the broadcast camera sees them (<see cref="KitBroadcastContrast"/>): the home side wears its
+        /// Home kit; the away side wears the first of Home, Away, Third whose shirt + shorts contrast with it reaches
+        /// <paramref name="minContrast"/>, otherwise the variant with the most contrast (and
+        /// a best <see cref="MatchKitSelection.Contrast"/> below the threshold sets <see cref="MatchKitSelection.ClashUnresolved"/>).
+        /// Unlike plain RGB distance or a luminance gap, this keeps red v sky blue (clearly different) and rejects sky
+        /// blue v white or navy v maroon (the same from the gantry).
         /// </summary>
-        public MatchKitSelection ResolveMatchKitsContrasting(string homeTeamId, string awayTeamId, float minLuminanceGap = 0.3f)
+        public MatchKitSelection ResolveMatchKitsContrasting(string homeTeamId, string awayTeamId,
+            float minContrast = KitBroadcastContrast.MinContrast)
         {
             var result = ResolveMatchKits(homeTeamId, awayTeamId);
             if (result.HomeKit == null || result.AwayKit == null) return result;
 
-            var homePrimary = KitDefinitionConverter.ToJerseyDesign(result.HomeKit).PrimaryColor;
-            float homeLum = JerseyComparer.GetLuminance(homePrimary);
-            float Gap(KitDefinitionData k) =>
-                Math.Abs(JerseyComparer.GetLuminance(KitDefinitionConverter.ToJerseyDesign(k).PrimaryColor) - homeLum);
-            if (Gap(result.AwayKit) >= minLuminanceGap) return result;
-
-            KitDefinitionData best = result.AwayKit;
+            KitDefinitionData best = null;
             KitVariant bestVariant = result.AwayVariant;
-            float bestGap = Gap(best);
+            float bestContrast = float.NegativeInfinity;
             foreach (var variant in new[] { KitVariant.Home, KitVariant.Away, KitVariant.Third })
             {
                 var kit = GetKit(awayTeamId, variant);
                 if (kit == null) continue;
-                var primary = KitDefinitionConverter.ToJerseyDesign(kit).PrimaryColor;
-                if (JerseyComparer.ColorDistance(primary, homePrimary) <= JerseyComparer.DefaultClashThreshold) continue;
-                float gap = Gap(kit);
-                if (gap >= minLuminanceGap)
+                float contrast = KitBroadcastContrast.Contrast(result.HomeKit, kit);
+                if (contrast >= minContrast)
                 {
                     best = kit;
                     bestVariant = variant;
+                    bestContrast = contrast;
                     break;
                 }
-                if (gap > bestGap + 1e-4f)
+                if (contrast > bestContrast + 1e-3f)
                 {
                     best = kit;
                     bestVariant = variant;
-                    bestGap = gap;
+                    bestContrast = contrast;
                 }
             }
+            if (best == null) return result;
             result.AwayKit = best;
             result.AwayVariant = bestVariant;
+            result.Contrast = bestContrast;
+            result.ClashUnresolved = bestContrast < minContrast;
             return result;
         }
 

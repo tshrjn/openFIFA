@@ -150,8 +150,9 @@ namespace OpenFifa.Tests.Editor
             Assert.IsFalse(e.IsStoppage);
             Assert.IsNull(e.CurrentAnalyst);
 
-            // Foul then immediate restart: the queued analyst line never plays.
-            var e2 = new CommentaryEngine(Shipped(), new CommentaryConfig { AnalystChance = 1 }, 5);
+            // Foul then immediate restart: the queued analyst line never plays. (Lulls off: an 8 s lull in live play may
+            // legitimately go to the analyst, which is a new line, not the queued one.)
+            var e2 = new CommentaryEngine(Shipped(), new CommentaryConfig { AnalystChance = 1, LullSeconds = 0 }, 5);
             var lead2 = Started(e2.Push(Ev(CommentaryEventType.Foul, 100, "Vance")), CommentaryVoice.PlayByPlay);
             e2.Push(Ev(CommentaryEventType.PlayResumed, lead2.EndTime - 0.1));
             for (double t = lead2.EndTime; t < lead2.EndTime + 20; t += 0.25)

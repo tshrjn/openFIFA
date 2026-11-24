@@ -40,6 +40,15 @@ When a deliberate difficulty change moves a step, re-measure on the same seeds a
 `StepGdFloor` / `StepBalanceFloor` arrays in `SinglePlayerSessionTests` together.
 
 
+Keeper dive reach (Nov 2026, match-feel PR): `SimActionConfig.GkDiveReachRange` went from 1.6 to 2.1, so a keeper's
+full-stretch reach is 0.9 + 2.1 x GkDiving/99 m (about 2.5 m for a top keeper, was 2.15 m) and more placed shots become
+diving saves. The ladder test still passes on seeds 49..120 with every floor unchanged. GD steps over the 72 seeds:
+97 / 69 / 49 / 71 / 79 / 81 (floors 60.5 / 46.8 / 18.0 / 27.4 / 61.2 / 60.5); balance steps 178.6 / 133.2 / 119.6 /
+127.2 / 151.0 / 130.0. Keeper save rates rose by 3-5 points: user keepers 63.8 / 67.3 / 70.1 / 71.9 / 71.7 / 69.9 /
+67.3 %, AI keepers 64.0 / 63.2 / 71.3 / 71.4 / 80.3 % (Beginner to World Class; Legendary and Ultimate under 40 shots).
+`Difficulty_LowVolumeKeepers_SaveRateInBandOnMoreSeeds` passes (Legendary AI keeper 39/47 = 83.0 %, inside the
+allowance). The tables above are the d762568 baseline and were not re-measured.
+
 Levers per level live in `TeamAIDifficultyLadder` (AI thetas, reaction bonus) and `SinglePlayerDifficultyProfile`
 (hidden AI outfield rating delta, hidden AI finishing delta, keeper deltas, assists). The outfield and finishing deltas
 apply only to the fully AI-controlled side, never to a human team or any local-multiplayer human seat, and never reach
