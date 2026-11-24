@@ -69,17 +69,29 @@ namespace OpenFifa.Core
             _teamNames = teamNames ?? new string[2];
         }
 
-        /// <summary>Displayed match minute (each half maps to 45 minutes).</summary>
-        public static int Minute(MatchSim sim)
+        /// <summary>Displayed match minute now (each half maps to 45 minutes).</summary>
+        public static int Minute(MatchSim sim) => Minute(sim.Config.HalfDurationSeconds, sim.State.Clock, sim.State.Half);
+
+        /// <summary>Displayed match minute when <paramref name="e"/> happened (its own half clock, not the sim's current one).</summary>
+        public static int Minute(MatchSim sim, in MatchEvent e) => Minute(sim.Config.HalfDurationSeconds, e.Time, e.Half);
+
+        private static int Minute(float halfSeconds, float clock, int half)
         {
-            var s = sim.State;
-            float half = sim.Config.HalfDurationSeconds;
-            int m = (int)(s.Clock / half * 45f);
+            int m = (int)(clock / halfSeconds * 45f);
             if (m > 45) m = 45;
-            return m + (s.Half >= 2 ? 45 : 0);
+            return m + (half >= 2 ? 45 : 0);
         }
 
-        /// <summary>Converts one step's events. <paramref name="now"/> is the commentary clock (monotonic seconds).</summary>
+        /// <summary>The event's sim time in seconds (its own tick, not the sim's current one).</summary>
+        private float EventTime(in MatchEvent e) => (float)(e.Tick * _sim.Dt);
+
+        /// <summary>
+        /// Converts one step's events. <paramref name="now"/> is the commentary clock (monotonic seconds). Every match-time
+        /// reading (won-ball and spell timers, the tackle and dribble windows, the counter window, the displayed minute)
+        /// comes from the event's own tick and clock, not the sim's current state: a fast-forward batch may convert several
+        /// ticks' events after the sim has run all of them, so State.Tick is later than an event in it. In live play (one
+        /// Step per Convert) the two are the same.
+        /// </summary>
         public IReadOnlyList<CommentaryEvent> Convert(IReadOnlyList<MatchEvent> events, double now)
         {
             _out.Clear();
@@ -143,17 +155,17 @@ namespace OpenFifa.Core
                         {
                             bool turnover = e.Team != _wonBallTeam && _wonBallTeam != SimTeam.None;
                             _wonBallTeam = e.Team;
-                            _wonBallTime = (float)(s.Tick * _sim.Dt);
+                            _wonBallTime = EventTime(e);
                             _wonBallInOwnHalf = _sim.AttackCoord(e.Team, e.Position) < 0f;
                             // Won back in the attacking third: the press worked.
-                            bool justTackled = e.PlayerId == _tackleWinner && s.Tick - _tackleTick <= _sim.Config.SecondsToTicks(2f);
+                            bool justTackled = e.PlayerId == _tackleWinner && e.Tick - _tackleTick <= _sim.Config.SecondsToTicks(2f);
                             if (turnover && !justTackled && _sim.AttackCoord(e.Team, e.Position) > _sim.Config.Pitch.HalfLength / 3f && e.PlayerId >= 0)
                                 Add(CommentaryEventType.PressWon, e, now, e.PlayerId);
                         }
                         if (e.Team != _spellTeam)
                         {
                             _spellTeam = e.Team;
-                            _spellStart = (float)(s.Tick * _sim.Dt);
+                            _spellStart = EventTime(e);
                             _spellCalled = false;
                         }
                         break;
@@ -195,7 +207,7 @@ namespace OpenFifa.Core
                         {
                             Add(CommentaryEventType.Tackle, e, now, e.PlayerId);
                             _tackleWinner = e.PlayerId;
-                            _tackleTick = s.Tick;
+                            _tackleTick = e.Tick;
                         }
                         break;
                     case MatchEventType.Foul:
@@ -237,7 +249,7 @@ namespace OpenFifa.Core
             if (id < 0 || id >= MatchSimState.PlayerCount) return;
             var team = e.Team;
             float carrier = _sim.AttackCoord(team, s.Players[id].Position);
-            if (id == _dribbler && _dribbleMarker >= 0 && s.Tick - _dribbleMarkerTick <= _sim.Config.SecondsToTicks(2.5f))
+            if (id == _dribbler && _dribbleMarker >= 0 && e.Tick - _dribbleMarkerTick <= _sim.Config.SecondsToTicks(2.5f))
             {
                 var m = s.Players[_dribbleMarker].Position;
                 float rel = _sim.AttackCoord(team, m) - carrier;
@@ -262,20 +274,19 @@ namespace OpenFifa.Core
                 float d = SimMath.FlatDistance(q.Position, s.Players[id].Position);
                 if (d < bestD) { bestD = d; best = j; }
             }
-            if (best >= 0 && best != _dribbleMarker) { _dribbleMarker = best; _dribbleMarkerTick = s.Tick; }
+            if (best >= 0 && best != _dribbleMarker) { _dribbleMarker = best; _dribbleMarkerTick = e.Tick; }
         }
 
         /// <summary>
         /// A restart (kick-off, throw-in, goal kick, corner, free kick) hands the ball to the taker's side without a
         /// PossessionChange event: that side now has the ball (so a press that wins it back is a turnover again), the
         /// counter-attack timer restarts without an own-half win (a set piece is not a counter), and a new possession
-        /// spell starts. Timed at the event's own tick: after a multi-tick fast-forward batch the sim's current tick is
-        /// later than the restart.
+        /// spell starts. Timed at the event's own tick (see <see cref="Convert"/>).
         /// </summary>
         private void RestartPossession(in MatchEvent e)
         {
             if (e.Team == SimTeam.None) return;
-            float t = (float)(e.Tick * _sim.Dt);
+            float t = EventTime(e);
             _wonBallTeam = e.Team;
             _wonBallTime = t;
             _wonBallInOwnHalf = false;
@@ -287,7 +298,7 @@ namespace OpenFifa.Core
         /// <summary>The build-up event for a completed pass that is not a sequence milestone (OnTheBall when nothing stands out).</summary>
         private CommentaryEventType BuildUpType(in MatchEvent e)
         {
-            float t = (float)(_sim.State.Tick * _sim.Dt);
+            float t = EventTime(e);
             if (e.Team != _spellTeam)
             {
                 _spellTeam = e.Team;
@@ -316,7 +327,7 @@ namespace OpenFifa.Core
             {
                 Type = type,
                 Time = now,
-                Minute = Minute(_sim),
+                Minute = Minute(_sim, e),
                 Team = e.Team == SimTeam.Away ? 1 : 0,
                 TeamName = _teamNames[e.Team == SimTeam.Away ? 1 : 0],
                 HomeScore = s.HomeScore,
@@ -355,7 +366,7 @@ namespace OpenFifa.Core
                 c.ShotQuality = _shotXg;
                 c.DistanceMetres = _shotDistance;
             }
-            float t = (float)(_sim.State.Tick * _sim.Dt);
+            float t = EventTime(e);
             bool fromShot = _shotPending && _shotTeam == e.Team && e.PlayerId == _shooter;
             GoalSituation sit = GoalSituation.OpenPlay;
             if (ownGoal) sit = GoalSituation.OwnGoal;

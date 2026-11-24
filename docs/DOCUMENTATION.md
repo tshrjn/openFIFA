@@ -42,6 +42,27 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-24 Session — Commentary adapter: every event timed at its own tick
+
+**Status**: Completed (PR fix/commentary-event-ticks)
+**Changes**:
+- `SimCommentaryAdapter` now reads all match time from the event (`e.Tick`, and `e.Time`/`e.Half` for the minute),
+  never from `State.Tick`/`State.Clock`. Following on from PR #66 (`RestartPossession`), this covers the
+  possession-change/interception branch (won-ball time, spell start, the 2 s "just tackled" window), the tackle tick,
+  the dribble-marker tick and its 2.5 s window, the new-spell start in `BuildUpType`, the counter window in `AddGoal`,
+  and the displayed minute (`Minute(sim, e)`). A fast-forward batch converts several ticks' events after the sim has run
+  them all, so the state is later than the events in it. `MatchSim.Step` bumps `Tick` before it emits anything, so in
+  live play (one Step per Convert) the event and state ticks are the same. A scratch run of 5 full matches through
+  `SinglePlayerMatchSession` gave identical commentary from the old and new adapter (1,930 events, every property).
+- `MatchFeelCommentaryTests` (FID_COMMENTARY): nine fast-forward tests, one per changed timing, where `State.Tick != e.Tick`.
+  Each one fails when its line is put back to the state tick (mutation-checked). The `Pass`/`Received` helpers take the
+  event tick, and the existing tests that advance `State.Tick` now stamp their events the way the sim does, so they do
+  not pass by accident.
+**Known Issues**: the adapter still reads some non-timing state at conversion time: the score on each line,
+`LastKickRestart` for a shot, and player positions in the dribble check. In a multi-tick batch those can come from a
+later tick than the event. The session's `FastForward` converts after every step, so it is not affected today.
+**Next**: none from this change.
+
 ## 2026-11-24 Session — PR #65 review nits
 
 **Status**: Completed (PR fix/pr65-nits)

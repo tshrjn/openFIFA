@@ -32,11 +32,11 @@ namespace OpenFifa.Tests.Editor
 
         private static MatchSim NewSim() => new MatchSim(new MatchSimConfig(), MatchSetup.CreateDefault(1));
 
-        private static MatchEvent Pass(int from, SimVec3 at) =>
-            new MatchEvent { Type = MatchEventType.Pass, PlayerId = from, Team = SimTeam.Home, Position = at, Action = IntentAction.Pass };
+        private static MatchEvent Pass(int from, SimVec3 at, int tick = 0) =>
+            new MatchEvent { Type = MatchEventType.Pass, Tick = tick, PlayerId = from, Team = SimTeam.Home, Position = at, Action = IntentAction.Pass };
 
-        private static MatchEvent Received(int player, int from, SimVec3 at) =>
-            new MatchEvent { Type = MatchEventType.PassCompleted, PlayerId = player, OtherPlayerId = from, Team = SimTeam.Home, Position = at };
+        private static MatchEvent Received(int player, int from, SimVec3 at, int tick = 0) =>
+            new MatchEvent { Type = MatchEventType.PassCompleted, Tick = tick, PlayerId = player, OtherPlayerId = from, Team = SimTeam.Home, Position = at };
 
         private static CommentaryEventType Only(IReadOnlyList<CommentaryEvent> outp)
         {
@@ -108,10 +108,11 @@ namespace OpenFifa.Tests.Editor
             for (int i = 0; i < MatchSimState.PlayerCount; i++) st.Players[i].Position = new SimVec3(-30f + i, 0f, -40f);
             st.Players[8].Position = new SimVec3(0f, 0f, 10f);
             st.Players[14].Position = new SimVec3(0.5f, 0f, 12f);
-            var touch = new MatchEvent { Type = MatchEventType.DribbleTouch, PlayerId = 8, Team = SimTeam.Home };
+            var touch = new MatchEvent { Type = MatchEventType.DribbleTouch, Tick = st.Tick, PlayerId = 8, Team = SimTeam.Home };
             Assert.AreEqual(0, a.Convert(new List<MatchEvent> { touch }, 1.0).Count);
             st.Tick += 60;
             st.Players[8].Position = new SimVec3(0f, 0f, 15f); // past him
+            touch.Tick = st.Tick;
             var outp = a.Convert(new List<MatchEvent> { touch }, 2.0);
             Assert.AreEqual(CommentaryEventType.DribblePast, Only(outp));
             Assert.AreEqual("Player8", outp[0].PlayerName);
@@ -142,7 +143,7 @@ namespace OpenFifa.Tests.Editor
             sim.State.Tick += 120;
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = sim.State.Tick, PlayerId = 15, Team = SimTeam.Away, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 30f) } }, 3.0);
             sim.State.Tick += 120;
-            var won = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(20f, 0f, 36f) } }, 5.0);
+            var won = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, Tick = sim.State.Tick, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(20f, 0f, 36f) } }, 5.0);
             Assert.AreEqual(CommentaryEventType.PressWon, Only(won));
         }
 
@@ -159,8 +160,8 @@ namespace OpenFifa.Tests.Editor
             var ko = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.KickOff, Tick = sim.State.Tick, PlayerId = 9, Team = SimTeam.Home, Detail = (int)RestartType.KickOff } }, 41.0);
             Assert.AreEqual(CommentaryEventType.KickOff, Only(ko));
             sim.State.Tick = 42 * ticksPerSecond;
-            a.Convert(new List<MatchEvent> { Pass(9, new SimVec3(0f, 0f, 0f)) }, 42.0);
-            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 9, new SimVec3(3f, 0f, -4f)) }, 43.0)));
+            a.Convert(new List<MatchEvent> { Pass(9, new SimVec3(0f, 0f, 0f), sim.State.Tick) }, 42.0);
+            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 9, new SimVec3(3f, 0f, -4f), sim.State.Tick) }, 43.0)));
         }
 
         [Test]
@@ -173,8 +174,8 @@ namespace OpenFifa.Tests.Editor
             sim.State.Tick = 18 * ticksPerSecond;
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = sim.State.Tick, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 19.0);
             sim.State.Tick = 25 * ticksPerSecond;
-            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f)) }, 25.0);
-            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f)) }, 26.0)),
+            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f), sim.State.Tick) }, 25.0);
+            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f), sim.State.Tick) }, 26.0)),
                 "7 s since the throw-in is not a long spell");
         }
 
@@ -191,9 +192,180 @@ namespace OpenFifa.Tests.Editor
             sim.State.Tick = 15 * ticksPerSecond;
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = 5 * ticksPerSecond, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 15.0);
             sim.State.Tick = 26 * ticksPerSecond;
-            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f)) }, 26.0);
-            Assert.AreEqual(CommentaryEventType.PossessionSpell, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f)) }, 26.5)),
+            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f), sim.State.Tick) }, 26.0);
+            Assert.AreEqual(CommentaryEventType.PossessionSpell, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f), sim.State.Tick) }, 26.5)),
                 "21 s since the throw-in's own tick");
+        }
+
+        // ---- fast-forward batches: every timing comes from the event's own tick, not State.Tick (the batch end) ----
+
+        private static MatchEvent Won(MatchEventType type, int player, SimTeam team, SimVec3 at, int tick) =>
+            new MatchEvent { Type = type, Tick = tick, PlayerId = player, Team = team, Position = at };
+
+        [Test]
+        public void Adapter_PossessionChangeInAFastForwardBatch_TimesTheSpellFromTheEventTick()
+        {
+            // Home wins the ball at 5 s in a batch converted at 15 s. 21 s after the win it is a long spell; timed from
+            // the batch end it would be only 11 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 1.0);
+            sim.State.Tick = 15 * tps;
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 6, SimTeam.Home, new SimVec3(0f, 0f, -10f), 5 * tps) }, 15.0);
+            sim.State.Tick = 26 * tps;
+            a.Convert(new List<MatchEvent> { Pass(6, new SimVec3(0f, 0f, 0f), sim.State.Tick) }, 26.0);
+            Assert.AreEqual(CommentaryEventType.PossessionSpell, Only(a.Convert(new List<MatchEvent> { Received(8, 6, new SimVec3(3f, 0f, -4f), sim.State.Tick) }, 26.5)),
+                "21 s since the possession change's own tick");
+        }
+
+        [Test]
+        public void Adapter_InterceptionInAFastForwardBatch_TimesTheCounterFromTheEventTick()
+        {
+            // Home intercepts in its own half at 1 s in a batch converted at 6 s, and scores at 13 s: 12 s after the win,
+            // past the 10 s counter window. Timed from the batch end it would be 7 s, a counter.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 0.5);
+            sim.State.Tick = 6 * tps;
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.Interception, 3, SimTeam.Home, new SimVec3(0f, 0f, -20f), 1 * tps) }, 6.0);
+            sim.State.Tick = 13 * tps;
+            var goal = a.Convert(new List<MatchEvent> { Won(MatchEventType.Goal, 9, SimTeam.Home, new SimVec3(0f, 0f, 30f), sim.State.Tick) }, 13.0);
+            Assert.AreEqual(GoalSituation.OpenPlay, goal[0].Situation, "12 s since the interception's own tick");
+        }
+
+        [Test]
+        public void Adapter_GoalInAFastForwardBatch_TimesTheCounterFromTheEventTick()
+        {
+            // Home intercepts in its own half at 1 s; the goal at 9 s comes in a batch converted at 15 s. 8 s after the
+            // win it is a counter; timed from the batch end it would be 14 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 0.5);
+            sim.State.Tick = 1 * tps;
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.Interception, 3, SimTeam.Home, new SimVec3(0f, 0f, -20f), sim.State.Tick) }, 1.0);
+            sim.State.Tick = 15 * tps;
+            var goal = a.Convert(new List<MatchEvent> { Won(MatchEventType.Goal, 9, SimTeam.Home, new SimVec3(0f, 0f, 30f), 9 * tps) }, 15.0);
+            Assert.AreEqual(GoalSituation.Counter, goal[0].Situation, "8 s since the interception");
+        }
+
+        [Test]
+        public void Adapter_TackleInAFastForwardBatch_TimesTheJustTackledWindowFromTheEventTick()
+        {
+            // Home's 9 wins a tackle at 7 s in a batch converted at 10 s, then collects the ball high up at 10.5 s: 3.5 s
+            // later, outside the 2 s "same ball" window, so it is a press won. Timed from the batch end the tackle would
+            // be 0.5 s old and the press would be swallowed.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 1.0);
+            sim.State.Tick = 10 * tps;
+            var tackle = Won(MatchEventType.Tackle, 9, SimTeam.Home, new SimVec3(0f, 0f, 30f), 7 * tps);
+            tackle.Detail = 1;
+            a.Convert(new List<MatchEvent> { tackle }, 10.0);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 30f), sim.State.Tick) }, 10.2);
+            sim.State.Tick = 10 * tps + tps / 2;
+            var won = a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 9, SimTeam.Home, new SimVec3(5f, 0f, 35f), sim.State.Tick) }, 10.5);
+            Assert.AreEqual(CommentaryEventType.PressWon, Only(won), "3.5 s since the tackle's own tick");
+        }
+
+        [Test]
+        public void Adapter_PossessionChangeInAFastForwardBatch_TimesTheJustTackledWindowFromTheEventTick()
+        {
+            // Home's 9 wins a tackle at 7 s; Away pokes it loose and 9 collects it high up at 8 s, converted in a batch at
+            // 10 s. 1 s after his tackle it is the same ball, not a second press; timed from the batch end it would be 3 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 1.0);
+            sim.State.Tick = 7 * tps;
+            var tackle = Won(MatchEventType.Tackle, 9, SimTeam.Home, new SimVec3(0f, 0f, 30f), sim.State.Tick);
+            tackle.Detail = 1;
+            a.Convert(new List<MatchEvent> { tackle }, 7.0);
+            sim.State.Tick = 10 * tps;
+            var batch = a.Convert(new List<MatchEvent>
+            {
+                Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 30f), 7 * tps + tps / 2),
+                Won(MatchEventType.PossessionChange, 9, SimTeam.Home, new SimVec3(5f, 0f, 35f), 8 * tps),
+            }, 10.0);
+            Assert.AreEqual(0, batch.Count, "1 s since his own tackle: the same ball");
+        }
+
+        [Test]
+        public void Adapter_ReceptionInAFastForwardBatch_TimesTheNewSpellFromTheEventTick()
+        {
+            // Home's first completed pass (a new spell) is at 3 s in a batch converted at 13 s. 21 s later it is a long
+            // spell; timed from the batch end it would be only 11 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { Won(MatchEventType.PossessionChange, 13, SimTeam.Away, new SimVec3(0f, 0f, 0f), 0) }, 1.0);
+            sim.State.Tick = 13 * tps;
+            var batch = a.Convert(new List<MatchEvent> { Pass(6, new SimVec3(0f, 0f, 0f), 2 * tps), Received(7, 6, new SimVec3(3f, 0f, -4f), 3 * tps) }, 13.0);
+            Assert.AreEqual(CommentaryEventType.OnTheBall, Only(batch));
+            sim.State.Tick = 24 * tps;
+            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f), sim.State.Tick) }, 24.0);
+            Assert.AreEqual(CommentaryEventType.PossessionSpell, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f), sim.State.Tick) }, 24.5)),
+                "21 s since the first reception's own tick");
+        }
+
+        [Test]
+        public void Adapter_DribbleTouchInAFastForwardBatch_TimesTheMarkerFromTheEventTick()
+        {
+            // Carrier 8's touch at 1 s notes defender 14 goal-side, in a batch converted at 4 s; at 4.5 s he is past him.
+            // 3.5 s after the marker was seen, outside the 2.5 s window: not a dribble past. Timed from the batch end
+            // the marker would be 0.5 s old.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            var st = sim.State;
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            for (int i = 0; i < MatchSimState.PlayerCount; i++) st.Players[i].Position = new SimVec3(-30f + i, 0f, -40f);
+            st.Players[8].Position = new SimVec3(0f, 0f, 10f);
+            st.Players[14].Position = new SimVec3(0.5f, 0f, 12f);
+            st.Tick = 4 * tps;
+            var touch = new MatchEvent { Type = MatchEventType.DribbleTouch, Tick = 1 * tps, PlayerId = 8, Team = SimTeam.Home };
+            Assert.AreEqual(0, a.Convert(new List<MatchEvent> { touch }, 4.0).Count);
+            st.Tick = 4 * tps + tps / 2;
+            st.Players[8].Position = new SimVec3(0f, 0f, 15f); // past him
+            touch.Tick = st.Tick;
+            Assert.AreEqual(0, a.Convert(new List<MatchEvent> { touch }, 4.5).Count, "3.5 s since the marker was seen");
+        }
+
+        [Test]
+        public void Adapter_DribblePastInAFastForwardBatch_TimesTheWindowFromTheEventTick()
+        {
+            // Carrier 8's touch at 1 s notes defender 14 goal-side; the touch that takes him past is at 3 s, in a batch
+            // converted at 4 s. 2 s after the marker is inside the 2.5 s window; timed from the batch end it is 3 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            var st = sim.State;
+            int tps = (int)Math.Round(1.0 / sim.Dt);
+            for (int i = 0; i < MatchSimState.PlayerCount; i++) st.Players[i].Position = new SimVec3(-30f + i, 0f, -40f);
+            st.Players[8].Position = new SimVec3(0f, 0f, 10f);
+            st.Players[14].Position = new SimVec3(0.5f, 0f, 12f);
+            st.Tick = 1 * tps;
+            var touch = new MatchEvent { Type = MatchEventType.DribbleTouch, Tick = st.Tick, PlayerId = 8, Team = SimTeam.Home };
+            Assert.AreEqual(0, a.Convert(new List<MatchEvent> { touch }, 1.0).Count);
+            st.Tick = 4 * tps;
+            st.Players[8].Position = new SimVec3(0f, 0f, 15f); // past him
+            touch.Tick = 3 * tps;
+            Assert.AreEqual(CommentaryEventType.DribblePast, Only(a.Convert(new List<MatchEvent> { touch }, 4.0)), "2 s since the marker was seen");
+        }
+
+        [Test]
+        public void Adapter_EventInAFastForwardBatch_TakesItsMinuteFromItsOwnClock()
+        {
+            // A first-half foul converted after the batch has run into the second half keeps its first-half minute.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            float half = sim.Config.HalfDurationSeconds;
+            sim.State.Half = 2;
+            sim.State.Clock = half / 3f;
+            var foul = new MatchEvent { Type = MatchEventType.Foul, Tick = 100, Time = half * 0.9f, Half = 1, PlayerId = 4, OtherPlayerId = 14, Team = SimTeam.Home };
+            var outp = a.Convert(new List<MatchEvent> { foul }, 50.0);
+            Assert.AreEqual((int)(0.9f * 45f), outp[0].Minute, "the foul's own minute (40'), not the batch end's (60')");
         }
 
         [Test]
@@ -206,8 +378,8 @@ namespace OpenFifa.Tests.Editor
             for (int k = 0; k < 16; k++)
             {
                 sim.State.Tick = k * 2 * ticksPerSecond; // a pass every 2 s, 30 s in all
-                a.Convert(new List<MatchEvent> { Pass(4 + k % 3, new SimVec3(0f, 0f, -5f)) }, k * 2.0);
-                foreach (var c in a.Convert(new List<MatchEvent> { Received(4 + (k + 1) % 3, 4, new SimVec3(4f, 0f, -3f)) }, k * 2.0 + 1)) types.Add(c.Type);
+                a.Convert(new List<MatchEvent> { Pass(4 + k % 3, new SimVec3(0f, 0f, -5f), sim.State.Tick) }, k * 2.0);
+                foreach (var c in a.Convert(new List<MatchEvent> { Received(4 + (k + 1) % 3, 4, new SimVec3(4f, 0f, -3f), sim.State.Tick) }, k * 2.0 + 1)) types.Add(c.Type);
             }
             Assert.AreEqual(1, types.FindAll(t => t == CommentaryEventType.PossessionSpell).Count, string.Join(",", types));
         }
