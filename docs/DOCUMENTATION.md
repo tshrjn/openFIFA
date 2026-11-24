@@ -42,6 +42,22 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-24 Session — PR #65 review nits
+
+**Status**: Completed (PR fix/pr65-nits)
+**Changes**:
+- `BroadcastRig.MaxClampCorrectionDegrees` 8 -> 9: 1.35 deg of headroom over the riding rig's largest trim (7.65) instead
+  of 0.35, still under every fixed gantry (28 m 9.8, 33 m 10.2, 16 m 25.5), so the fixed-gantry guard still fails them.
+- `SimCommentaryAdapter.RestartPossession` times the won-ball and spell start at the restart event's own tick (`e.Tick`),
+  not `State.Tick`, which is later after a multi-tick fast-forward batch. Test in `MatchFeelCommentaryTests`.
+- The white slab at the bottom of broadcast frames (#62/#63 and #65 captures, about 26:45-27:15) was the dugout roofs and
+  the tunnel canopy. With play about 8-11 m in from the near touchline they come in at the bottom edge covering 0-8% of
+  the frame, under the 8% hide threshold. `NearSideOcclusion` now hides a piece whenever the bottom edge of the frame
+  cuts it (`CutByBottomEdge`). That piece is hidden on the frame it enters, so the switch is never seen. The 8%/5%
+  hysteresis remains for a piece wholly inside the frame. Tests in `BroadcastCameraRigTests` (FID_PRESENTATION).
+**Known Issues**: none new.
+**Next**: none from this review.
+
 ## 2026-11-24 Session — Follow-ups from the #62/#63 review
 
 **Status**: Completed (PR fix/pr62-63-followups)

@@ -140,7 +140,7 @@ namespace OpenFifa.Tests.Editor
             var a = new SimCommentaryAdapter(sim, Names());
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, 0f) } }, 1.0);
             sim.State.Tick += 120;
-            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, PlayerId = 15, Team = SimTeam.Away, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 30f) } }, 3.0);
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = sim.State.Tick, PlayerId = 15, Team = SimTeam.Away, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 30f) } }, 3.0);
             sim.State.Tick += 120;
             var won = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 9, Team = SimTeam.Home, Position = new SimVec3(20f, 0f, 36f) } }, 5.0);
             Assert.AreEqual(CommentaryEventType.PressWon, Only(won));
@@ -156,7 +156,7 @@ namespace OpenFifa.Tests.Editor
             int ticksPerSecond = (int)Math.Round(1.0 / sim.Dt);
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 6, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, -10f) } }, 1.0);
             sim.State.Tick = 40 * ticksPerSecond;
-            var ko = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.KickOff, PlayerId = 9, Team = SimTeam.Home, Detail = (int)RestartType.KickOff } }, 41.0);
+            var ko = a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.KickOff, Tick = sim.State.Tick, PlayerId = 9, Team = SimTeam.Home, Detail = (int)RestartType.KickOff } }, 41.0);
             Assert.AreEqual(CommentaryEventType.KickOff, Only(ko));
             sim.State.Tick = 42 * ticksPerSecond;
             a.Convert(new List<MatchEvent> { Pass(9, new SimVec3(0f, 0f, 0f)) }, 42.0);
@@ -171,11 +171,29 @@ namespace OpenFifa.Tests.Editor
             int ticksPerSecond = (int)Math.Round(1.0 / sim.Dt);
             a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 6, Team = SimTeam.Home, Position = new SimVec3(0f, 0f, -10f) } }, 1.0);
             sim.State.Tick = 18 * ticksPerSecond;
-            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 19.0);
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = sim.State.Tick, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 19.0);
             sim.State.Tick = 25 * ticksPerSecond;
             a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f)) }, 25.0);
             Assert.AreEqual(CommentaryEventType.OnTheBall, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f)) }, 26.0)),
                 "7 s since the throw-in is not a long spell");
+        }
+
+        [Test]
+        public void Adapter_RestartInAFastForwardBatch_TimesTheSpellFromTheEventTick()
+        {
+            // A fast-forward batch converts its events after the sim has run every tick of it, so State.Tick is later than
+            // the throw-in's own tick. The spell starts at the throw-in (5 s), not at the end of the batch (15 s): 21 s
+            // later it is a long spell; timed from the batch end it would be only 11 s.
+            var sim = NewSim();
+            var a = new SimCommentaryAdapter(sim, Names());
+            int ticksPerSecond = (int)Math.Round(1.0 / sim.Dt);
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.PossessionChange, PlayerId = 6, Team = SimTeam.Away, Position = new SimVec3(0f, 0f, -10f) } }, 1.0);
+            sim.State.Tick = 15 * ticksPerSecond;
+            a.Convert(new List<MatchEvent> { new MatchEvent { Type = MatchEventType.RestartTaken, Tick = 5 * ticksPerSecond, PlayerId = 7, Team = SimTeam.Home, Detail = (int)RestartType.ThrowIn, Position = new SimVec3(34f, 0f, 0f) } }, 15.0);
+            sim.State.Tick = 26 * ticksPerSecond;
+            a.Convert(new List<MatchEvent> { Pass(7, new SimVec3(0f, 0f, 0f)) }, 26.0);
+            Assert.AreEqual(CommentaryEventType.PossessionSpell, Only(a.Convert(new List<MatchEvent> { Received(8, 7, new SimVec3(3f, 0f, -4f)) }, 26.5)),
+                "21 s since the throw-in's own tick");
         }
 
         [Test]

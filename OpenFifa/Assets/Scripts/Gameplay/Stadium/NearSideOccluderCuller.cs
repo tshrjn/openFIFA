@@ -6,8 +6,9 @@ using UnityEngine;
 namespace OpenFifa.Gameplay
 {
     /// <summary>
-    /// Hides near-side stadium furniture (dugouts, tunnel canopy) while it fills the bottom of the broadcast frame
-    /// (<see cref="NearSideOcclusion"/>: more than 8% of the frame height, shown again below 5%). Runs after the camera
+    /// Hides near-side stadium furniture (dugouts, tunnel canopy) while it is cut off by the bottom of the broadcast
+    /// frame, at any size (<see cref="NearSideOcclusion"/>; a piece wholly inside the frame: more than 8% of the frame
+    /// height, shown again below 5%). Runs after the camera
     /// driver (200) and the offside cut (300), so it judges the pose that is rendered. Only acts in the broadcast mode
     /// (including the goal camera); review stills from the other modes show everything.
     /// </summary>
@@ -47,7 +48,7 @@ namespace OpenFifa.Gameplay
             {
                 var r = renderers[i];
                 if (r == null) continue;
-                _hidden[i] = active && NearSideOcclusion.Hidden(_hidden[i], NearSideOcclusion.Coverage(view, _boxes[i]));
+                _hidden[i] = active && NearSideOcclusion.Hidden(_hidden[i], view, _boxes[i]);
                 if (r.enabled == _hidden[i]) r.enabled = !_hidden[i];
                 if (_hidden[i]) hiddenCount++;
             }

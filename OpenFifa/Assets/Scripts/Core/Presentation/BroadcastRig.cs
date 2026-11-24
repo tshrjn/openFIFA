@@ -62,8 +62,10 @@ namespace OpenFifa.Core
         /// within 14.35-35.22 deg at the default height/setbacks (so the clamp trims up to 7.65 deg on the far
         /// touchline and 5.2 at the near corners); a fixed-depth gantry needs 9.8 (28 m), 10.2 (33 m) or 25.5 (16 m).
         /// The ball then sits a little off <see cref="BroadcastFraming.BallScreenFromTop"/> but well inside the frame.
+        /// 9 deg sits between the two: 1.35 deg of headroom over the riding rig, so a small rig tweak does not trip the
+        /// tests, and still below every fixed gantry (0.8 deg under the closest, 28 m), so the fixed-gantry guard fails.
         /// </summary>
-        public const float MaxClampCorrectionDegrees = 8f;
+        public const float MaxClampCorrectionDegrees = 9f;
 
         /// <summary>
         /// Full solve for a framed point at <paramref name="focusX"/> (world X; the near touchline is +halfWidth):

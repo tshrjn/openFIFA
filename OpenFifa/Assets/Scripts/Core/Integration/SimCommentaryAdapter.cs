@@ -269,12 +269,13 @@ namespace OpenFifa.Core
         /// A restart (kick-off, throw-in, goal kick, corner, free kick) hands the ball to the taker's side without a
         /// PossessionChange event: that side now has the ball (so a press that wins it back is a turnover again), the
         /// counter-attack timer restarts without an own-half win (a set piece is not a counter), and a new possession
-        /// spell starts.
+        /// spell starts. Timed at the event's own tick: after a multi-tick fast-forward batch the sim's current tick is
+        /// later than the restart.
         /// </summary>
         private void RestartPossession(in MatchEvent e)
         {
             if (e.Team == SimTeam.None) return;
-            float t = (float)(_sim.State.Tick * _sim.Dt);
+            float t = (float)(e.Tick * _sim.Dt);
             _wonBallTeam = e.Team;
             _wonBallTime = t;
             _wonBallInOwnHalf = false;

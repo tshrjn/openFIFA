@@ -114,7 +114,7 @@ namespace OpenFifa.Tests.Editor.Presentation
         public void Pose_NearTouchlinePlay_NoSwingTowardsOverhead()
         {
             // The old fixed 28 m / 19 m rig tilted ~38 deg at the near touchline and ~9 deg at the far one. Raw tilts,
-            // so this is the geometry, not the clamp (the clamped values differ by at most 8 deg by construction).
+            // so this is the geometry, not the clamp (the clamped values differ by at most 8 deg, the width of the 22-30 deg clamp, by construction).
             float near = BroadcastRig.RawPosePitchDegrees(HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
             float far = BroadcastRig.RawPosePitchDegrees(-HalfWidth, 0f, HalfWidth, HalfLength, H, Near, Far, Fov, FromTop, MaxYaw);
             Assert.That(near - far, Is.LessThanOrEqualTo(21.5f), $"raw near {near:F1} v far {far:F1}");
@@ -267,6 +267,73 @@ namespace OpenFifa.Tests.Editor.Presentation
             var view = ViewFor(HalfWidth, 45f);
             var minusSide = NearSideOcclusion.Occluders(layout)[0]; // dugout at -10 m
             Assert.AreEqual(0f, NearSideOcclusion.Coverage(view, minusSide), 1e-5f);
+        }
+
+        /// <summary>
+        /// Regression (the white slab under the radar in the #62/#63 and #65 captures, 26:45-27:15): with play about 10 m
+        /// in from the near touchline the dugout roofs and tunnel canopy come in at the bottom edge covering only ~5% of
+        /// the frame, under <see cref="NearSideOcclusion.HideCoverage"/>, so the size threshold alone left them drawn.
+        /// </summary>
+        [Test]
+        public void Hidden_SlabCutByTheBottomEdgeBelowHideCoverage_IsHidden()
+        {
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            var boxes = NearSideOcclusion.Occluders(layout);
+            var view = ViewFor(24f, 0f);
+            int sliver = 0;
+            foreach (var b in boxes)
+            {
+                float c = NearSideOcclusion.Coverage(view, b);
+                if (c <= 0f) continue;
+                Assert.Less(c, NearSideOcclusion.HideCoverage, "the case the size threshold missed");
+                Assert.IsFalse(NearSideOcclusion.Hidden(false, c), "size threshold alone: drawn");
+                Assert.IsTrue(NearSideOcclusion.CutByBottomEdge(view, b));
+                Assert.IsTrue(NearSideOcclusion.Hidden(false, view, b), "cut off by the bottom edge: hidden");
+                sliver++;
+            }
+            Assert.Greater(sliver, 0, "a near-side piece is in shot at the bottom edge");
+        }
+
+        /// <summary>
+        /// Play runs from the far touchline to the near one and back at several points along the pitch, with the culler's
+        /// state carried from frame to frame: a near-side piece is never drawn while the bottom edge cuts it off, and all
+        /// of them are drawn again once the play is back in the far half.
+        /// </summary>
+        [Test]
+        public void Hidden_PlaySweepsToTheNearTouchlineAndBack_NeverDrawsASlabAtTheBottomEdge()
+        {
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            var boxes = NearSideOcclusion.Occluders(layout);
+            foreach (float z in new[] { -40f, -20f, -10f, -5f, 0f, 5f, 10f, 20f, 40f })
+            {
+                var hidden = new bool[boxes.Count];
+                int steps = 2 * (int)(2f * HalfWidth / 0.25f);
+                for (int k = 0; k <= steps; k++)
+                {
+                    float t = k <= steps / 2 ? k / (float)(steps / 2) : (steps - k) / (float)(steps / 2);
+                    float x = -HalfWidth + 2f * HalfWidth * t;
+                    var view = ViewFor(x, z);
+                    for (int i = 0; i < boxes.Count; i++)
+                    {
+                        hidden[i] = NearSideOcclusion.Hidden(hidden[i], view, boxes[i]);
+                        if (!hidden[i])
+                            Assert.IsFalse(NearSideOcclusion.CutByBottomEdge(view, boxes[i]),
+                                $"piece {i} drawn cut off by the bottom edge, play at ({x:F2}, {z})");
+                    }
+                }
+                for (int i = 0; i < boxes.Count; i++) Assert.IsFalse(hidden[i], $"piece {i} back on show, play back at the far touchline (z {z})");
+            }
+        }
+
+        [Test]
+        public void CutByBottomEdge_OutOfShotOrMidPitchPlay_IsFalse()
+        {
+            var layout = StadiumLayout.Create(PitchSpec.Standard);
+            var boxes = NearSideOcclusion.Occluders(layout);
+            foreach (float x in new[] { -HalfWidth, 0f, 10f })
+            foreach (float z in Zs())
+                foreach (var b in boxes)
+                    Assert.IsFalse(NearSideOcclusion.CutByBottomEdge(ViewFor(x, z), b), $"play at ({x}, {z})");
         }
 
         [Test]
