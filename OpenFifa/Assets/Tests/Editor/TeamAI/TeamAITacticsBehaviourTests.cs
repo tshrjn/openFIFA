@@ -1,3 +1,4 @@
+using System.Linq;
 using NUnit.Framework;
 using OpenFifa.Core;
 
@@ -430,9 +431,10 @@ namespace OpenFifa.Tests.Editor.TeamAI
 
         // ------------------------------------------------------------------ style strength follows intent
 
-        private static int AIGoalsFor(TeamAIStyle style, TeamAIDifficultyLevel level, int seeds)
+        /// <summary>AI goals per match (one match per seed, seeds 1..<paramref name="seeds"/>).</summary>
+        private static int[] AIGoalsPerSeed(TeamAIStyle style, TeamAIDifficultyLevel level, int seeds)
         {
-            int goals = 0;
+            var goals = new int[seeds];
             for (int seed = 1; seed <= seeds; seed++)
             {
                 var setup = MatchSetup.CreateDefault((ulong)seed);
@@ -443,10 +445,39 @@ namespace OpenFifa.Tests.Editor.TeamAI
                 });
                 var bot = new ScriptedGamepadBot();
                 while (!s.IsFinished) s.StepOnce(bot);
-                goals += s.Result.AIGoals;
+                goals[seed - 1] = s.Result.AIGoals;
             }
             return goals;
         }
+
+        private static int Sum(int[] a)
+        {
+            int n = 0;
+            foreach (int v in a) n += v;
+            return n;
+        }
+
+        /// <summary>
+        /// Paired per-match difference a - b over the same seeds (same opponent, same setup): mean and its standard error
+        /// (sample standard deviation of the per-seed differences / sqrt(n)).
+        /// </summary>
+        private static void PairedDifference(int[] a, int[] b, out double mean, out double standardError)
+        {
+            int n = a.Length;
+            double sum = 0.0;
+            for (int i = 0; i < n; i++) sum += a[i] - b[i];
+            mean = sum / n;
+            double ss = 0.0;
+            for (int i = 0; i < n; i++)
+            {
+                double d = a[i] - b[i] - mean;
+                ss += d * d;
+            }
+            standardError = n > 1 ? System.Math.Sqrt(ss / (n - 1) / n) : double.PositiveInfinity;
+        }
+
+        /// <summary>Paired differences more than this many standard errors below zero count as "clearly below".</summary>
+        private const double ClearlyBelowStandardErrors = 2.0;
 
         /// <summary>
         /// A defensive style must not be the strongest attack. At Ultimate against the scripted user (48 seeds of
@@ -457,6 +488,17 @@ namespace OpenFifa.Tests.Editor.TeamAI
         /// 17-48 (Possession 142 v Balanced 151), and the keeper dive-reach change (match-feel PR) flipped HighPress v
         /// Balanced on seeds 1-16 (76 v 80) while seeds 17-48 kept the order (186 v 146). Over 48 seeds: main ParkTheBus
         /// 157, Balanced 222, Possession 222, HighPress 271; with the dive reach 142 / 226 / 217 / 262.
+        ///
+        /// Possession v Balanced: the two are equally productive within seed noise (217 v 226 over 48 matches, about 4.5
+        /// goals a match each), so the old "possession >= 0.95 x balanced" total passed by 2.3 goals and would flip on
+        /// the next tuning change without any real change in strength. What the check is for is that possession is not a
+        /// clearly weaker attack (as ParkTheBus is: about 1.75 goals a match below balanced). So it is a paired per-match
+        /// test with a tolerance from the measured variance: the mean per-seed difference (possession - balanced, same
+        /// seed, same opponent) must not be more than <see cref="ClearlyBelowStandardErrors"/> standard errors below zero
+        /// (one-sided ~97.5%). The standard error is measured from the per-seed differences in this run. Measured at 48
+        /// seeds: possession - balanced -0.19 goals a match (SE 0.39, so the bar is -0.78: about 28 goals of headroom over
+        /// 48 matches, where the old total check had 2.3); park the bus - balanced -1.75 (SE 0.31), clearly below, which
+        /// the last assertion checks so the tolerance is known to separate a weaker attack.
         /// </summary>
         [Test]
         [Category("Slow")]
@@ -465,16 +507,27 @@ namespace OpenFifa.Tests.Editor.TeamAI
         {
             const int seeds = 48;
             var level = TeamAIDifficultyLevel.Ultimate;
-            int bus = AIGoalsFor(TeamAIStyle.ParkTheBus, level, seeds);
-            int bal = AIGoalsFor(TeamAIStyle.Balanced, level, seeds);
-            int poss = AIGoalsFor(TeamAIStyle.Possession, level, seeds);
-            int press = AIGoalsFor(TeamAIStyle.HighPress, level, seeds);
+            int[] busPer = AIGoalsPerSeed(TeamAIStyle.ParkTheBus, level, seeds);
+            int[] balPer = AIGoalsPerSeed(TeamAIStyle.Balanced, level, seeds);
+            int[] possPer = AIGoalsPerSeed(TeamAIStyle.Possession, level, seeds);
+            int[] pressPer = AIGoalsPerSeed(TeamAIStyle.HighPress, level, seeds);
+            int bus = Sum(busPer), bal = Sum(balPer), poss = Sum(possPer), press = Sum(pressPer);
             System.Console.WriteLine($"AI goals at Ultimate over {seeds}: ParkTheBus {bus}, Balanced {bal}, Possession {poss}, HighPress {press}");
+            System.Console.WriteLine("per seed bus/bal/poss/press: " + string.Join(" ", System.Linq.Enumerable.Range(0, seeds)
+                .Select(i => $"{busPer[i]}/{balPer[i]}/{possPer[i]}/{pressPer[i]}")));
             Assert.Less(bus, bal, "park the bus should score less than a balanced side");
             Assert.Less(bus, poss, "park the bus should score less than a possession side");
             Assert.Greater(press, bal, "a high press should score more than a balanced side");
             Assert.Greater(press, bus * 1.4f, "a high press should score far more than park the bus");
-            Assert.GreaterOrEqual(poss, bal * 0.95f, "a possession side should be among the productive styles, not below balanced");
+
+            PairedDifference(possPer, balPer, out double possMinusBal, out double se);
+            PairedDifference(busPer, balPer, out double busMinusBal, out double busSe);
+            System.Console.WriteLine($"per match: possession - balanced {possMinusBal:F2} (SE {se:F2}), " +
+                                     $"park the bus - balanced {busMinusBal:F2} (SE {busSe:F2})");
+            Assert.GreaterOrEqual(possMinusBal, -ClearlyBelowStandardErrors * se,
+                $"a possession side should not be a clearly weaker attack than a balanced one ({possMinusBal:F2} goals a match, SE {se:F2})");
+            // The same tolerance does tell a clearly weaker attack apart (otherwise the check above would be vacuous).
+            Assert.Less(busMinusBal, -ClearlyBelowStandardErrors * busSe, "park the bus should be clearly below balanced per match");
         }
 
         // ------------------------------------------------------------------ box defending
