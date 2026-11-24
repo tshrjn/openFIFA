@@ -42,6 +42,28 @@ Possible next steps:
 
 ## Log
 
+## 2026-11-24 Session — Follow-ups from the #62/#63 review
+
+**Status**: Completed (PR fix/pr62-63-followups)
+**Changes**:
+- Goal camera v pause: `GoalCamera.Director.Update(..., paused)` freezes the hold (a pause longer than 4 s no longer ends
+  it) and the new `GoalCamera.SkipInput` ignores the pause/resume press and stops the skip grace timer while paused.
+  `SinglePlayerCamera.Paused` is set by the match controller. Tests in `BroadcastCameraRigTests` (FID_PRESENTATION).
+- `SimCommentaryAdapter`: KickOff and RestartTaken hand possession to the taker's side (PressWon after their throw-in,
+  counter timer restarts with no own-half win) and start a new possession spell. Tests in `MatchFeelCommentaryTests`.
+- Stadium/crowd/HUD team colours: `KitBroadcastContrast.TeamColours` uses the primaries of the kits actually worn
+  (resolved `MatchKitBinder` selection), and the CIEDE2000 rule on plain colours when kits are unavailable. The old
+  RGB-L1 < 0.35 rule disagreed with the worn kit in 73 of 380 PL pairings.
+- Tilt tests: `BroadcastRig.RawPitchDegrees` / `RawPosePitchDegrees` (unclamped). The raw tilt runs 14.35-35.22 deg, so
+  the 22-30 clamp trims up to 7.65 deg; tests now bound the trim (`MaxClampCorrectionDegrees` = 8) and check that
+  fixed-depth rigs (28 / 33 / 16 m) fail that bound.
+- `StyleGoalsFor`: the possession check is a paired per-match test (mean per-seed difference no more than 2 SE below
+  zero; measured -0.19, SE 0.39) instead of a total that passed by 2.3 goals.
+- 26 missing `.meta` files added (Unity-generated).
+**Known Issues**: the clamp still does real work at the touchlines (the ball sits off its 0.57 screen height there);
+retuning the setbacks would change the sim-facing camera yaw and so recorded matches.
+**Next**: none from this review.
+
 ## 2026-11-24 Session — Match feel: kit clash, commentary density and variety, diving saves
 
 **Status**: Completed (PR feature/match-feel)
