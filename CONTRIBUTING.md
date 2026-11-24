@@ -20,7 +20,8 @@ The CLA is in [`CLA.md`](CLA.md). In short:
 - You keep the copyright in your contribution.
 - You grant Tushar Jain a perpetual, worldwide, irrevocable, royalty-free license to use and distribute it, including
   the right to relicense it under other terms (commercial licenses included).
-- Your contribution stays available under the AGPL in openFIFA.
+- For as long as Tushar Jain distributes openFIFA under the AGPL, your contribution stays available under the AGPL
+  (with the Unity exception) as part of it. Copies already released under the AGPL stay under the AGPL.
 - You confirm you have the right to submit it (it is your own work, or you have your employer's permission).
 
 **How to agree:** tick the CLA checkbox in the pull request description. The
@@ -36,8 +37,10 @@ Pull requests without the ticked box cannot be merged.
 
 Third-party assets and code keep their own licenses. If your pull request adds any, list them in
 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) with their source and license, and follow the asset license rules
-in [`docs/ASSETS.md`](docs/ASSETS.md). Do not add code or assets whose license is incompatible with the AGPL (for
-example, Unity Asset Store content that may not be redistributed in source form).
+in [`docs/ASSETS.md`](docs/ASSETS.md). Only commit code and assets that may be redistributed in source form and whose
+license allows commercial use and relicensing as part of openFIFA (for example CC0, CC-BY, MIT or Apache-2.0). Do not
+commit anything licensed with ShareAlike or NonCommercial terms, or anything that may only be shipped inside a built
+game (for example Mixamo downloads or Unity Asset Store content).
 
 ## SPDX headers for new files
 

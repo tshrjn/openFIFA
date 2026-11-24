@@ -24,7 +24,19 @@
 
 ---
 
+## License rule for committed assets
+
+Only assets that may be **redistributed in source form** and whose license **allows commercial use and relicensing as
+part of openFIFA** may be committed to this repository (CC0, CC-BY, MIT, Apache-2.0 and similar). openFIFA is
+AGPL-3.0-or-later and is also offered under commercial licenses, so assets under ShareAlike (CC-BY-SA) or NonCommercial
+(CC-BY-NC) terms, and assets that may only be shipped inside a built game, cannot be committed. Sources marked
+**not committable** below may be used for local experiments only. Every committed third-party asset must be listed in
+[`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md). See [`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
 ## Professional Asset Sources (AAA Tier)
+
+Marketplace licenses (TurboSquid, CGTrader, Reallusion, Daz3D and similar) usually allow use inside a shipped game but
+not redistribution of the source files, so these assets are **not committable** unless their license says otherwise.
 
 | Source | Type | Notes |
 |--------|------|-------|
@@ -45,14 +57,14 @@
 |--------|---------|--------|-------|
 | **Quaternius Universal Base Characters** | CC0 | FBX, glTF | Best option. Male/female/teen humanoids, game-optimized. Pair with Universal Animation Library. |
 | **Kenney Animated Characters 1-3** | CC0 | FBX | Modular PNG skin system — easy team jersey creation |
-| **Mixamo Characters** | Free (Adobe account) | FBX | 100+ rigged characters, 5K-20K polys. Cannot redistribute raw files, in-game use OK. |
+| **Mixamo Characters** | Free (Adobe account) | FBX | **Not committable** (raw files may not be redistributed; in-game use only). 100+ rigged characters, 5K-20K polys. |
 | **Sketchfab: Football Player** by Hiago Tadeu | CC-BY 4.0 | glTF, FBX | Soccer-themed, 36.6K tri. Good for stylized games. |
 
 ### Animations
 
 | Source | License | Content | Notes |
 |--------|---------|---------|-------|
-| **Mixamo** | Free (Adobe) | 2500+ mocap clips | **Critical resource.** Search "soccer" for: Soccer Idle, Pass, Shoot, Slide Tackle, Header, Throw In. Also: Running, Sprinting, Jogging, Strafing. Download as "FBX for Unity", check "In Place". |
+| **Mixamo** | Free (Adobe) | 2500+ mocap clips | **Not committable** (raw files may not be redistributed; in-game use only). Useful reference. Search "soccer" for: Soccer Idle, Pass, Shoot, Slide Tackle, Header, Throw In. Also: Running, Sprinting, Jogging, Strafing. Download as "FBX for Unity", check "In Place". |
 | **Rokoko Free Sports Pack** | Commercial (free) | 12 sports mocap | Professional quality, finger capture, Mixamo skeleton. |
 | **Quaternius Universal Animation Library** | CC0 | 45 locomotion | Walk, run, jog, sprint in 8 directions, jump, crawl. |
 | **CMU Motion Capture Database** | Research/personal | 2500+ clips | Subject #10 has soccer kicks. Use keijiro/CMUMocap GitHub package for Unity-ready format. |
@@ -77,7 +89,7 @@
 |--------|---------|--------|-------|
 | **Free3D "Football Ball"** | Free | FBX, OBJ, Blend | 73.6K+ downloads. Standard soccer ball. |
 | **B1Blender Soccer Ball** (Sketchfab) | CC-BY | glTF | PBR textures (albedo, normal, roughness). |
-| **Unity Asset Store: Low Polygon Soccer Ball** | Free (EULA) | Unity Package | 758 favorites. Ready for Unity import. |
+| **Unity Asset Store: Low Polygon Soccer Ball** | Free (EULA) | Unity Package | **Not committable** (Asset Store EULA forbids source redistribution). 758 favorites. Ready for Unity import. |
 
 ### Audio
 
@@ -110,6 +122,9 @@
 ## Import Workflows
 
 ### Mixamo → Unity
+
+> **Not committable.** Mixamo files may not be redistributed, so use them in a local working copy for
+> experiments only and do not commit them (see the license rule at the top of this file).
 
 1. Go to mixamo.com, sign in with Adobe account
 2. Select character (or upload your own FBX)

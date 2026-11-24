@@ -253,7 +253,7 @@ We're targeting **AAA visual quality inspired by EA FC / FIFA / PES** — photor
 
 **Accepted formats**: FBX, glTF/GLB (models), PNG (textures, up to 4K), WAV (audio), TTF/OTF (fonts)
 
-**License requirement**: All contributed assets must be **CC0, CC-BY, or MIT** licensed. Professional marketplace assets (TurboSquid, CGTrader) are acceptable if properly licensed.
+**License requirement**: Assets committed to this repository must be redistributable in source form and must allow commercial use and relicensing as part of openFIFA, for example **CC0, CC-BY, or MIT**. Licenses with ShareAlike or NonCommercial terms, and assets that may only be shipped inside a built game (Mixamo, Unity Asset Store EULA content, most TurboSquid/CGTrader licenses), cannot be committed. See [`CONTRIBUTING.md`](CONTRIBUTING.md#third-party-assets-and-code).
 
 See [`docs/ASSETS.md`](docs/ASSETS.md) for the full asset pipeline guide and list of sources we're using.
 
@@ -354,15 +354,18 @@ Inspired by:
 
 Copyright (C) 2026 Tushar Jain.
 
-openFIFA's source code is licensed under the **GNU Affero General Public License v3.0 or later**
-(SPDX: `AGPL-3.0-or-later`), with an additional permission for the Unity engine and Apple platform SDKs. See
-[`LICENSE`](LICENSE) for the full license text and [`LICENSE-EXCEPTION.md`](LICENSE-EXCEPTION.md) for the exception.
+Everything in this repository (source code and original assets) that is not listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) is licensed under the
+**GNU Affero General Public License v3.0 or later** (SPDX: `AGPL-3.0-or-later`), with an additional permission for the
+Unity engine and Apple platform SDKs. See [`LICENSE`](LICENSE) for the full license text and
+[`LICENSE-EXCEPTION.md`](LICENSE-EXCEPTION.md) for the exception.
 
 **In plain English** (this summary is not the license and not legal advice):
 
 - You may use, study, modify and share openFIFA for free, including for education and research.
-- If you distribute a modified version, or run one as a network service (for example an online multiplayer server),
-  you must release its complete source code under the same license.
+- If you distribute openFIFA (modified or not), you must offer its complete source code, under the same license, to
+  everyone you give it to. If you run a modified version as a network service (for example an online multiplayer
+  server), you must offer its source code to its users.
 - The Unity exception lets openFIFA be built and shipped with the Unity engine, Unity's own packages and Apple's
   macOS/iOS/iPadOS SDKs, even though those are not open source. It covers only those components, not any other
   proprietary code.
@@ -382,8 +385,15 @@ the commercial option possible.
 
 ### Third-party assets
 
-Third-party assets and code bundled with openFIFA (for example the commentary voices) keep their own licenses. See
-[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+Third-party assets and code bundled with openFIFA (for example the commentary voices, the TextMesh Pro resources and
+the Liberation Sans font) keep their own licenses. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+### Real-world names and data
+
+Real club, player, league and stadium names and related data (for example the Premier League roster pack) are not
+covered by the AGPL, by the Unity exception or by any openFIFA commercial license, and openFIFA grants no rights in
+them. Their use does not imply endorsement by or affiliation with any of them. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md#real-world-names-and-data-not-licensed).
 
 ---
 
