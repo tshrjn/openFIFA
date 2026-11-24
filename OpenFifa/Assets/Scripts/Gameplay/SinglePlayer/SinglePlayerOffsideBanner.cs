@@ -71,7 +71,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         private void Update()
         {
             if (_plate == null || Mathf.Approximately(_progress, _target)) return;
-            _progress = Mathf.MoveTowards(_progress, _target, Time.unscaledDeltaTime / _slideDuration);
+            _progress = Mathf.MoveTowards(_progress, _target, OffsidePresentation.FrameSeconds() / _slideDuration);
             Apply();
         }
 

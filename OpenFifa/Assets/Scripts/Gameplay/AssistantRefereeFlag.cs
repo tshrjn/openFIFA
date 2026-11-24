@@ -98,7 +98,7 @@ namespace OpenFifa.Gameplay
             float t = 0f;
             while (t < 1f)
             {
-                t += Time.unscaledDeltaTime / _raiseDuration;
+                t += OffsidePresentation.FrameSeconds() / _raiseDuration;
                 float eased = 1f - Mathf.Pow(1f - Mathf.Clamp01(t), 3f);
                 _armPivot.localRotation = Quaternion.Slerp(from, to, eased);
                 yield return null;
