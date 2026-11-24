@@ -443,8 +443,11 @@ float KitEllipse(float2 p, float2 c, float2 r)
 half KitPaintHead(KitSpace k, half skin, inout half3 albedo)
 {
     float3 kp = k.kitPos;
+    // Head features below are laid out around the mannequin head centre (kit z -0.012). Bodies whose head sits
+    // elsewhere along z (the Blender athlete: +0.024) set _HeadParams.y, and the head is re-based onto that centre.
+    kp.z -= _HeadParams.y - (-0.012);
     float2 p = kp.xy;
-    float nz = (kp.z - _HeadParams.y) / max(_HeadParams.w, 0.01);
+    float nz = (kp.z - (-0.012)) / max(_HeadParams.w, 0.01);
     half onHead = k.torsoW * KitSoftStep(0.085, kp.y, 0.004) * skin;
     half front = smoothstep(0.35, 0.65, nz);
     float ax = abs(kp.x);

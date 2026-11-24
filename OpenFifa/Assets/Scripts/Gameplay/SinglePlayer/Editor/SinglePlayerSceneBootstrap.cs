@@ -21,7 +21,23 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
     public static class SinglePlayerSceneBootstrap
     {
         public const string ScenePath = "Assets/Scenes/SinglePlayerMatch.unity";
-        public const string ModelPath = "Assets/Animations/Quaternius/UAL2/UAL2_Standard.fbx";
+        public const string AthleteModelPath = "Assets/Art/Characters/Athlete/Athlete.fbx";
+        public const string MannequinModelPath = "Assets/Animations/Quaternius/UAL2/UAL2_Standard.fbx";
+
+        /// <summary>
+        /// Player model baked into the scene: the Blender athlete body (tools/blender/athlete_body.py), or the
+        /// Quaternius mannequin with OPENFIFA_PLAYER_MODEL=mannequin (A/B renders). Any other value is an asset path.
+        /// </summary>
+        public static string ModelPath
+        {
+            get
+            {
+                string v = Environment.GetEnvironmentVariable("OPENFIFA_PLAYER_MODEL");
+                if (string.IsNullOrEmpty(v) || v == "athlete") return AthleteModelPath;
+                if (v == "mannequin") return MannequinModelPath;
+                return v;
+            }
+        }
         public const string ControllerPath = "Assets/Animations/Controllers/Footballer.controller";
         public const string DefaultLinuxOut = "build/LinuxCapture/OpenFootball.x86_64";
         public const string RendererDataPath = "Assets/Settings/URPRendererData.asset";

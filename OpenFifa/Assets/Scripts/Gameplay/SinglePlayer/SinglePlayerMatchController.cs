@@ -878,6 +878,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
                         r.SetPropertyBlock(block);
                     }
                     var driver = p.gameObject.AddComponent<PlayerAnimationDriver>();
+                    if (AthleteBody.IsAthlete(model)) driver.GaitScale = AthleteBody.GaitScale;
                     driver.Source = new SimPlayerAnimSource(Session, id);
                     driver.Ball = _ball; // explicit: no scene lookup by name or tag
                     driver.VisualBallRadius = VisualBallRadius;
