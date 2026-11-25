@@ -2,7 +2,7 @@
   <img src="https://img.shields.io/badge/Unity-6%20LTS-000000?style=for-the-badge&logo=unity&logoColor=white" alt="Unity 6 LTS"/>
   <img src="https://img.shields.io/badge/C%23-239120?style=for-the-badge&logo=csharp&logoColor=white" alt="C#"/>
   <img src="https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white" alt="macOS"/>
-  <img src="https://img.shields.io/badge/License-MIT-blue?style=for-the-badge" alt="MIT License"/>
+  <a href="#license"><img src="https://img.shields.io/badge/License-AGPL--3.0--or--later-blue?style=for-the-badge" alt="AGPL-3.0-or-later License"/></a>
   <img src="https://img.shields.io/github/stars/tshrjn/openfifa?style=for-the-badge&color=yellow" alt="Stars"/>
 </p>
 
@@ -208,6 +208,12 @@ We welcome contributions from everyone! OpenFootball is built by the community, 
 
 See [`CLAUDE.md`](CLAUDE.md) for the complete coding guide.
 
+### Contributor License Agreement
+
+Every contribution needs the openFIFA [Contributor License Agreement](CLA.md): you keep your copyright and grant a
+license that also lets the project offer commercial licenses. Agree by ticking the box in the pull request template.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
 ---
 
 ## Request for Art
@@ -247,7 +253,7 @@ We're targeting **AAA visual quality inspired by EA FC / FIFA / PES** — photor
 
 **Accepted formats**: FBX, glTF/GLB (models), PNG (textures, up to 4K), WAV (audio), TTF/OTF (fonts)
 
-**License requirement**: All contributed assets must be **CC0, CC-BY, or MIT** licensed. Professional marketplace assets (TurboSquid, CGTrader) are acceptable if properly licensed.
+**License requirement**: Assets committed to this repository must be redistributable in source form and must allow commercial use and relicensing as part of openFIFA, for example **CC0, CC-BY, or MIT**. Licenses with ShareAlike or NonCommercial terms, and assets that may only be shipped inside a built game (Mixamo, Unity Asset Store EULA content, most TurboSquid/CGTrader licenses), cannot be committed. See [`CONTRIBUTING.md`](CONTRIBUTING.md#third-party-assets-and-code).
 
 See [`docs/ASSETS.md`](docs/ASSETS.md) for the full asset pipeline guide and list of sources we're using.
 
@@ -346,7 +352,48 @@ Inspired by:
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+Copyright (C) 2026 Tushar Jain.
+
+Everything in this repository (source code and original assets) that is not listed in
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) is licensed under the
+**GNU Affero General Public License v3.0 or later** (SPDX: `AGPL-3.0-or-later`), with an additional permission for the
+Unity engine and Apple platform SDKs. See [`LICENSE`](LICENSE) for the full license text and
+[`LICENSE-EXCEPTION.md`](LICENSE-EXCEPTION.md) for the exception.
+
+**In plain English** (this summary is not the license and not legal advice):
+
+- You may use, study, modify and share openFIFA for free, including for education and research.
+- If you distribute openFIFA (modified or not), you must offer its complete source code, under the same license, to
+  everyone you give it to. If you run a modified version as a network service (for example an online multiplayer
+  server), you must offer its source code to its users.
+- The Unity exception lets openFIFA be built and shipped with the Unity engine, Unity's own packages and Apple's
+  macOS/iOS/iPadOS SDKs, even though those are not open source. It covers only those components, not any other
+  proprietary code.
+
+### Commercial licensing
+
+If you want to use openFIFA in a closed-source or commercial product without the AGPL's obligations, a separate
+commercial license is available from the copyright holder. To ask about one, open a
+[GitHub issue with the `commercial-license` label](https://github.com/tshrjn/openFIFA/issues/new?template=commercial-license.md)
+(the "Commercial license enquiry" template adds the label for you; issues are public, so keep confidential details out),
+or reach [@tshrjn](https://github.com/tshrjn) on GitHub.
+
+This is the same dual-licensing model used by [Qt](https://www.qt.io/licensing/) and
+[MySQL](https://www.mysql.com/about/legal/licensing/oem/): open source under a copyleft license, with a commercial
+license for those who cannot meet its terms. Contributions are accepted under the [CLA](CLA.md), which is what makes
+the commercial option possible.
+
+### Third-party assets
+
+Third-party assets and code bundled with openFIFA (for example the commentary voices, the TextMesh Pro resources and
+the Liberation Sans font) keep their own licenses. See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).
+
+### Real-world names and data
+
+Real club, player, league and stadium names and related data (for example the Premier League roster pack) are not
+covered by the AGPL, by the Unity exception or by any openFIFA commercial license, and openFIFA grants no rights in
+them. Their use does not imply endorsement by or affiliation with any of them. See
+[`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md#real-world-names-and-data-not-licensed).
 
 ---
 

@@ -1,5 +1,9 @@
 # Third-party notices
 
+openFIFA's own code and original assets are licensed under AGPL-3.0-or-later with the additional permission in
+[`LICENSE-EXCEPTION.md`](LICENSE-EXCEPTION.md). The components listed below are not: each keeps its own license,
+and none of them is covered by the AGPL or by an openFIFA commercial license.
+
 ## Commentary voices: Kokoro-82M
 
 The commentary audio in `OpenFifa/Assets/StreamingAssets/Commentary/audio/` was synthesised offline with
@@ -28,3 +32,38 @@ mesh, its targets (shape morphs), UV layout, the "game_engine" skeleton and its 
 MakeHuman project under [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (public domain dedication), so
 the exported body needs no attribution. Credit is given anyway: MakeHuman team and community.
 MPFB's own source code is GPL-3.0-or-later; it is a build tool only and is not part of the game or this repository.
+
+## Characters and animation: Quaternius (CC0)
+
+`OpenFifa/Assets/Art/Characters/Quaternius/` (Mannequin_F) and `OpenFifa/Assets/Animations/Quaternius/UAL1/` and
+`UAL2/` (Universal Animation Library) are by [Quaternius](https://quaternius.com/), released under
+[CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) (public domain dedication). Each folder keeps its
+`License.txt`. No attribution is required; credit is given anyway.
+
+## TextMesh Pro resources (Unity Companion License)
+
+The files in `OpenFifa/Assets/TextMesh Pro/` (shaders, settings, style sheets, line-breaking tables and the sample
+sprite assets) are TextMesh Pro Essential Resources from Unity Technologies, imported from the Unity package. They are
+licensed under the [Unity Companion License](https://unity.com/legal/licenses/unity-companion-license), which only
+allows their use with the Unity engine. They are not licensed under the AGPL and cannot be relicensed by openFIFA.
+The additional permission in `LICENSE-EXCEPTION.md` lets openFIFA be combined and conveyed with them.
+
+The sample emoji sprites (`OpenFifa/Assets/TextMesh Pro/Sprites/EmojiOne.*` and `Resources/Sprite Assets/EmojiOne.asset`)
+are provided by EmojiOne and are subject to EmojiOne's licensing terms; see `Sprites/EmojiOne Attribution.txt`.
+
+## Font: Liberation Sans (SIL Open Font License 1.1)
+
+`OpenFifa/Assets/TextMesh Pro/Fonts/LiberationSans.ttf` and the font assets generated from it
+(`Resources/Fonts & Materials/LiberationSans SDF*`) are Liberation Sans, Copyright (c) 2012 Red Hat, Inc., with
+Reserved Font Name Liberation, licensed under the SIL Open Font License 1.1. The full license is in
+`OpenFifa/Assets/TextMesh Pro/Fonts/LiberationSans - OFL.txt`.
+
+## Real-world names and data (not licensed)
+
+Some files refer to real football clubs, players, leagues and stadiums, for example the Premier League roster pack
+(`OpenFifa/Assets/StreamingAssets/Rosters/Packs/premier_league.roster.json`) and commentary clips that speak real
+player names (`OpenFifa/Assets/StreamingAssets/Commentary/`). These names, likenesses, trademarks and related data
+are not covered by the AGPL, by the Unity exception or by any openFIFA commercial license, and openFIFA grants no
+rights in them. Their use here does not imply endorsement by, or affiliation with, any club, player, league or
+rights holder. Using them may require permission from the respective rights holders. Ratings and attributes are
+openFIFA's own estimates.
