@@ -1,6 +1,6 @@
-# OpenFifa roster format (schema v1)
+# OpenFootball roster format (schema v1)
 
-OpenFifa reads leagues, clubs and players from one JSON file per league. The game ships one fictional league.
+OpenFootball reads leagues, clubs and players from one JSON file per league. The game ships one fictional league.
 Players can add their own leagues as local files. This page is the spec. The code that enforces it is in
 `OpenFifa/Assets/Scripts/Core/Rosters/` (`RosterSchema`, `RosterValidator`, `RosterLoader`, `OverallCalculator`).
 
@@ -14,11 +14,11 @@ Players can add their own leagues as local files. This page is the spec. The cod
   the file (or the `Packs/` folder) and the game falls back to the fictional league. Clear the licensing before a
   public release.
 - **The fictional roster is still bundled.** The league, every club, ground and player name was invented by
-  `tools/rosters/generate_fictional_league.py`, and the attributes are on OpenFifa's own scale. The game does not
+  `tools/rosters/generate_fictional_league.py`, and the attributes are on OpenFootball's own scale. The game does not
   ship any real league, club, crest, player name or third-party rating, including EA FC or sofifa data.
 - **User rosters stay on the user's device.** `LocalFileRosterSource` reads `*.roster.json` files the user puts in
   the app's Documents folder (on iPad: Files app > On My iPad > OpenFifa). This works like PES option files.
-  OpenFifa does not download, host or link to roster packs. Apart from the Premier League pack above, do not commit
+  OpenFootball does not download, host or link to roster packs. Apart from the Premier League pack above, do not commit
   rosters that hold real-world data.
 - There is no scraper in this repo, and none should be added. See
   `docs/research/research_notes/Football game fidelity research/player_data_licensing.md` for the reasons.
@@ -138,7 +138,7 @@ away kit from `colours`, so `RosterClub.Kits` always has at least those two.
 
 ## Attributes (1-20)
 
-OpenFifa uses its own 1-20 scale (FM-style). It deliberately differs from the 0-99 scale of other games, and no
+OpenFootball uses its own 1-20 scale (FM-style). It deliberately differs from the 0-99 scale of other games, and no
 value is derived from or checked against third-party ratings.
 
 | Group | Keys |

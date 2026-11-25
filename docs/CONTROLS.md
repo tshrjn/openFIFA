@@ -1,6 +1,6 @@
-# OpenFifa controls
+# OpenFootball controls
 
-OpenFifa has two control schemes: a console-style gamepad layout and an iPad touch layout. Both produce the same `ControlIntent` (in `OpenFifa/Assets/Scripts/Core/Controls/`), which the match code maps to the sim's player intent. The bindings live in `OpenFifa/Assets/Settings/Input/OpenFifaControls.inputactions`.
+OpenFootball has two control schemes: a console-style gamepad layout and an iPad touch layout. Both produce the same `ControlIntent` (in `OpenFifa/Assets/Scripts/Core/Controls/`), which the match code maps to the sim's player intent. The bindings live in `OpenFifa/Assets/Settings/Input/OpenFifaControls.inputactions`.
 
 The gamepad layout follows the functional conventions of the common console football layout. Those conventions are documented in `docs/research/research_notes/Football game fidelity research/commentary_controls.md`. Code and UI use generic names (South/East/West/North, Shoulder, Trigger) and show platform glyphs at runtime.
 

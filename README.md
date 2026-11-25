@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>The open-source AAA arcade soccer game for macOS</strong><br/>
-  5v5 fast-paced matches. Premium gameplay. FIFA-style controls. Built with Unity. Powered by AI agents.
+  5v5 fast-paced matches. Premium gameplay. Console-style football controls. Built with Unity. Powered by AI agents.
 </p>
 
 <p align="center">
@@ -25,7 +25,7 @@
 
 ## What is OpenFootball?
 
-OpenFootball is an **open-source, AAA arcade-style 5v5 soccer game** for macOS. Think FIFA meets Sensible Soccer — fast matches, premium-quality gameplay, standard FIFA-style controls (keyboard/mouse + Xbox-like gamepad), and pure fun.
+OpenFootball is an **open-source, AAA arcade-style 5v5 soccer game** for macOS. Think modern console football meets Sensible Soccer — fast matches, premium-quality gameplay, standard console-style controls (keyboard/mouse + Xbox-like gamepad), and pure fun.
 
 Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebase is being developed through **AI-assisted long-horizon task automation** — every feature starts as a test, every component is independently verifiable, and the entire development process is documented in real-time.
 
@@ -56,7 +56,7 @@ Built from scratch using **Unity 6 LTS** with a unique twist: the entire codebas
 |---------|--------|
 | 5v5 arcade matches (4v4 Rush mode) | **Done** |
 | AI opponents with FSM behavior | **Done** |
-| FIFA-style keyboard/mouse controls | **Done** |
+| Console-style keyboard/mouse controls | **Done** |
 | Broadcast-style camera | **Done** |
 | Match flow (kickoff, halftime, fulltime) | **Done** |
 | Goal celebrations + replays | Planned |
@@ -159,10 +159,10 @@ OpenFootball is designed for quick, fun matches:
 - **5v5 format** — faster pace than 11v11, easier to follow
 - **3-minute halves** — complete matches in ~7 minutes
 - **Simplified rules** — no offsides, no VAR, just play
-- **Keyboard/mouse + Xbox gamepad** — standard FIFA-style controls
+- **Keyboard/mouse + Xbox gamepad** — standard console-style football controls
 - **AI opponents** — difficulty scales from casual to challenging
 
-### Controls (FIFA-style)
+### Controls (console-style)
 
 | Action | Keyboard / Mouse | Xbox Gamepad |
 |--------|-----------------|--------------|
