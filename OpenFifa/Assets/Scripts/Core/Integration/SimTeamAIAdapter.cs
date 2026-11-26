@@ -166,6 +166,17 @@ namespace OpenFifa.Core
             }
         }
 
+        /// <summary>
+        /// Throttle for the command's tempo limit (<see cref="AIPlayerCommand.SpeedLimit"/>, m/s) on a non-sprint move:
+        /// the sim's jog top speed is <see cref="MaxJogFraction"/> of the player's sprint speed. 1 = no limit.
+        /// </summary>
+        public static float TempoThrottle(in AIPlayerCommand cmd)
+        {
+            if (cmd.SpeedLimit <= 0f) return 1f;
+            float jogTop = (cmd.SprintSpeed > 0.5f ? cmd.SprintSpeed : AssumedSprintSpeed) * MaxJogFraction;
+            return SimMath.Clamp01(cmd.SpeedLimit / jogTop);
+        }
+
         /// <summary>Off-ball positioning intents that may shuffle facing the ball (never the carrier or a ball chaser).</summary>
         public static bool IsOffBallShapeIntent(TeamAIIntent intent)
         {
@@ -273,6 +284,7 @@ namespace OpenFifa.Core
                 float allowed = (float)Math.Sqrt(2f * ArriveDeceleration * SimMath.Max(0f, dist - ArriveRadius * 0.5f));
                 float cap = (allowed + 0.25f + recede) / (sprint ? MaxSprintSpeed : MaxSprintSpeed * MaxJogFraction);
                 if (cap < throttle) throttle = SimMath.Max(cap, BrakeThrottle);
+                if (!sprint) throttle = SimMath.Min(throttle, TempoThrottle(cmd));
                 intent.Move = dir * throttle;
                 intent.Sprint = sprint;
             }
@@ -280,7 +292,9 @@ namespace OpenFifa.Core
             {
                 // On a moving target: run with it.
                 bool sprint = tvSpeed > AssumedJogSpeed * 0.9f;
-                intent.Move = tv / tvSpeed * SimMath.Clamp01(tvSpeed / (sprint ? AssumedSprintSpeed : AssumedJogSpeed));
+                float th = SimMath.Clamp01(tvSpeed / (sprint ? AssumedSprintSpeed : AssumedJogSpeed));
+                if (!sprint) th = SimMath.Min(th, TempoThrottle(cmd));
+                intent.Move = tv / tvSpeed * th;
                 intent.Sprint = sprint;
             }
             else if (cmd.FaceLookAt && plainMove)

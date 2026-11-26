@@ -89,6 +89,12 @@ namespace OpenFifa.Core
             SimVec3 desiredRoot = ballAtContact - AnimMath.LocalToWorld(contactLocal, visualYaw);
             SimVec3 wantDelta = (desiredRoot - (simRootAtContact + authoredTravel)).Flat;
 
+            if (profile.LateralWarpOnly)
+            {
+                // Sideways only: project onto the body's right axis (forward/back stays with the sim root).
+                SimVec3 right = AnimMath.LocalToWorld(new SimVec3(1f, 0f, 0f), visualYaw);
+                wantDelta = right * SimVec3.Dot(wantDelta, right);
+            }
             SimVec3 delta = SimVec3.ClampMagnitude(wantDelta, profile.MaxWarpDistance);
             float residual = (wantDelta - delta).Magnitude;
 
@@ -104,6 +110,13 @@ namespace OpenFifa.Core
             float windowStart = contactTime - profile.WarpWindow;
             float holdEnd = contactTime + profile.FollowThrough;
             float releaseEnd = holdEnd + profile.ReleaseTime;
+            if (profile.LateralWarpOnly)
+            {
+                // Inside the touch window: in over its first half, out over the follow-through, no hold.
+                windowStart = contactTime - profile.WarpWindow * 0.5f;
+                holdEnd = contactTime;
+                releaseEnd = contactTime + profile.FollowThrough;
+            }
             return new WarpPlan(delta, yawDelta, totalResidual, residualYaw, windowStart, contactTime, holdEnd, releaseEnd,
                 simRootAtContact + delta, visualYaw,
                 totalResidual <= distanceTolerance && (residualYaw < 0f ? -residualYaw : residualYaw) <= 1e-3f);

@@ -58,12 +58,15 @@ namespace OpenFifa.Core
         /// <summary>Formation anchors by slot (0..10), world space.</summary>
         public readonly SimVec3[] Anchors = new SimVec3[TeamAIFormations.SlotCount];
         /// <summary>
-        /// Velocity of each formation anchor (m/s, flat, smoothed): how fast the block slides with the ball. Holders get
-        /// it as their move target's velocity so they flow with the shape (see <see cref="TeamAIShapeMotion"/>).
+        /// Velocity of each shape spot (m/s, flat): how fast the block slides with the ball. Holders get it as their move
+        /// target's velocity so they flow with the shape (see <see cref="TeamAIShapeMotion"/>).
         /// </summary>
         public readonly SimVec3[] AnchorVelocities = new SimVec3[TeamAIFormations.SlotCount];
-        private readonly SimVec3[] _anchorsAhead = new SimVec3[TeamAIFormations.SlotCount];
-        private TeamAIPhase _anchorPhase = (TeamAIPhase)(-1);
+        /// <summary>Where shape holders actually stand: the anchors followed with a lag at the slide speed (see UpdateShapeSpots).</summary>
+        public readonly SimVec3[] ShapeSpots = new SimVec3[TeamAIFormations.SlotCount];
+        private bool _shapePrimed;
+        private float _shapeLineZ;
+        private float _shapeLineVel;
 
         public TeamAIPhase Phase => PhaseMachine.Phase;
         /// <summary>Our back-line depth (0..1 from our goal) this tick.</summary>
@@ -138,7 +141,6 @@ namespace OpenFifa.Core
 
             // ---- Layer 2: formation anchors ----
             float line = TeamAIFormationShape.ComputeAnchors(phase, Tactics, ball, sign, pitch, Anchors);
-            UpdateAnchorVelocities(world, phase, sign, dt);
             if (!inPossession && ownerIndex >= 0 && ownerTeam != Team)
             {
                 // Ball pressure rule: drop the line when the carrier is unpressured and facing our goal.
@@ -148,6 +150,7 @@ namespace OpenFifa.Core
                 if (pressure > 5f && facingUs) line = Math.Max(0.05f, line - 0.04f);
             }
             BackLineDepth = line;
+            UpdateShapeSpots(world, phase, line, sign, dt);
             OffsideDepth = ComputeOffsideDepth(world, sign, ballDepth);
             // Speed of the offside line (m/s toward the opponent goal), for runners timing a run in behind it.
             _lineSpeed = _prevOffsideDepth >= 0f && dt > 1e-4f
@@ -417,7 +420,10 @@ namespace OpenFifa.Core
                 var spot = SpaceFromCarrier(world, ownerIndex, raw);
                 // The spot is relative to the carrier: it moves with him, so the supporter keeps his 8-15 m distance
                 // (and angle) while the carrier dribbles instead of being run onto.
-                SetMove(ref cmd, p, spot, TeamAIMath.FlatDistance(p.Position, spot) > 8f, TeamAIIntent.Support);
+                // Supporting players jog to their spot; only a long way off (a fast break) do they sprint.
+                float sd = TeamAIMath.FlatDistance(p.Position, spot);
+                SetMove(ref cmd, p, spot, sd > TeamAITempo.SupportSprintDistance, TeamAIIntent.Support);
+                cmd.SpeedLimit = TeamAITempo.SupportSpeed(sd, Difficulty.Theta);
                 return;
             }
 
@@ -440,11 +446,12 @@ namespace OpenFifa.Core
             }
 
             // Wingers hold the width; everyone else holds the shape, staying onside.
-            var t = anchor;
+            var shapeSpot = ShapeSpotFor(p);
+            var t = shapeSpot;
             var intent = TeamAIIntent.HoldShape;
             if (p.Role == TeamAIRole.W)
             {
-                t = new SimVec3((anchor.X >= 0f ? 1f : -1f) * (pitch.HalfWidth - 2.5f), 0f, anchor.Z);
+                t = new SimVec3((anchor.X >= 0f ? 1f : -1f) * (pitch.HalfWidth - 2.5f), 0f, shapeSpot.Z);
                 intent = TeamAIIntent.HoldWidth;
             }
             float tDepth = TeamAIMath.Depth(t.Z, sign, pitch);
@@ -565,13 +572,24 @@ namespace OpenFifa.Core
                 }
                 if (opp >= 0)
                 {
-                    SetMoveTracking(ref cmd, p, TeamAIMath.ClampToPitch(target, pitch, 0.5f), markVel, false, intent);
+                    var markTarget = TeamAIMath.ClampToPitch(target, pitch, 0.5f);
+                    SetMoveTracking(ref cmd, p, markTarget, markVel, false, intent);
                     cmd.TargetPlayerId = world.Players[opp].Id;
+                    if (intent == TeamAIIntent.KeepLine)
+                    {
+                        // Holding the line opposite a forward: line tempo (a goal-side Mark keeps full pace).
+                        bool sp = false;
+                        cmd.SpeedLimit = TeamAITempo.ShapeSpeed(world, Team, p, markTarget, SimVec3.Zero, Phase, Difficulty.Theta,
+                            world.MatchPhase != TeamAIMatchPhase.InPlay, ref sp);
+                    }
                 }
                 else
                 {
-                    // Nobody to pick up: hold the line, sliding with it and adjusting along it.
-                    SetHold(ref cmd, p, world, target, AnchorVelocityFor(p), false, intent, true, false);
+                    // Nobody to pick up: hold the (smoothed) line, sliding with it and adjusting along it.
+                    var spot = ShapeSpotFor(p);
+                    var vel = AnchorVelocityFor(p);
+                    SetHold(ref cmd, p, world, new SimVec3(spot.X, 0f, _shapeLineZ), new SimVec3(vel.X, 0f, _shapeLineVel), false,
+                        intent, true, false);
                 }
                 return;
             }
@@ -590,15 +608,19 @@ namespace OpenFifa.Core
                     {
                         cmd.TargetPlayerId = world.Players[opp].Id;
                         // The shadow point sits 40% of the way from the ball to the runner and moves with both.
-                        var shadowVel = world.Ball.Velocity * 0.6f + world.Players[opp].Velocity * 0.4f;
-                        SetMoveTracking(ref cmd, p, shadow, shadowVel, TeamAIMath.FlatDistance(p.Position, shadow) > 10f,
-                            TeamAIIntent.CoverShadow);
+                        // A pass in flight drags the point at 60% of its speed: shift with it at a jog, not a sprint.
+                        var shadowVel = TeamAIShapeMotion.ClampSpeed(TeamAIMath.Flat(world.Ball.Velocity * 0.6f + world.Players[opp].Velocity * 0.4f),
+                            TeamAITempo.MaxShadowSpeed);
+                        float shd = TeamAIMath.FlatDistance(p.Position, shadow);
+                        SetMoveTracking(ref cmd, p, shadow, shadowVel, shd > 15f, TeamAIIntent.CoverShadow);
+                        cmd.SpeedLimit = TeamAITempo.CoverSpeed(shd, shadowVel.Magnitude, Difficulty.Theta);
                         return;
                     }
                 }
             }
 
-            SetHold(ref cmd, p, world, anchor, AnchorVelocityFor(p), TeamAIMath.FlatDistance(p.Position, anchor) > 15f,
+            var holdSpot = ShapeSpotFor(p);
+            SetHold(ref cmd, p, world, holdSpot, AnchorVelocityFor(p), TeamAIMath.FlatDistance(p.Position, holdSpot) > 15f,
                 TeamAIIntent.HoldShape, false, false);
         }
 
@@ -653,7 +675,7 @@ namespace OpenFifa.Core
                 }
                 else
                 {
-                    SetHold(ref cmd, p, world, anchor, AnchorVelocityFor(p), false, TeamAIIntent.HoldShape, false, false);
+                    SetHold(ref cmd, p, world, ShapeSpotFor(p), AnchorVelocityFor(p), false, TeamAIIntent.HoldShape, false, false);
                 }
                 return;
             }
@@ -1029,29 +1051,47 @@ namespace OpenFifa.Core
         }
 
         /// <summary>
-        /// Differentiates the anchors: anchors for the ball <see cref="TeamAIShapeMotion.AnchorLookAhead"/> s ahead
-        /// (same phase) minus anchors now, smoothed. Zero while the ball is dead or the phase just changed.
+        /// Shape spots: the formation anchors as the players actually track them. The anchors are an instant function of
+        /// the ball, so a 30 m pass moves them 10-30 m at once; real teams slide across progressively. Each spot follows
+        /// its anchor with a <see cref="TeamAIShapeMotion.ShapeSmoothing"/> s lag, never faster than the phase's slide
+        /// speed (<see cref="TeamAIShapeMotion.SlideSpeed"/>), and the spot's own velocity is passed to the holder so he
+        /// walks or jogs with it. Logic that reads the shape (marking zones, pressing distances) still uses
+        /// <see cref="Anchors"/>; only where holders stand is smoothed. Spots snap at kick-offs.
         /// </summary>
-        private void UpdateAnchorVelocities(TeamAIWorld world, TeamAIPhase phase, int sign, float dt)
+        private void UpdateShapeSpots(TeamAIWorld world, TeamAIPhase phase, float line, int sign, float dt)
         {
-            var ballVel = TeamAIShapeMotion.ClampSpeed(TeamAIMath.Flat(world.Ball.Velocity), TeamAIShapeMotion.MaxAnchorBallSpeed);
-            bool live = world.MatchPhase == TeamAIMatchPhase.InPlay && phase == _anchorPhase;
-            _anchorPhase = phase;
-            float k = dt > 0f ? 1f - (float)Math.Exp(-dt / TeamAIShapeMotion.AnchorVelocitySmoothing) : 1f;
-            if (live && ballVel.SqrMagnitude > 1e-4f)
-            {
-                var ahead = TeamAIMath.Flat(world.Ball.Position) + ballVel * TeamAIShapeMotion.AnchorLookAhead;
-                TeamAIFormationShape.ComputeAnchors(phase, Tactics, ahead, sign, world.Pitch, _anchorsAhead);
-            }
+            bool snap = !_shapePrimed || world.MatchPhase == TeamAIMatchPhase.Kickoff || dt <= 0f;
+            _shapePrimed = true;
+            float maxStep = TeamAIShapeMotion.SlideSpeed(phase, Difficulty.Theta) * dt;
+            float k = dt > 0f ? 1f - (float)Math.Exp(-dt / TeamAIShapeMotion.ShapeSmoothing) : 1f;
             for (int s = 0; s < TeamAIFormations.SlotCount; s++)
             {
-                var v = SimVec3.Zero;
-                if (live && ballVel.SqrMagnitude > 1e-4f)
-                    v = TeamAIShapeMotion.ClampSpeed((_anchorsAhead[s] - Anchors[s]) * (1f / TeamAIShapeMotion.AnchorLookAhead),
-                        TeamAIShapeMotion.MaxAnchorSpeed);
-                if (!live) AnchorVelocities[s] = v;
-                else AnchorVelocities[s] = AnchorVelocities[s] + (v - AnchorVelocities[s]) * k;
+                if (snap)
+                {
+                    ShapeSpots[s] = Anchors[s];
+                    AnchorVelocities[s] = SimVec3.Zero;
+                    continue;
+                }
+                var step = TeamAIShapeMotion.ClampSpeed((Anchors[s] - ShapeSpots[s]) * k, maxStep);
+                ShapeSpots[s] = ShapeSpots[s] + step;
+                AnchorVelocities[s] = step * (1f / dt);
             }
+            float lineZ = TeamAIMath.DepthToZ(line, sign, world.Pitch);
+            if (snap) { _shapeLineZ = lineZ; _shapeLineVel = 0f; }
+            else
+            {
+                float dz = (lineZ - _shapeLineZ) * k;
+                if (dz > maxStep) dz = maxStep; else if (dz < -maxStep) dz = -maxStep;
+                _shapeLineZ += dz;
+                _shapeLineVel = dz / dt;
+            }
+        }
+
+        private SimVec3 ShapeSpotFor(in TeamAIPlayer p)
+        {
+            int slot = p.FormationSlot;
+            if (slot < 0 || slot >= TeamAIFormations.SlotCount) slot = 0;
+            return ShapeSpots[slot];
         }
 
         private SimVec3 AnchorVelocityFor(in TeamAIPlayer p)
@@ -1080,8 +1120,12 @@ namespace OpenFifa.Core
             }
             var t = TeamAIMath.ClampToPitch(spot + off, world.Pitch, 0.5f);
             if (spaceFromCarrier >= 0) t = SpaceFromCarrier(world, spaceFromCarrier, t);
+            var tv = TeamAIMath.Flat(spotVelocity + offVel);
+            float limit = TeamAITempo.ShapeSpeed(world, Team, p, t, tv, Phase, Difficulty.Theta, world.MatchPhase != TeamAIMatchPhase.InPlay,
+                ref sprint);
             SetMove(ref cmd, p, t, sprint, intent);
-            cmd.MoveTargetVelocity = TeamAIMath.Flat(spotVelocity + offVel);
+            cmd.MoveTargetVelocity = tv;
+            cmd.SpeedLimit = limit;
         }
 
         private static void SetMove(ref AIPlayerCommand cmd, in TeamAIPlayer p, SimVec3 target, bool sprint, TeamAIIntent intent)
@@ -1092,6 +1136,8 @@ namespace OpenFifa.Core
             cmd.Sprint = sprint && d > 1.5f;
             cmd.Intent = intent;
             cmd.MoveTargetVelocity = SimVec3.Zero;
+            cmd.SpeedLimit = 0f;
+            cmd.SprintSpeed = p.MaxSpeed;
         }
 
         /// <summary>Velocity of the offside line our runners time their runs against (flat, along the attack).</summary>

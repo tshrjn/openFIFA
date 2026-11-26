@@ -40,7 +40,10 @@ namespace OpenFifa.Tests.Editor
             Assert.IsFalse(p.UsesRunUp);
             Assert.AreEqual(0f, p.MinWindup, 1e-6f);
             Assert.AreEqual(0f, p.PlantFootOffset.SqrMagnitude, 1e-9f, "no plant foot: the run cycle keeps its own footfalls");
-            Assert.AreEqual(0f, p.MaxWarpDistance, 1e-6f, "no body warp while running");
+            // The only body warp while running is a small sideways shift toward the ball (no yaw, no forward/back).
+            Assert.IsTrue(p.LateralWarpOnly);
+            Assert.AreEqual(DribbleTouchSolver.MaxLateralShift, p.MaxWarpDistance, 1e-6f);
+            Assert.LessOrEqual(p.MaxWarpDistance, 0.25f + 1e-6f);
             Assert.AreEqual(0f, p.MaxWarpYaw, 1e-6f);
             Assert.AreEqual(1f, p.MinRate, 1e-6f);
             Assert.AreEqual(1f, p.MaxRate, 1e-6f);
@@ -92,13 +95,64 @@ namespace OpenFifa.Tests.Editor
         }
 
         [Test]
-        public void Plan_DribbleTouch_NoPlantNoStrideNoWarp()
+        public void Plan_DribbleTouch_NoPlantNoStrideNoForwardWarp()
         {
+            // Ball straight ahead (0.35 m, right foot offset 0.09 m): no plant, no stride plan, no yaw, and the body is
+            // never pulled forward or back; only the 0.09 m foot offset is taken up sideways.
             ActionSyncPlan plan = PlanTouch(0f, 1f, ActionSide.Right);
             Assert.AreEqual(ContactEffector.None, plan.Ik.PlantEffector);
             Assert.IsFalse(plan.HasStridePlan);
-            Assert.AreEqual(0f, plan.Warp.TranslationDelta.SqrMagnitude, 1e-9f);
+            Assert.AreEqual(0f, plan.Warp.TranslationDelta.Z, 1e-6f, "forward/back warp while running");
+            Assert.AreEqual(-0.09f, plan.Warp.TranslationDelta.X, 1e-4f);
             Assert.AreEqual(0f, plan.Warp.YawDelta, 1e-6f);
+        }
+
+        private static ActionSyncPlan PlanTouchAt(SimVec3 ballLocal, float yawDeg, ActionSide side)
+        {
+            SimVec3 root = new SimVec3(3f, 0f, 6f);
+            SimVec3 ball = root + AnimMath.LocalToWorld(ballLocal, yawDeg);
+            var r = new ActionSyncRequest(AnimActionKind.DribbleTouch, side, 0f, 1f, root, root, yawDeg, ball,
+                AnimMath.Forward(yawDeg), 6f, ActionSide.Right);
+            return new AnimationSyncPlanner().Plan(r);
+        }
+
+        [Test]
+        public void Plan_DribbleTouch_BallToTheSide_BodyShiftsSidewaysOnly()
+        {
+            // Running toward +X (yaw 90), ball 0.4 m to the right and 0.6 m ahead: shift = 0.4 - 0.09 = 0.31, capped at 0.25,
+            // along the body's right axis (-Z in the world), nothing along the run.
+            var plan = PlanTouchAt(new SimVec3(0.4f, 0.11f, 0.6f), 90f, ActionSide.Right);
+            SimVec3 local = AnimMath.WorldToLocal(plan.Warp.TranslationDelta, 90f);
+            Assert.AreEqual(DribbleTouchSolver.MaxLateralShift, local.X, 1e-4f);
+            Assert.AreEqual(0f, local.Z, 1e-4f);
+            Assert.AreEqual(0f, plan.Warp.YawDelta, 1e-6f);
+        }
+
+        [Test]
+        public void Plan_DribbleTouch_BallLeft_LeftFootShiftsLeft()
+        {
+            var plan = PlanTouchAt(new SimVec3(-0.25f, 0.11f, 0.35f), 0f, ActionSide.Left);
+            Assert.AreEqual(-(0.25f - 0.09f), plan.Warp.TranslationDelta.X, 1e-4f);
+        }
+
+        [Test]
+        public void Plan_DribbleTouch_ShiftEasesInAndOutInsideTheTouchWindow()
+        {
+            var plan = PlanTouchAt(new SimVec3(0.5f, 0.11f, 0.35f), 0f, ActionSide.Right);
+            var w = plan.Warp;
+            Assert.AreEqual(0f, w.WeightAt(1f - DribbleTouchSolver.BlendIn - 1e-3f), 1e-6f);
+            Assert.AreEqual(1f, w.WeightAt(1f), 1e-6f);
+            Assert.AreEqual(0f, w.WeightAt(1f + DribbleTouchSolver.BlendOut + 1e-3f), 1e-6f);
+            // Eased (smoothstep): slow at the edges, no step anywhere.
+            Assert.Less(w.WeightAt(1f - 0.9f * DribbleTouchSolver.BlendIn), 0.05f);
+            float prev = 0f, maxStep = 0f;
+            for (float t = 0.85f; t <= 1.15f; t += 1f / 120f)
+            {
+                float v = w.WeightAt(t);
+                maxStep = System.Math.Max(maxStep, System.Math.Abs(v - prev));
+                prev = v;
+            }
+            Assert.Less(maxStep, 0.11f, "warp pops");
         }
 
         [Test]

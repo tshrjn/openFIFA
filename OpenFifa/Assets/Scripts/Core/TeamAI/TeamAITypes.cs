@@ -135,6 +135,13 @@ namespace OpenFifa.Core
         /// <summary>Unit flat aim direction from the ball (includes difficulty error).</summary>
         public SimVec3 Aim;
         public TeamAIIntent Intent;
+        /// <summary>
+        /// Tempo: the fastest the player should move on a non-sprint run (m/s), 0 = no limit (a full jog). Off-ball shape
+        /// moves walk or jog (see <see cref="TeamAITempo"/>); presses, chases and runs in behind leave it at 0.
+        /// </summary>
+        public float SpeedLimit;
+        /// <summary>The player's current top (sprint) speed, m/s, so the adapter can turn <see cref="SpeedLimit"/> into a throttle.</summary>
+        public float SprintSpeed;
 
         public static AIPlayerCommand Idle(int id, SimVec3 pos)
         {
