@@ -1,0 +1,47 @@
+name: Bug report
+description: Something broke, crashed or looked wrong while building or playing.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying OpenFootball. Short reports are fine. A screenshot or clip helps more than a long description.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you saw, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: Steps, if you know them. "It happened once in a match" is useful too.
+      placeholder: |
+        1. Open OpenFifa/ in Unity
+        2. Play the Match scene
+        3. ...
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Unity editor)
+        - macOS (standalone build)
+        - iPad / iPhone
+        - Linux
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Commit or version
+      description: Output of `git rev-parse --short HEAD`, or the date you cloned.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs, screenshots or clips
+      description: Unity console errors, Player.log, or drag images/videos here.

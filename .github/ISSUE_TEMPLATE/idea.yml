@@ -1,0 +1,19 @@
+name: Idea or feature request
+description: Suggest a mode, mechanic, tool or improvement.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: The idea
+      description: What should change, and why it would make the game better.
+    validations:
+      required: true
+  - type: dropdown
+    id: help
+    attributes:
+      label: Would you like to work on it?
+      options:
+        - "No, just suggesting"
+        - "Maybe, with some pointers"
+        - "Yes, I'd like to open a PR"

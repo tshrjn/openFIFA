@@ -1,0 +1,50 @@
+name: Gameplay feedback
+description: You played a match. Tell us how it felt.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful thing you can send. Rough notes after one match are enough.
+  - type: textarea
+    id: liked
+    attributes:
+      label: What felt good?
+  - type: textarea
+    id: annoyed
+    attributes:
+      label: What felt wrong or frustrating?
+      description: Controls, passing, shooting, AI teammates or opponents, camera, speed, sound, anything.
+    validations:
+      required: true
+  - type: dropdown
+    id: input
+    attributes:
+      label: How did you play?
+      options:
+        - Keyboard and mouse
+        - Gamepad
+        - Touch
+        - Watched AI vs AI only
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS (Unity editor)
+        - macOS (standalone build)
+        - iPad / iPhone
+        - Linux
+        - Windows
+        - Other
+  - type: textarea
+    id: next
+    attributes:
+      label: What would make you play another match?
+  - type: textarea
+    id: build-info
+    attributes:
+      label: Build and device
+      description: Filled in automatically when you use "Send feedback" in the game. Otherwise, add your device and OS if you like.
+      render: text
+    validations:
+      required: false
