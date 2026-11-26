@@ -50,6 +50,11 @@ namespace OpenFifa.Gameplay.SinglePlayer
         public RosterClub HomeClub { get; private set; }
         public RosterClub AwayClub { get; private set; }
         public string[] Names { get; private set; } = new string[MatchSimState.PlayerCount];
+        /// <summary>Squad numbers per sim id (roster shirt numbers, else 1-11).</summary>
+        public int[] ShirtNumbers { get; private set; } = new int[MatchSimState.PlayerCount];
+        /// <summary>Team colours of the current match (HUD accents).</summary>
+        public Color HomeColour { get; private set; } = new Color(0.75f, 0.1f, 0.15f);
+        public Color AwayColour { get; private set; } = new Color(0.95f, 0.95f, 0.97f);
         public bool Started => Session != null;
         /// <summary>Hold the match without showing the pause menu (review captures).</summary>
         public bool Frozen { get; set; }
@@ -111,13 +116,15 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _pitchRoot = new GameObject("Pitch (PitchBuilder)").transform;
             _pitchRoot.SetParent(transform, false);
             var builder = _pitchRoot.gameObject.AddComponent<PitchBuilder>();
+            builder.RunOffMetres = RunOffMetres; // grass beyond the lines instead of a dark void at the touchline
             builder.BuildPitch(new PitchConfigData(pitch.Length, pitch.Width, pitch.GoalWidth, 9.15f, 5.5f, pitch.GoalHeight, 1f, 0.5f));
             // Rotate after building: PitchBuilder parents with worldPositionStays, so a pre-rotated root would be undone.
             _pitchRoot.localRotation = Quaternion.Euler(0f, 90f, 0f);
 
             BuildGoal(+1, pitch);
             BuildGoal(-1, pitch);
-            BuildStands(pitch);
+            // Procedural stadium (stands, crowd, roofs, floodlights, LED ring 4.5 m back on the run-off).
+            _stadium = ProceduralStadium.Build(transform, pitch, new Color(0.75f, 0.1f, 0.15f), new Color(0.1f, 0.3f, 0.8f));
 
             if (FindFirstObjectByType<Light>() == null)
             {
@@ -128,7 +135,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
             // Light from the camera side and high, so the far stand's shadow falls behind it, not on the pitch.
             foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
-                if (l.type == LightType.Directional) l.transform.rotation = Quaternion.Euler(62f, -90f, 0f);
+                if (l.type == LightType.Directional)
+                {
+                    // ~40 deg sun from the camera side, angled down the pitch: long readable player shadows that fall
+                    // away from the broadcast camera.
+                    l.transform.rotation = Quaternion.Euler(40f, -75f, 0f);
+                    l.shadows = LightShadows.Soft; // resolution, cascades and bias come from the URP asset
+                }
 
             var cam = Camera.main;
             if (cam == null)
@@ -139,9 +152,14 @@ namespace OpenFifa.Gameplay.SinglePlayer
             cam.clearFlags = CameraClearFlags.SolidColor;
             cam.backgroundColor = new Color(0.09f, 0.11f, 0.16f);
             cam.farClipPlane = 600f;
+            cam.nearClipPlane = 0.5f; // better depth precision for the lines and ring at broadcast distance
+            var camData = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>()
+                          ?? cam.gameObject.AddComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
+            camData.renderPostProcessing = true; // ACES tonemapping / grade from the scene's global volume
             BroadcastCamera = cam.GetComponent<SinglePlayerCamera>() ?? cam.gameObject.AddComponent<SinglePlayerCamera>();
             BroadcastCamera.HalfLength = pitch.HalfLength;
             BroadcastCamera.HalfWidth = pitch.HalfWidth;
+            FitBroadcastCameraToStand();
 
             _ball = GameObject.CreatePrimitive(PrimitiveType.Sphere).transform;
             _ball.name = "Ball";
@@ -150,12 +168,9 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Tint(_ball.gameObject, Color.white);
             ApplyBallPattern(_ball.gameObject);
             BroadcastCamera.Ball = _ball;
+            _ballShadow = BuildBallShadow();
 
-            _marker = GameObject.CreatePrimitive(PrimitiveType.Cylinder).transform;
-            _marker.name = "ControlledMarker";
-            _marker.localScale = new Vector3(1.6f, 0.02f, 1.6f);
-            Destroy(_marker.GetComponent<Collider>());
-            Tint(_marker.gameObject, new Color(1f, 0.85f, 0.1f));
+            _marker = BuildMarkerRing();
             _marker.gameObject.SetActive(false);
             BroadcastCamera.Snap();
         }
@@ -220,13 +235,162 @@ namespace OpenFifa.Gameplay.SinglePlayer
             Post(root, new Vector3(-hw, h * 0.5f, z), new Vector3(r * 2f, h * 0.5f, r * 2f), Quaternion.identity);
             Post(root, new Vector3(hw, h * 0.5f, z), new Vector3(r * 2f, h * 0.5f, r * 2f), Quaternion.identity);
             Post(root, new Vector3(0f, h, z), new Vector3(r * 2f, hw, r * 2f), Quaternion.Euler(0f, 0f, 90f));
-            // Simple net: a translucent back and roof.
-            var back = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
-            back.SetParent(root, false);
-            back.localPosition = new Vector3(0f, h * 0.5f, z + side * 2f);
-            back.localScale = new Vector3(pitch.GoalWidth, h, 0.02f);
-            Destroy(back.GetComponent<Collider>());
-            Tint(back.gameObject, new Color(0.9f, 0.9f, 0.9f, 0.35f));
+            var netMat = BuildNet(root, side, z, hw, h);
+            _netMaterials.Add(netMat);
+            _netMouths.Add(new Vector3(0f, h * 0.5f, z));
+        }
+
+        /// <summary>Net depth at the roof (from the goal line) and at the ground (m).</summary>
+        public const float NetTopDepth = 1.0f, NetBottomDepth = 2.0f;
+        /// <summary>Net mesh cell size (m).</summary>
+        public const float NetCell = 0.14f;
+        /// <summary>Grass beyond the touch and goal lines (m).</summary>
+        public const float RunOffMetres = 5f;
+
+        private static Material _netMaterial;
+
+        /// <summary>
+        /// Net box behind the goal: roof, sloping back and two sides, drawn with a procedural cutout grid so the
+        /// keeper and the far pitch stay visible through it. Sprites/Default is in the always-included shader list, so
+        /// it blends in the player build without depending on a URP keyword variant being kept; it renders both faces.
+        /// </summary>
+        private static Material BuildNet(Transform root, int side, float z, float hw, float h)
+        {
+            float zt = z + side * NetTopDepth, zb = z + side * NetBottomDepth;
+            var verts = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var tris = new List<int>();
+            // Roof: crossbar to the top back bar.
+            NetQuad(verts, uvs, tris, new Vector3(-hw, h, z), new Vector3(hw, h, z), new Vector3(hw, h, zt), new Vector3(-hw, h, zt), 0);
+            // Back: top back bar down to the ground bar.
+            NetQuad(verts, uvs, tris, new Vector3(-hw, h, zt), new Vector3(hw, h, zt), new Vector3(hw, 0f, zb), new Vector3(-hw, 0f, zb), 1);
+            // Sides: post, top, slope, ground.
+            for (int sx = -1; sx <= 1; sx += 2)
+                NetQuad(verts, uvs, tris, new Vector3(sx * hw, 0f, z), new Vector3(sx * hw, h, z), new Vector3(sx * hw, h, zt), new Vector3(sx * hw, 0f, zb), 2);
+
+            var mesh = new Mesh { name = "GoalNet" };
+            mesh.SetVertices(verts);
+            mesh.SetUVs(0, uvs);
+            var cols = new Color[verts.Count];
+            for (int i = 0; i < cols.Length; i++) cols[i] = Color.white;
+            mesh.colors = cols;
+            mesh.SetTriangles(tris, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+
+            var net = new GameObject("Net").transform;
+            net.SetParent(root, false);
+            net.gameObject.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = net.gameObject.AddComponent<MeshRenderer>();
+            var mat = new Material(NetMaterial()) { name = "GoalNet " + (side > 0 ? "+Z" : "-Z") };
+            mr.sharedMaterial = mat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+
+            // Back frame: the top back bar and the ground bars that hold the net (thin, grey).
+            var frame = new Color(0.78f, 0.78f, 0.8f);
+            float r = 0.03f;
+            Bar(root, new Vector3(-hw, h, zt), new Vector3(hw, h, zt), r, frame);
+            Bar(root, new Vector3(-hw, 0.02f, zb), new Vector3(hw, 0.02f, zb), r, frame);
+            for (int sx = -1; sx <= 1; sx += 2)
+            {
+                Bar(root, new Vector3(sx * hw, h, zt), new Vector3(sx * hw, 0.02f, zb), r, frame);
+                Bar(root, new Vector3(sx * hw, 0.02f, z), new Vector3(sx * hw, 0.02f, zb), r, frame);
+            }
+            return mat;
+        }
+
+        /// <summary>Quad a-b-c-d with UVs in net cells (axis 0: x/z, 1: x/slope, 2: z/y).</summary>
+        private static void NetQuad(List<Vector3> v, List<Vector2> uv, List<int> t, Vector3 a, Vector3 b, Vector3 c, Vector3 d, int plane)
+        {
+            int i = v.Count;
+            foreach (var p in new[] { a, b, c, d })
+            {
+                v.Add(p);
+                Vector2 q;
+                if (plane == 0) q = new Vector2(p.x, p.z);
+                else if (plane == 1) q = new Vector2(p.x, p.y * 1.08f); // slope is ~8% longer than its height
+                else q = new Vector2(p.z, p.y);
+                uv.Add(q / NetCell);
+            }
+            t.Add(i); t.Add(i + 1); t.Add(i + 2);
+            t.Add(i); t.Add(i + 2); t.Add(i + 3);
+        }
+
+        private static void Bar(Transform parent, Vector3 from, Vector3 to, float radius, Color c)
+        {
+            var b = GameObject.CreatePrimitive(PrimitiveType.Cylinder).transform;
+            b.SetParent(parent, false);
+            Vector3 d = to - from;
+            b.localPosition = (from + to) * 0.5f;
+            b.localRotation = Quaternion.FromToRotation(Vector3.up, d.normalized);
+            b.localScale = new Vector3(radius * 2f, d.magnitude * 0.5f, radius * 2f);
+            Destroy(b.GetComponent<Collider>());
+            Tint(b.gameObject, c);
+        }
+
+        /// <summary>Procedural net: white 2-texel strands on a 16-texel cell, transparent between; mipmaps fade it to a light veil at distance.</summary>
+        private static Material NetMaterial()
+        {
+            if (_netMaterial != null) return _netMaterial;
+            const int N = 16;
+            var px = new Color32[N * N];
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    bool strand = x < 2 || y < 2;
+                    px[y * N + x] = strand ? new Color32(240, 240, 240, 190) : new Color32(255, 255, 255, 0);
+                }
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, true)
+            {
+                name = "NetGrid", wrapMode = TextureWrapMode.Repeat, filterMode = FilterMode.Trilinear, anisoLevel = 4,
+            };
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
+            _netMaterial = new Material(shader) { name = "GoalNet", mainTexture = tex };
+            return _netMaterial;
+        }
+
+        /// <summary>Marker ring radii (m) and its lift above the grass surface (the pitch cube's top is at 0.05 m).</summary>
+        public const float RingInner = 0.62f, RingOuter = 0.8f, RingY = 0.09f;
+
+        /// <summary>
+        /// Controlled-player ring: a flat annulus mesh, unlit (Sprites/Default, transparent queue, no z-write, no shadows),
+        /// 4 cm above the grass. The old marker was a 1.6 m cylinder whose top sat exactly on the pitch surface (y 0.05),
+        /// so it z-fought with the grass and showed as flickering yellow shards.
+        /// </summary>
+        private static Transform BuildMarkerRing()
+        {
+            const int seg = 64;
+            var verts = new Vector3[seg * 2];
+            var cols = new Color[seg * 2];
+            var tris = new int[seg * 6];
+            for (int i = 0; i < seg; i++)
+            {
+                float a = i * Mathf.PI * 2f / seg;
+                var d = new Vector3(Mathf.Cos(a), 0f, Mathf.Sin(a));
+                verts[i * 2] = d * RingOuter;
+                verts[i * 2 + 1] = d * RingInner;
+                cols[i * 2] = cols[i * 2 + 1] = Color.white;
+                int j = (i + 1) % seg;
+                // Clockwise seen from above (front face up); the shader is double-sided anyway.
+                tris[i * 6] = i * 2; tris[i * 6 + 1] = i * 2 + 1; tris[i * 6 + 2] = j * 2;
+                tris[i * 6 + 3] = j * 2; tris[i * 6 + 4] = i * 2 + 1; tris[i * 6 + 5] = j * 2 + 1;
+            }
+            var mesh = new Mesh { name = "MarkerRing", vertices = verts, colors = cols, triangles = tris };
+            mesh.RecalculateNormals();
+            mesh.RecalculateBounds();
+            var go = new GameObject("ControlledMarker");
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
+            var m = new Material(shader) { name = "MarkerRing", color = new Color(1f, 0.85f, 0.1f, 0.95f) };
+            m.renderQueue = 3100; // after the grass, lines and net
+            mr.sharedMaterial = m;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            return go.transform;
         }
 
         private static void Post(Transform parent, Vector3 pos, Vector3 scale, Quaternion rot)
@@ -238,32 +402,6 @@ namespace OpenFifa.Gameplay.SinglePlayer
             p.localScale = scale;
             Destroy(p.GetComponent<Collider>());
             Tint(p.gameObject, Color.white);
-        }
-
-        private void BuildStands(PitchSpec pitch)
-        {
-            var root = new GameObject("Stands").transform;
-            root.SetParent(transform, false);
-            var col = new Color(0.22f, 0.24f, 0.3f);
-            // Far touchline and both ends; the broadcast camera side (+X) stays open.
-            Box(root, new Vector3(-(pitch.HalfWidth + 16f), 7f, 0f), new Vector3(18f, 14f, pitch.Length + 30f), col, -25f, 0f);
-            for (int s = -1; s <= 1; s += 2)
-                Box(root, new Vector3(0f, 5f, s * (pitch.HalfLength + 16f)), new Vector3(pitch.Width + 30f, 10f, 14f), col, 0f, s * -25f);
-            // Advertising boards along the near touchline give scale in the broadcast view.
-            for (int i = -5; i <= 5; i++)
-                Box(root, new Vector3(pitch.HalfWidth + 4f, 0.5f, i * 9.5f), new Vector3(0.2f, 1f, 9f),
-                    (i & 1) == 0 ? new Color(0.1f, 0.3f, 0.8f) : new Color(0.85f, 0.85f, 0.9f), 0f, 0f);
-        }
-
-        private static void Box(Transform parent, Vector3 pos, Vector3 size, Color c, float tiltZ, float tiltX)
-        {
-            var b = GameObject.CreatePrimitive(PrimitiveType.Cube).transform;
-            b.SetParent(parent, false);
-            b.localPosition = pos;
-            b.localScale = size;
-            b.localRotation = Quaternion.Euler(tiltX, 0f, tiltZ);
-            Destroy(b.GetComponent<Collider>());
-            Tint(b.gameObject, c);
         }
 
         private static readonly int BaseColorId = Shader.PropertyToID("_BaseColor");
@@ -345,6 +483,13 @@ namespace OpenFifa.Gameplay.SinglePlayer
                 options.PlayerNames = names;
                 options.PlayerIds = ids;
                 Names = names;
+                var numbers = new int[MatchSimState.PlayerCount];
+                for (int i = 0; i < MatchSetup.PlayersPerTeam; i++)
+                {
+                    numbers[i] = hs.Starters[i] != null ? hs.Starters[i].ShirtNumber : i + 1;
+                    numbers[i + MatchSetup.PlayersPerTeam] = aws.Starters[i] != null ? aws.Starters[i].ShirtNumber : i + 1;
+                }
+                ShirtNumbers = numbers;
                 homeColor = ParseColour(HomeClub.PrimaryColour, homeColor);
                 awayColor = ParseColour(AwayClub.PrimaryColour, awayColor);
                 if (ColourDistance(homeColor, awayColor) < 0.35f) awayColor = ParseColour(AwayClub.AwayColour, awayColor);
@@ -353,7 +498,12 @@ namespace OpenFifa.Gameplay.SinglePlayer
             {
                 Names = new string[MatchSimState.PlayerCount];
                 for (int i = 0; i < Names.Length; i++) Names[i] = (i < 11 ? "H" : "A") + (i % 11 + 1);
+                var numbers = new int[MatchSimState.PlayerCount];
+                for (int i = 0; i < numbers.Length; i++) numbers[i] = i % MatchSetup.PlayersPerTeam + 1;
+                ShirtNumbers = numbers;
             }
+            HomeColour = homeColor;
+            AwayColour = awayColor;
             return options;
         }
 
@@ -365,6 +515,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             Level = level;
             var options = BuildOptions(level, out var homeColor, out var awayColor);
+            if (_stadium != null) _stadium.SetTeamColours(homeColor, awayColor);
             Session = new SinglePlayerMatchSession(options);
             Input = new SinglePlayerInput(Session.Profile.PassAssist);
             Session.HumanSlots[0].Input = CreateHumanInput();
@@ -532,6 +683,7 @@ namespace OpenFifa.Gameplay.SinglePlayer
             }
             SyncVisuals();
             RotateBall(advancing ? Time.deltaTime : 0f);
+            if (!Frozen) UpdateCrowd(advancing ? Time.deltaTime : 0f);
         }
 
         /// <summary>
@@ -554,6 +706,150 @@ namespace OpenFifa.Gameplay.SinglePlayer
         {
             if (Session == null) return;
             UpdateControlledMarker();
+            UpdateBallVisual();
+            UpdateNetFade();
+        }
+
+        private ProceduralStadium _stadium;
+
+        /// <summary>
+        /// The broadcast camera rides above the main (near) stand. Lift it until, over its whole dolly range, it is
+        /// outside the stand and roof and has a clear line to the near touchline (the stand's rows rise to ~17 m at
+        /// 30 m back, so a 15 m camera at that depth sat inside the seating and showed its underside).
+        /// </summary>
+        private void FitBroadcastCameraToStand()
+        {
+            if (_stadium == null || _stadium.Layout == null || BroadcastCamera == null) return;
+            var stand = _stadium.Layout.MainStand;
+            float far = BroadcastCamera.BroadcastSetback;
+            float near = far - SinglePlayerCamera.DollyIn * BroadcastCamera.HalfWidth;
+            float h = BroadcastCamera.BroadcastHeight;
+            for (int k = 0; k < 40; k++)
+            {
+                bool ok = true;
+                for (float d = near; d <= far + 0.01f && ok; d += 0.5f)
+                    ok = !stand.Contains(d, h, true) && stand.SegmentClear(d, h, 0f, 0f, true, 0.25f)
+                         && h <= stand.RoofUndersideAt(d) - 1f;
+                if (ok) break;
+                h += 0.5f;
+            }
+            BroadcastCamera.BroadcastHeight = h;
+        }
+        private float _excitement = CrowdBaseline;
+        /// <summary>Crowd excitement at rest and how fast it settles back (per second).</summary>
+        public const float CrowdBaseline = 0.25f, CrowdDecay = 0.12f;
+
+        /// <summary>
+        /// Crowd reaction from this frame's sim events: a goal peaks it, shots/saves/woodwork lift it, fouls stir it,
+        /// then it settles back to the baseline. Allocation-free.
+        /// </summary>
+        private void UpdateCrowd(float dt)
+        {
+            if (_stadium == null || Session == null) return;
+            var ev = Session.FrameEvents;
+            for (int i = 0; i < ev.Count; i++)
+            {
+                switch (ev[i].Type)
+                {
+                    case MatchEventType.Goal: _excitement = 1f; break;
+                    case MatchEventType.PostHit:
+                    case MatchEventType.CrossbarHit:
+                    case MatchEventType.Save: _excitement = Mathf.Max(_excitement, 0.75f); break;
+                    case MatchEventType.Shot: _excitement = Mathf.Max(_excitement, 0.55f); break;
+                    case MatchEventType.Foul:
+                    case MatchEventType.YellowCard:
+                    case MatchEventType.RedCard: _excitement = Mathf.Max(_excitement, 0.45f); break;
+                }
+            }
+            _excitement = Mathf.MoveTowards(_excitement, CrowdBaseline, CrowdDecay * dt);
+            _stadium.SetExcitement(_excitement);
+        }
+
+        private Transform _ballShadow;
+        private Material _ballShadowMat;
+        private readonly List<Material> _netMaterials = new List<Material>(2);
+        private readonly List<Vector3> _netMouths = new List<Vector3>(2);
+
+        /// <summary>Smallest on-screen ball diameter (px at the current resolution) before the visual is scaled up.</summary>
+        public const float MinBallPixels = 6f;
+
+        /// <summary>
+        /// Ball readability at broadcast distance: scales the visual ball up (never below its true size, at most 2.2x)
+        /// so it stays at least <see cref="MinBallPixels"/> across, keeps it resting on the grass, and places the
+        /// contact shadow blob under it (larger and fainter with height).
+        /// </summary>
+        private void UpdateBallVisual()
+        {
+            var cam = BroadcastCamera != null ? BroadcastCamera.GetComponent<Camera>() : null;
+            if (cam == null || _ball == null) return;
+            Vector3 p = _ball.position;
+            float d = Vector3.Distance(cam.transform.position, p);
+            float px = 2f * _ballRadius * Screen.height / (2f * d * Mathf.Tan(cam.fieldOfView * 0.5f * Mathf.Deg2Rad));
+            float k = px > 0.01f ? Mathf.Clamp(MinBallPixels / px, 1f, 2.2f) : 1f;
+            _ball.localScale = Vector3.one * (2f * _ballRadius * k);
+            float r = _ballRadius * k;
+            if (p.y < r) _ball.position = new Vector3(p.x, r, p.z);
+
+            if (_ballShadow != null)
+            {
+                float h = Mathf.Max(0f, p.y - _ballRadius);
+                float size = Mathf.Max(0.45f, 2.6f * r) * (1f + h * 0.12f);
+                _ballShadow.position = new Vector3(p.x, RingY - 0.01f, p.z);
+                _ballShadow.localScale = new Vector3(size, 1f, size);
+                _ballShadowMat.color = new Color(0f, 0f, 0f, Mathf.Lerp(0.55f, 0.12f, Mathf.Clamp01(h / 8f)));
+            }
+        }
+
+        private Transform BuildBallShadow()
+        {
+            const int N = 64;
+            var px = new Color32[N * N];
+            float c = (N - 1) * 0.5f;
+            for (int y = 0; y < N; y++)
+                for (int x = 0; x < N; x++)
+                {
+                    float d = Mathf.Sqrt((x - c) * (x - c) + (y - c) * (y - c)) / c;
+                    float a = Mathf.Clamp01(1f - d);
+                    px[y * N + x] = new Color32(255, 255, 255, (byte)(a * a * 255f));
+                }
+            var tex = new Texture2D(N, N, TextureFormat.RGBA32, true) { wrapMode = TextureWrapMode.Clamp, name = "BallShadow" };
+            tex.SetPixels32(px);
+            tex.Apply(true, true);
+            var mesh = new Mesh
+            {
+                name = "BallShadowQuad",
+                vertices = new[] { new Vector3(-0.5f, 0f, -0.5f), new Vector3(-0.5f, 0f, 0.5f), new Vector3(0.5f, 0f, 0.5f), new Vector3(0.5f, 0f, -0.5f) },
+                uv = new[] { new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(1f, 0f) },
+                colors = new[] { Color.white, Color.white, Color.white, Color.white },
+                triangles = new[] { 0, 1, 2, 0, 2, 3 },
+            };
+            mesh.RecalculateBounds();
+            var go = new GameObject("BallShadow");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var mr = go.AddComponent<MeshRenderer>();
+            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Universal Render Pipeline/Unlit");
+            _ballShadowMat = new Material(shader) { name = "BallShadow", mainTexture = tex, color = new Color(0f, 0f, 0f, 0.5f) };
+            _ballShadowMat.renderQueue = 3050;
+            mr.sharedMaterial = _ballShadowMat;
+            mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+            mr.receiveShadows = false;
+            return go.transform;
+        }
+
+        /// <summary>Fades a goal's net when the camera is close behind it (goal-area views), so it does not wall off play.</summary>
+        private void UpdateNetFade()
+        {
+            var cam = BroadcastCamera != null ? BroadcastCamera.transform : null;
+            if (cam == null) return;
+            for (int i = 0; i < _netMaterials.Count; i++)
+            {
+                Vector3 mouth = _netMouths[i];
+                float d = Vector3.Distance(cam.position, mouth);
+                bool behind = Mathf.Sign(cam.position.z) == Mathf.Sign(mouth.z) && Mathf.Abs(cam.position.z) > Mathf.Abs(mouth.z);
+                float a = behind ? Mathf.Lerp(0.3f, 1f, Mathf.InverseLerp(10f, 30f, d)) : 1f;
+                _netMaterials[i].color = new Color(1f, 1f, 1f, a);
+            }
         }
 
         private void UpdateControlledMarker()
@@ -563,7 +859,8 @@ namespace OpenFifa.Gameplay.SinglePlayer
             _marker.gameObject.SetActive(show);
             if (show)
             {
-                _marker.position = _players[controlled].position + new Vector3(0f, 0.03f, 0f);
+                var pp = _players[controlled].position;
+                _marker.position = new Vector3(pp.x, RingY, pp.z);
                 BroadcastCamera.Player = _players[controlled];
             }
             else

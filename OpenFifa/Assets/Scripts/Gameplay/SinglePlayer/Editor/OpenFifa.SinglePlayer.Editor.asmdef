@@ -5,7 +5,9 @@
         "OpenFifa.Core",
         "OpenFifa.Gameplay",
         "OpenFifa.Editor",
-        "OpenFifa.Animations.Editor"
+        "OpenFifa.Animations.Editor",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": ["Editor"],
     "excludePlatforms": [],

@@ -587,8 +587,8 @@ namespace OpenFifa.Tests.Editor
             var config = new CrowdPlacementConfig(rowsPerSection: 10, seatsPerRow: 20);
             // Default density for section 0 is 0.95
             int count = config.CrowdCountForSection(0);
-            Assert.AreEqual((int)(200 * 0.95f), count,
-                $"Section 0 crowd count should be 200*0.95={200 * 0.95f}, got {count}");
+            // Literal, not (int)(200 * 0.95f): that expression is 189 or 190 depending on float evaluation precision.
+            Assert.AreEqual(190, count, $"Section 0 crowd count should be 200 * 0.95 = 190, got {count}");
         }
 
         [Test]

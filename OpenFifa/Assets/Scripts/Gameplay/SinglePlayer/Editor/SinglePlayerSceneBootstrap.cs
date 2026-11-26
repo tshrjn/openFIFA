@@ -6,6 +6,8 @@ using UnityEditor;
 using UnityEditor.Build.Reporting;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 using UnityEngine.SceneManagement;
 
 namespace OpenFifa.Gameplay.SinglePlayer.Editor
@@ -22,6 +24,9 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
         public const string ModelPath = "Assets/Animations/Quaternius/UAL2/UAL2_Standard.fbx";
         public const string ControllerPath = "Assets/Animations/Controllers/Footballer.controller";
         public const string DefaultLinuxOut = "build/LinuxCapture/OpenFootball.x86_64";
+        public const string RendererDataPath = "Assets/Settings/URPRendererData.asset";
+        public const string VolumeProfilePath = "Assets/Settings/SinglePlayerVolumeProfile.asset";
+        public const string PostProcessDataPath = "Packages/com.unity.render-pipelines.universal/Runtime/Data/PostProcessData.asset";
 
         [MenuItem("OpenFootball/Scenes/Create Single Player Match")]
         public static void CreateSceneMenu()
@@ -52,7 +57,9 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
             var camGo = new GameObject("Broadcast Camera");
             camGo.tag = "MainCamera";
             var cam = camGo.AddComponent<Camera>();
-            cam.fieldOfView = 34f;
+            cam.fieldOfView = 27f;
+            var camData = camGo.AddComponent<UniversalAdditionalCameraData>();
+            camData.renderPostProcessing = true;
             camGo.AddComponent<AudioListener>();
             camGo.AddComponent<SinglePlayerCamera>();
 
@@ -60,11 +67,20 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
             sun.type = LightType.Directional;
             sun.intensity = 1.2f;
             sun.shadows = LightShadows.Soft;
-            sun.transform.rotation = Quaternion.Euler(50f, -30f, 0f);
+            sun.transform.rotation = Quaternion.Euler(40f, -75f, 0f);
+
+            EnsureRendererSetup();
+            EnsureShaderKeepMaterials();
+            var volumeGo = new GameObject("Global Volume");
+            var volume = volumeGo.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 0f;
+            volume.sharedProfile = EnsureVolumeProfile();
 
             var root = new GameObject("SinglePlayerMatch");
             var controller = root.AddComponent<SinglePlayerMatchController>();
             root.AddComponent<SinglePlayerHud>();
+            root.AddComponent<SinglePlayerHudCanvas>();
             root.AddComponent<SinglePlayerCapture>();
 
             // Use the mannequin only when the animator controller exists; otherwise the capsules read better than a T-pose.
@@ -83,6 +99,136 @@ namespace OpenFifa.Gameplay.SinglePlayer.Editor
             EditorSceneManager.SaveScene(scene, ScenePath);
             AssetDatabase.SaveAssets();
             return ScenePath;
+        }
+
+        /// <summary>
+        /// Renderer: assigns URP's PostProcessData (it was empty, so Volume effects such as tonemapping never ran) and
+        /// adds Screen Space Ambient Occlusion once. Idempotent; saves the renderer asset.
+        /// </summary>
+        public static void EnsureRendererSetup()
+        {
+            var rd = AssetDatabase.LoadAssetAtPath<UniversalRendererData>(RendererDataPath);
+            if (rd == null)
+            {
+                Debug.LogWarning("[OpenFootball] renderer data not found at " + RendererDataPath);
+                return;
+            }
+            bool dirty = false;
+            if (rd.postProcessData == null)
+            {
+                rd.postProcessData = AssetDatabase.LoadAssetAtPath<PostProcessData>(PostProcessDataPath);
+                dirty = rd.postProcessData != null;
+            }
+            if (!rd.rendererFeatures.Any(f => f is ScreenSpaceAmbientOcclusion))
+            {
+                var ssao = ScriptableObject.CreateInstance<ScreenSpaceAmbientOcclusion>();
+                ssao.name = "ScreenSpaceAmbientOcclusion";
+                AssetDatabase.AddObjectToAsset(ssao, rd);
+                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(ssao, out _, out long localId);
+                var so = new SerializedObject(rd);
+                var features = so.FindProperty("m_RendererFeatures");
+                var map = so.FindProperty("m_RendererFeatureMap");
+                features.arraySize++;
+                features.GetArrayElementAtIndex(features.arraySize - 1).objectReferenceValue = ssao;
+                map.arraySize++;
+                map.GetArrayElementAtIndex(map.arraySize - 1).longValue = localId;
+                so.ApplyModifiedPropertiesWithoutUndo();
+                dirty = true;
+            }
+            if (dirty)
+            {
+                EditorUtility.SetDirty(rd);
+                AssetDatabase.SaveAssets();
+                Debug.Log("[OpenFootball] renderer: post-process data " + (rd.postProcessData != null ? "set" : "missing") + ", SSAO on");
+            }
+        }
+
+        /// <summary>
+        /// Global volume profile for the match (created or topped up, idempotent): ACES tonemapping, a slight warm grade
+        /// with a little less saturation, and mild bloom so the floodlight lamps and halos glow.
+        /// </summary>
+        public static VolumeProfile EnsureVolumeProfile()
+        {
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(VolumeProfilePath);
+            if (profile == null)
+            {
+                profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                AssetDatabase.CreateAsset(profile, VolumeProfilePath);
+            }
+            bool changed = false;
+            if (!profile.Has<Tonemapping>())
+            {
+                var tone = AddComponent<Tonemapping>(profile);
+                tone.mode.Override(TonemappingMode.ACES);
+                changed = true;
+            }
+            if (!profile.Has<ColorAdjustments>())
+            {
+                var colour = AddComponent<ColorAdjustments>(profile);
+                colour.postExposure.Override(0.35f); // ACES darkens mid-tones; bring the exposure back
+                colour.contrast.Override(6f);
+                colour.saturation.Override(-12f);
+                changed = true;
+            }
+            if (!profile.Has<WhiteBalance>())
+            {
+                AddComponent<WhiteBalance>(profile).temperature.Override(6f);
+                changed = true;
+            }
+            if (!profile.Has<Bloom>())
+            {
+                var bloom = AddComponent<Bloom>(profile);
+                bloom.threshold.Override(1.1f); // only HDR-bright lamps and halos, not white kits or lines
+                bloom.intensity.Override(0.35f);
+                bloom.scatter.Override(0.6f);
+                changed = true;
+            }
+            if (changed)
+            {
+                EditorUtility.SetDirty(profile);
+                AssetDatabase.SaveAssets();
+            }
+            return profile;
+        }
+
+        private static T AddComponent<T>(VolumeProfile profile) where T : VolumeComponent
+        {
+            var c = profile.Add<T>(true);
+            c.name = typeof(T).Name;
+            AssetDatabase.AddObjectToAsset(c, profile);
+            return c;
+        }
+
+        public const string ShaderKeepFolder = "Assets/Resources/OpenFootball/ShaderKeep";
+
+        /// <summary>
+        /// Player builds only ship shaders (and keyword variants) that some included asset uses. The stadium's LED
+        /// boards, lamps and halos use URP/Unlit created at runtime, so keep two materials under Resources (always in
+        /// the build): opaque Unlit and transparent additive Unlit. Idempotent; no ProjectSettings edits.
+        /// </summary>
+        public static void EnsureShaderKeepMaterials()
+        {
+            var unlit = Shader.Find("Universal Render Pipeline/Unlit");
+            if (unlit == null) return;
+            Directory.CreateDirectory(ShaderKeepFolder);
+            string opaquePath = ShaderKeepFolder + "/KeepUnlitOpaque.mat", addPath = ShaderKeepFolder + "/KeepUnlitAdditive.mat";
+            if (AssetDatabase.LoadAssetAtPath<Material>(opaquePath) == null)
+                AssetDatabase.CreateAsset(new Material(unlit) { name = "KeepUnlitOpaque" }, opaquePath);
+            if (AssetDatabase.LoadAssetAtPath<Material>(addPath) == null)
+            {
+                var m = new Material(unlit) { name = "KeepUnlitAdditive" };
+                m.SetFloat("_Surface", 1f);
+                m.SetFloat("_Blend", 2f);
+                m.SetFloat("_SrcBlend", (float)BlendMode.One);
+                m.SetFloat("_DstBlend", (float)BlendMode.One);
+                m.SetFloat("_ZWrite", 0f);
+                m.SetFloat("_Cull", (float)CullMode.Off);
+                m.SetOverrideTag("RenderType", "Transparent");
+                m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+                m.renderQueue = (int)RenderQueue.Transparent;
+                AssetDatabase.CreateAsset(m, addPath);
+            }
+            AssetDatabase.SaveAssets();
         }
 
         private static RuntimeAnimatorController TryBuildAnimator()
