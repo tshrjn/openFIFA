@@ -27,14 +27,21 @@ namespace OpenFifa.Editor
         public const string Ual1Path = "Assets/Animations/Quaternius/UAL1/UAL1_Standard.fbx";
         public const string Ual2Path = "Assets/Animations/Quaternius/UAL2/UAL2_Standard.fbx";
 
-        /// <summary>Natural speeds (m/s) used as blend-tree positions. Must match PlayerAnimationDriver.authoredSpeeds.</summary>
-        public static readonly float WalkSpeed = 1.4f, JogSpeed = 3.4f, SprintSpeed = 6.5f, JockeySpeed = 1.4f;
+        /// <summary>
+        /// Natural speeds (m/s) used as blend-tree positions: the measured clip speeds in <see cref="LocomotionGaitTable"/>
+        /// (PlayerAnimationDriver's <see cref="LocomotionGaitSolver"/> uses the same table to set the playback rate).
+        /// </summary>
+        public static readonly float WalkSpeed = LocomotionGaitTable.WalkSpeed, JogSpeed = LocomotionGaitTable.JogSpeed,
+            SprintSpeed = LocomotionGaitTable.SprintSpeed, JockeySpeed = LocomotionGaitTable.JockeySpeed,
+            BackpedalSpeed = LocomotionGaitTable.BackpedalSpeed;
 
         [MenuItem("OpenFootball/Animation/Build Footballer Animator")]
         public static void BuildAll()
         {
             EnsureFolder(GeneratedDir);
             EnsureFolder(ControllerDir);
+            ReimportIfStale(Ual1Path);
+            ReimportIfStale(Ual2Path);
             var neutral = NeutralPose.Sample();
             var clips = new Dictionary<string, AnimationClip>();
             foreach (ClipSpec spec in Poses.All())
@@ -43,6 +50,41 @@ namespace OpenFifa.Editor
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log($"[FootballAnimationBuilder] Built {clips.Count} generated clips and {ControllerPath}");
+            CheckMeasuredSpeeds(clips.TryGetValue("Jockey", out AnimationClip jk) ? jk : null);
+        }
+
+        /// <summary>
+        /// Reimports a Quaternius FBX whose stored clip settings predate the current postprocessor (e.g. root rotation
+        /// still "Original"), so the controller is never built on clips that face the wrong way.
+        /// </summary>
+        private static void ReimportIfStale(string fbxPath)
+        {
+            if (!(AssetImporter.GetAtPath(fbxPath) is ModelImporter importer)) return;
+            bool stale = importer.clipAnimations.Any(c => !c.keepOriginalOrientation || !c.lockRootRotation ||
+                Mathf.Abs(Mathf.DeltaAngle(c.rotationOffset, QuaterniusImportPostprocessor.OrientationOffsetDeg)) > 0.5f);
+            if (!stale) return;
+            Debug.Log($"[FootballAnimationBuilder] Reimporting {fbxPath} (clip root settings are stale)");
+            AssetDatabase.ImportAsset(fbxPath, ImportAssetOptions.ForceUpdate);
+        }
+
+        /// <summary>Warns when a clip's measured natural speed drifts from LocomotionGaitTable by more than 12%.</summary>
+        private static void CheckMeasuredSpeeds(AnimationClip jockey)
+        {
+            void Check(AnimationClip clip, float table, bool lateral)
+            {
+                if (clip == null) return;
+                float measured = Mathf.Abs(LocomotionClipMeasure.Measure(clip, lateral).StanceSpeed);
+                string msg = $"[FootballAnimationBuilder] {clip.name}: measured {measured:F2} m/s, table {table:F2} m/s";
+                if (Mathf.Abs(measured - table) > 0.12f * table) Debug.LogWarning(msg + " -> update LocomotionGaitTable");
+                else Debug.Log(msg);
+            }
+            Check(LibraryClip(Ual1Path, "Walk_Loop"), WalkSpeed, false);
+            Check(LibraryClip(Ual1Path, "Jog_Fwd_Loop"), JogSpeed, false);
+            Check(LibraryClip(Ual1Path, "Sprint_Loop"), SprintSpeed, false);
+            Check(jockey, JockeySpeed, true);
+            string facing = LocomotionClipMeasure.RuntimeFacingReport();
+            if (facing.Contains("BACKWARDS")) Debug.LogError("[FootballAnimationBuilder] Locomotion runs backwards:\n" + facing);
+            else Debug.Log("[FootballAnimationBuilder] Runtime facing:\n" + facing);
         }
 
         // ------------------------------------------------------------------ clip writing
@@ -141,7 +183,7 @@ namespace OpenFifa.Editor
             AddChild(tree, walk, new Vector2(0f, WalkSpeed), 1f, false);
             AddChild(tree, jog, new Vector2(0f, JogSpeed), 1f, false);
             AddChild(tree, sprint, new Vector2(0f, SprintSpeed), 1f, false);
-            AddChild(tree, walk, new Vector2(0f, -WalkSpeed), -1f, false); // backpedal: walk reversed
+            AddChild(tree, walk, new Vector2(0f, -BackpedalSpeed), -1f, false); // backpedal: walk reversed
             AddChild(tree, jockey, new Vector2(JockeySpeed, 0f), 1f, false);
             AddChild(tree, jockey, new Vector2(-JockeySpeed, 0f), 1f, true);
             loco.speedParameterActive = true;
@@ -407,16 +449,21 @@ namespace OpenFifa.Editor
                 g.Keys.Add(new PoseKey(g.Length, P("RootT.x", 1.0f, "RootT.y", -0.8f, SpLR, 0.3f, LArmDU, 0.4f, RArmDU, 0.5f, LLL, -0.4f, RLL, -0.5f)));
                 yield return g;
 
-                // Jockey: low side-shuffle to the right (mirrored in the blend tree for the left), 0.8 s loop.
-                ClipSpec j = Spec("Jockey", "Gen_Jockey_R_Loop", AnimActionKind.None, loop: true, length: 0.8f);
-                var j0 = P("RootT.y", -0.08f, LLL, -0.4f, RLL, -0.4f, LULfb, 0.25f, RULfb, 0.25f, RULio, 0.1f, LULio, 0.1f, SpFB, 0.2f, LArmDU, 0.15f, RArmDU, 0.15f);
-                var j1 = P("RootT.y", -0.06f, LLL, -0.3f, RLL, -0.5f, LULfb, 0.2f, RULfb, 0.3f, RULio, 0.4f, LULio, -0.05f, SpFB, 0.2f, LArmDU, 0.15f, RArmDU, 0.2f);
-                var j2 = P("RootT.y", -0.1f, LLL, -0.45f, RLL, -0.35f, LULfb, 0.3f, RULfb, 0.25f, RULio, -0.05f, LULio, 0.35f, SpFB, 0.2f, LArmDU, 0.2f, RArmDU, 0.15f);
-                j.Keys.Add(new PoseKey(0f, j0));
-                j.Keys.Add(new PoseKey(0.2f, j1));
-                j.Keys.Add(new PoseKey(0.4f, j0));
-                j.Keys.Add(new PoseKey(0.6f, j2));
-                j.Keys.Add(new PoseKey(0.8f, j0));
+                // Jockey: low side-shuffle to the right (mirrored in the blend tree for the left), 0.7 s loop. Unlike the
+                // first blockout (legs splayed in place, 0.4 m/s of foot travel), the planted foot sweeps toward the body's
+                // centre while the other leg steps out, so the shuffle covers ground: LocomotionClipMeasure reads its
+                // natural lateral speed into LocomotionGaitTable.JockeySpeed.
+                ClipSpec j = Spec("Jockey", "Gen_Jockey_R_Loop", AnimActionKind.None, loop: true, length: 0.7f);
+                Dictionary<string, float> J(float rio, float lio, float rLift, float lLift, float y) => P(
+                    "RootT.y", y, RULio, rio, LULio, lio,
+                    RLL, -0.4f - 0.3f * rLift, LLL, -0.4f - 0.3f * lLift,
+                    RULfb, 0.25f + 0.15f * rLift, LULfb, 0.25f + 0.15f * lLift,
+                    SpFB, 0.2f, SpLR, 0.04f * (rio - lio), LArmDU, 0.2f, RArmDU, 0.2f, LArmFB, 0.15f, RArmFB, 0.15f);
+                j.Keys.Add(new PoseKey(0f, J(0.45f, 0.35f, 0f, 0f, -0.1f)));      // wide: right foot just landed
+                j.Keys.Add(new PoseKey(0.175f, J(0.25f, 0.12f, 0f, 1f, -0.07f))); // left foot lifts and closes in
+                j.Keys.Add(new PoseKey(0.35f, J(0.02f, 0.02f, 0f, 0f, -0.06f)));  // feet together, left lands
+                j.Keys.Add(new PoseKey(0.525f, J(0.28f, 0.16f, 1f, 0f, -0.08f))); // right foot lifts and steps out
+                j.Keys.Add(new PoseKey(0.7f, J(0.45f, 0.35f, 0f, 0f, -0.1f)));
                 yield return j;
             }
         }

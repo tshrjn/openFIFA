@@ -164,8 +164,14 @@ namespace OpenFifa.Core
         public float GkReleaseProtectSeconds = 0.25f;
 
         // ---- Bodies (ball-vs-player deflection and player-player separation). ----
-        /// <summary>Radius (m) of a player's body capsule; two players are kept 2x this apart.</summary>
+        /// <summary>Radius (m) of a player's body capsule for ball deflection and shielding.</summary>
         public float PlayerBodyRadius = 0.3f;
+
+        /// <summary>
+        /// Personal-space radius (m) for player-player separation: two players are kept 2x this apart. Larger than the
+        /// body capsule because the animated body (arms, stride, lean) reaches ~0.35-0.4 m; at 0.3 m the meshes interpenetrate.
+        /// </summary>
+        public float PlayerSeparationRadius = 0.38f;
 
         /// <summary>Top of an outfield player's body capsule (m): the head.</summary>
         public float PlayerHeadHeight = 1.9f;

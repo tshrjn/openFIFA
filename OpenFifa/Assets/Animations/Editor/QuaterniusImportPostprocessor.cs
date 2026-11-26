@@ -70,7 +70,13 @@ namespace OpenFifa.Editor
                 c.lockRootRotation = true;
                 c.lockRootHeightY = true;
                 c.lockRootPositionXZ = true;
+                // Root rotation "Based Upon: Original" turned 180 deg: the Quaternius takes are authored travelling along
+                // -Z (Blender -Y forward), so without the offset every locomotion clip ran BACKWARDS relative to the player
+                // root, and the generated action clips (+Z) flipped the body 180 deg on every kick. "Body Orientation" is
+                // not used because it skews the jog/sprint travel 20-30 deg off the axis (the torso twists in those
+                // takes). Verified by LocomotionClipMeasure.RuntimeFacingReport (planted-foot drift along -Z = travel +Z).
                 c.keepOriginalOrientation = true;
+                c.rotationOffset = OrientationOffsetDeg;
                 c.keepOriginalPositionY = true;
                 c.keepOriginalPositionXZ = true;
 
@@ -95,6 +101,9 @@ namespace OpenFifa.Editor
 
         /// <summary>Quaternius libraries are authored at 30 fps (all clip durations are multiples of 1/30 s).</summary>
         private const float SourceFrameRate = 30f;
+
+        /// <summary>Root yaw offset (deg) applied to every Quaternius clip so it travels along +Z, the sim facing.</summary>
+        public const float OrientationOffsetDeg = 180f;
 
         public static string StripPrefix(string takeName)
         {

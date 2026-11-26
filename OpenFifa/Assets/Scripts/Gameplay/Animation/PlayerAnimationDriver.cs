@@ -20,6 +20,12 @@ namespace OpenFifa.Gameplay
     /// snapshot with <see cref="AnimSnapshotInterpolator"/>, and the presentation clock used for action timing is the
     /// same interpolated time, so contact frames stay in step with an interpolated ball. Without an alpha the latest
     /// snapshot is shown as-is.
+    ///
+    /// Locomotion presentation: the root follows the sim exactly; the visual root carries (a) the shown facing from
+    /// <see cref="BodyFacingSmoother"/> (human turn rate, faces the run direction on a forward run), (b) the action
+    /// warp and (c) the lean from <see cref="LocomotionLean"/>. <see cref="LocomotionGaitSolver"/> picks the gait from
+    /// the sim velocity and sets the playback rate from the measured clip speeds so the feet match the ground; it shows
+    /// strafe/backpedal only when the SIM moves the player off its facing (jockey, short retreats).
     /// </summary>
     [DefaultExecutionOrder(100)]
     [DisallowMultipleComponent]
@@ -35,15 +41,17 @@ namespace OpenFifa.Gameplay
         [SerializeField] private bool followSimTransform = true;
 
         [Header("Locomotion (blend tree fallback)")]
-        [Tooltip("Natural speeds (m/s) of the moving clips in the locomotion blend tree, ascending.")]
-        [SerializeField] private float[] authoredSpeeds = { 1.4f, 3.4f, 6.5f };
-        [SerializeField] private float minLocoRate = 0.6f;
-        [SerializeField] private float maxLocoRate = 1.4f;
-        [SerializeField] private float parameterDampTime = 0.08f;
+        [Tooltip("Damping (s) of the blend-tree position: gait changes (walk/jog/sprint, start, stop) crossfade over about twice this.")]
+        [SerializeField] private float parameterDampTime = 0.12f;
         [SerializeField] private float accelerationSmoothing = 0.1f;
+        [Tooltip("Below this speed (m/s) the body keeps the sim facing; above it, a forward run faces its velocity.")]
+        [SerializeField] private float faceVelocityAboveSpeed = 0.5f;
+        [Tooltip("Turning on the spot faster than this (deg/s) adds a stepping cycle so the feet move round instead of spinning.")]
+        [SerializeField] private float turnInPlaceStepRate = 150f;
+        [SerializeField] private bool enableLean = true;
 
         [Header("Actions")]
-        [SerializeField] private float actionCrossFade = 0.08f;
+        [SerializeField] private float actionCrossFade = 0.12f;
         [SerializeField] private int actionLayer = 0;
 
         [Header("IK")]
@@ -59,7 +67,7 @@ namespace OpenFifa.Gameplay
         [Tooltip("Pick the touching foot from the Locomotion state's normalised time (measured cycle) instead of a nominal stride.")]
         [SerializeField] private bool useLocomotionPhase = true;
         [Tooltip("Normalised-time phase (0..1) at which the right foot strikes the ground in the locomotion clips; the left strikes half a cycle later.")]
-        [SerializeField, Range(0f, 1f)] private float rightFootStrikePhase = 0f;
+        [SerializeField, Range(0f, 1f)] private float rightFootStrikePhase = LocomotionGaitTable.RightFootStrikePhase;
         [Tooltip("Fraction of the cycle each foot is on the ground.")]
         [SerializeField, Range(0.05f, 0.49f)] private float stanceFraction = DribbleTouchSolver.DefaultStanceFraction;
         [Tooltip("Touch IK weight multiplier while the touching foot is planted (0 = skip: never drag a grounded foot).")]
@@ -81,7 +89,11 @@ namespace OpenFifa.Gameplay
         private float _fixedDtOverride;
         private ILocomotionBackend _backend;
         private AnimationSyncPlanner _planner;
-        private LocomotionRateSolver _rateSolver;
+        private readonly LocomotionGaitSolver _gaitSolver = new LocomotionGaitSolver();
+        private readonly BodyFacingSmoother _facing = new BodyFacingSmoother();
+        private readonly LocomotionLean _lean = new LocomotionLean();
+        private float _simYaw;
+        private Vector3 _lastPos;
 
         private ActionSyncPlan _plan;
         private int _planActionId;
@@ -96,7 +108,6 @@ namespace OpenFifa.Gameplay
 
         private Vector3 _prevVelocity;
         private Vector3 _acceleration;
-        private float _prevYaw;
         private float _yawRate;
         private bool _hasPrev;
 
@@ -187,7 +198,6 @@ namespace OpenFifa.Gameplay
             if (_source == null) _source = GetComponent<IPlayerAnimSource>();
             _backend = GetComponent<ILocomotionBackend>();
             _planner = new AnimationSyncPlanner { BallRadius = ballRadius };
-            _rateSolver = new LocomotionRateSolver(authoredSpeeds, minLocoRate, maxLocoRate);
 
             if (animator != null)
             {
@@ -245,24 +255,69 @@ namespace OpenFifa.Gameplay
             if (Halted)
             {
                 _acceleration = Vector3.zero;
-                _yawRate = 0f;
             }
             else if (_hasPrev)
             {
                 Vector3 rawAcc = (vel - _prevVelocity) / dt;
                 float k = accelerationSmoothing > 0f ? 1f - Mathf.Exp(-dt / accelerationSmoothing) : 1f;
                 _acceleration = Vector3.Lerp(_acceleration, rawAcc, k);
-                _yawRate = Mathf.Lerp(_yawRate, AnimMath.DeltaAngle(_prevYaw, yaw) / dt, k);
             }
+            bool teleported = _hasPrev && (pos - _lastPos).sqrMagnitude > 9f; // kick-off reset, restart placement
             _prevVelocity = vel;
-            _prevYaw = yaw;
+            _lastPos = pos;
             _hasPrev = true;
+            _simYaw = yaw;
 
             SampleGait(dt);
             PollAction(pos, vel, yaw);
-            DriveLocomotion(dt, pos, vel, yaw);
+            // Gait first (it decides whether the SIM strafes), then the shown facing, then the Animator.
+            SimVec3 simLocal = AnimMath.WorldToLocal(vel.ToSim(), yaw);
+            _gaitSolver.Solve(simLocal.X, simLocal.Z, _source.IsSprinting, out float gaitStrafe, out float gaitForward);
+            UpdateBodyFacing(dt, vel, yaw, teleported);
+            DriveLocomotion(dt, pos, vel, yaw, gaitStrafe, gaitForward);
             UpdateActionPlayback();
             ApplyWarp();
+        }
+
+        /// <summary>Yaw (deg) the body is shown at: the sim facing, turned at a human rate (see BodyFacingSmoother).</summary>
+        public float VisualYaw => _facing.Yaw;
+
+        /// <summary>Current gait mode (diagnostics).</summary>
+        public LocomotionMode GaitMode => _gaitSolver.Mode;
+
+        /// <summary>Playback rate applied to the locomotion state this frame (diagnostics).</summary>
+        public float LocomotionRate { get; private set; } = 1f;
+
+        /// <summary>
+        /// Shown body yaw. A forward run faces its velocity (above <see cref="faceVelocityAboveSpeed"/>); strafing,
+        /// standing and slow moves keep the sim facing (which faces the ball while jockeying); a full-body action hands
+        /// the yaw back to the sim quickly because the sync planner's yaw warp is relative to it.
+        /// </summary>
+        private void UpdateBodyFacing(float dt, Vector3 vel, float simYaw, bool teleported)
+        {
+            float speed = Halted ? 0f : new Vector2(vel.x, vel.z).magnitude;
+            bool actionOwnsYaw = _plan != null && !_plan.Profile.LayeredOnLocomotion;
+            bool backend = _backend != null && _backend.IsActive;
+            if (teleported || backend)
+            {
+                _facing.Snap(simYaw);
+                _lean.Reset();
+                _yawRate = 0f;
+                return;
+            }
+            float target = simYaw;
+            if (!actionOwnsYaw && !Halted && _gaitSolver.Mode == LocomotionMode.Forward && speed > faceVelocityAboveSpeed)
+                target = AnimMath.YawOf(vel.ToSim());
+            _facing.Step(target, speed, dt, actionOwnsYaw ? 3f : 1f);
+            _yawRate = _facing.YawRate;
+
+            if (!enableLean || (actionOwnsYaw && _actionStarted))
+            {
+                _lean.Step(0f, 0f, 0f, dt);
+                return;
+            }
+            Vector3 fwd = speed > 0.1f ? vel / speed : Vector3.zero;
+            _lean.Step(speed, _facing.YawRate, Vector3.Dot(_acceleration, fwd), dt);
         }
 
         private void ApplyPoseFreeze()
@@ -491,12 +546,27 @@ namespace OpenFifa.Gameplay
         {
             if (visualRoot == null || visualRoot == transform) return;
             visualRoot.localPosition = Vector3.zero;
-            visualRoot.localRotation = Quaternion.identity;
+            visualRoot.localRotation = BodyRotation(0f);
+        }
+
+        /// <summary>
+        /// Visual-root rotation relative to the sim root: the shown-facing offset (smoothed turn) plus the action yaw
+        /// warp, then the lean (pitch forward, bank right) about the feet.
+        /// </summary>
+        private Quaternion BodyRotation(float warpYaw)
+        {
+            float yawOffset = AnimMath.DeltaAngle(_simYaw, _facing.Yaw) + warpYaw;
+            return Quaternion.Euler(0f, yawOffset, 0f) * Quaternion.Euler(_lean.ForwardDeg, 0f, -_lean.RightDeg);
         }
 
         private void ApplyWarp()
         {
-            if (visualRoot == null || visualRoot == transform) return;
+            if (visualRoot == null || visualRoot == transform)
+            {
+                // No separate visual: show the smoothed facing on the root itself.
+                if (followSimTransform) transform.rotation = Quaternion.Euler(0f, _facing.Yaw, 0f);
+                return;
+            }
             if (_plan == null)
             {
                 ResetVisualRoot();
@@ -504,7 +574,7 @@ namespace OpenFifa.Gameplay
             }
             Vector3 worldOffset = _plan.Warp.TranslationAt(_simTime).ToUnity();
             visualRoot.localPosition = transform.InverseTransformVector(worldOffset);
-            visualRoot.localRotation = Quaternion.Euler(0f, _plan.Warp.YawAt(_simTime), 0f);
+            visualRoot.localRotation = BodyRotation(_plan.Warp.YawAt(_simTime));
         }
 
         /// <summary>Called by <see cref="PlayerAnimatorHooks"/> on the clip's contact frame.</summary>
@@ -518,41 +588,47 @@ namespace OpenFifa.Gameplay
 
         // ------------------------------------------------------------------ locomotion
 
-        private void DriveLocomotion(float dt, Vector3 pos, Vector3 vel, float yaw)
+        private void DriveLocomotion(float dt, Vector3 pos, Vector3 vel, float yaw, float gaitStrafe, float gaitForward)
         {
-            float speed = vel.magnitude;
-            float rate = _rateSolver.RateFor(speed);
-            if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
-                rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
-
+            float speed = Halted ? 0f : vel.magnitude;
             Vector3 desired = Halted ? Vector3.zero : _source.DesiredVelocity;
             desired.y = 0f;
-            var frame = new LocomotionFrame(_simTime, dt, pos, vel, _acceleration, desired, yaw, _yawRate,
-                _source.IsSprinting, rate);
 
             if (_backend != null && _backend.IsActive)
             {
+                var frame = new LocomotionFrame(_simTime, dt, pos, vel, _acceleration, desired, yaw, _yawRate,
+                    _source.IsSprinting, 1f);
                 _backend.DriveLocomotion(frame);
                 return;
             }
 
             if (Halted)
             {
-                // Stopped clock: snap to idle instead of damping down from a sprint over several frames.
-                animator.SetFloat(SpeedHash, 0f);
-                animator.SetFloat(ForwardHash, 0f);
-                animator.SetFloat(StrafeHash, 0f);
-                animator.SetFloat(TurnRateHash, 0f);
-                animator.SetFloat(LocoRateHash, 1f);
-                return;
+                // Stopped clock (whistle, half time): settle to idle over a short blend instead of popping upright.
+                gaitStrafe = 0f;
+                gaitForward = 0f;
+            }
+            else if (_gaitSolver.Mode == LocomotionMode.Idle && Mathf.Abs(_facing.YawRate) > turnInPlaceStepRate)
+            {
+                // Turning on the spot: a short stepping cycle (slow walk) so the feet go round with the body.
+                float k = Mathf.Clamp01((Mathf.Abs(_facing.YawRate) - turnInPlaceStepRate) / 300f);
+                gaitForward = Mathf.Max(gaitForward, 0.55f * LocomotionGaitTable.WalkSpeed * k);
             }
 
-            SimVec3 local = AnimMath.WorldToLocal(vel.ToSim(), yaw);
-            animator.SetFloat(SpeedHash, speed, parameterDampTime, dt);
-            animator.SetFloat(ForwardHash, local.Z, parameterDampTime, dt);
-            animator.SetFloat(StrafeHash, local.X, parameterDampTime, dt);
-            animator.SetFloat(TurnRateHash, _yawRate, parameterDampTime, dt);
+            float damp = Halted ? parameterDampTime * 1.5f : parameterDampTime;
+            animator.SetFloat(SpeedHash, speed, damp, dt);
+            animator.SetFloat(ForwardHash, gaitForward, damp, dt);
+            animator.SetFloat(StrafeHash, gaitStrafe, damp, dt);
+            animator.SetFloat(TurnRateHash, Halted ? 0f : _yawRate, damp, dt);
+
+            // Rate from the blend the tree shows NOW (damped), so the feet match the ground through every transition.
+            float shownF = animator.GetFloat(ForwardHash), shownS = animator.GetFloat(StrafeHash);
+            float shown = Mathf.Sqrt(shownF * shownF + shownS * shownS);
+            float rate = speed < _gaitSolver.IdleSpeed ? 1f : _gaitSolver.RateFor(speed, shown);
+            if (!Halted && _plan != null && _plan.HasStridePlan && !_actionStarted && _simTime < _plan.Ik.PlantTime)
+                rate = _plan.Stride.CadenceScale; // run-up: land the plant foot on time
             animator.SetFloat(LocoRateHash, rate);
+            LocomotionRate = rate;
         }
 
         private ActionSide EstimateNextFootfall() => TryEstimateNextFootfall(out ActionSide next) ? next : ActionSide.Right;
