@@ -10,8 +10,15 @@ namespace OpenFifa.Gameplay
     /// lower-tier corner fills, cantilever roofs with lit undersides and edge lights, corner floodlight pylons with halos,
     /// a players' tunnel and dugouts on the near (camera) side, and an LED board ring beyond the run-off.
     /// No asset files: textures are generated, materials are shared URP Lit/Unlit (SRP-batcher friendly), and each
-    /// stand is one mesh with three submeshes (structure, crowd A, crowd B). Roughly 20 draw calls, a few thousand triangles.
-    /// Call <see cref="SetExcitement"/> (0..1) to make the crowd bounce, <see cref="SetTeamColours"/> when the clubs are known.
+    /// stand is one mesh with a structure submesh plus one crowd submesh per bob phase group
+    /// (<see cref="CrowdVariation.PhaseGroups"/>). Roughly 30 draw calls.
+    /// Crowd de-tiling: rows are cut into 3-7 seat segments that each pick a texture variant, a start seat, a height
+    /// scale, a lighting tilt and a bob phase group from a hash (<see cref="CrowdVariation"/>). LED boards are cut into
+    /// segments starting on different ads, in two phase groups, and switch to a scrolling goal graphic on goals
+    /// (<see cref="LedBoardSchedule"/>). No custom shader: all motion is material texture offsets, so it survives
+    /// player builds and iOS Metal with the stock URP shaders.
+    /// Call <see cref="SetExcitement"/> (0..1; reaching 1 counts as a goal) to make the crowd bounce,
+    /// <see cref="SetTeamColours"/> when the clubs are known.
     /// </summary>
     public sealed class ProceduralStadium : MonoBehaviour
     {
@@ -25,7 +32,10 @@ namespace OpenFifa.Gameplay
         public int DrawCalls { get; private set; }
         public float Excitement => _target;
 
-        private Material _structure, _crowdA, _crowdB, _led, _lamp, _halo;
+        private Material _structure, _lamp, _halo;
+        private readonly Material[] _crowd = new Material[CrowdVariation.PhaseGroups];
+        private readonly Material[] _led = new Material[LedBoardSchedule.PhaseGroups];
+        private float _goalStart = -1000f;
         private Texture2D _palette, _crowdTex, _ledTex, _haloTex;
         private readonly List<Mesh> _meshes = new List<Mesh>();
         private uint _seed;
@@ -45,7 +55,15 @@ namespace OpenFifa.Gameplay
         }
 
         /// <summary>Crowd excitement 0 (calm, still) .. 1 (bouncing). Smoothed over ~0.4 s.</summary>
-        public void SetExcitement(float excitement) => _target = Mathf.Clamp01(excitement);
+        public void SetExcitement(float excitement)
+        {
+            float e = Mathf.Clamp01(excitement);
+            if (e >= 0.999f && _target < 0.999f) CelebrateGoal();
+            _target = e;
+        }
+
+        /// <summary>Starts the LED goal graphic (also triggered when <see cref="SetExcitement"/> reaches 1).</summary>
+        public void CelebrateGoal() => _goalStart = Time.time;
 
         /// <summary>Repaints crowd shirts, seats, fascias and LED panels for new club colours.</summary>
         public void SetTeamColours(Color home, Color away)
@@ -59,10 +77,17 @@ namespace OpenFifa.Gameplay
         {
             _excitement = Mathf.MoveTowards(_excitement, _target, Time.deltaTime * 2.5f);
             float t = Time.time;
-            StadiumCrowd.CardOffset(_excitement, t, 0f, out float du, out float dv);
-            SetOffset(_crowdA, du, dv);
-            StadiumCrowd.CardOffset(_excitement, t, 1.9f, out du, out dv);
-            SetOffset(_crowdB, du, dv);
+            int texH = _crowdTex != null ? _crowdTex.height : 1024;
+            for (int g = 0; g < _crowd.Length; g++)
+            {
+                CrowdVariation.CardOffset(_excitement, t, g, texH, out float du, out float dv);
+                SetOffset(_crowd[g], du, dv);
+            }
+            for (int g = 0; g < _led.Length; g++)
+            {
+                LedBoardSchedule.Offset(t, t - _goalStart, g, out float lu, out float lv);
+                SetOffset(_led[g], lu, lv);
+            }
         }
 
         private static void SetOffset(Material m, float du, float dv)
@@ -76,8 +101,10 @@ namespace OpenFifa.Gameplay
         private void OnDestroy()
         {
             foreach (var m in _meshes) if (m != null) Destroy(m);
-            foreach (var o in new Object[] { _structure, _crowdA, _crowdB, _led, _lamp, _halo, _palette, _crowdTex, _ledTex, _haloTex })
+            foreach (var o in new Object[] { _structure, _lamp, _halo, _palette, _crowdTex, _ledTex, _haloTex })
                 if (o != null) Destroy(o);
+            foreach (var m in _crowd) if (m != null) Destroy(m);
+            foreach (var m in _led) if (m != null) Destroy(m);
         }
 
         // ------------------------------------------------------------------ materials
@@ -140,7 +167,8 @@ namespace OpenFifa.Gameplay
 
         // ------------------------------------------------------------------ build
 
-        private StadiumMeshBuffer _misc, _roof, _ledBuf, _lamps, _halos;
+        private StadiumMeshBuffer _misc, _roof, _lamps, _halos;
+        private StadiumMeshBuffer[] _ledBufs;
 
         private void BuildInternal(StadiumLayout layout, Color home, Color away, uint seed)
         {
@@ -153,15 +181,15 @@ namespace OpenFifa.Gameplay
             SetTeamColours(home, away);
 
             _structure = Lit("Stadium Structure", _palette, 0.15f);
-            _crowdA = Lit("Stadium Crowd A", _crowdTex, 0f);
-            _crowdB = Lit("Stadium Crowd B", _crowdTex, 0f);
-            _led = Unlit("Stadium LED", _ledTex, new Color(1.25f, 1.25f, 1.25f));
+            for (int g = 0; g < _crowd.Length; g++) _crowd[g] = Lit("Stadium Crowd " + g, _crowdTex, 0f);
+            for (int g = 0; g < _led.Length; g++) _led[g] = Unlit("Stadium LED " + g, _ledTex, new Color(1.25f, 1.25f, 1.25f));
             _lamp = Unlit("Stadium Lamps", Texture2D.whiteTexture, new Color(5f, 4.85f, 4.4f));
             _halo = Additive("Stadium Halo", _haloTex, new Color(0.85f, 0.82f, 0.75f, 1f));
 
             _misc = new StadiumMeshBuffer();
             _roof = new StadiumMeshBuffer();
-            _ledBuf = new StadiumMeshBuffer();
+            _ledBufs = new StadiumMeshBuffer[_led.Length];
+            for (int g = 0; g < _ledBufs.Length; g++) _ledBufs[g] = new StadiumMeshBuffer();
             _lamps = new StadiumMeshBuffer();
             _halos = new StadiumMeshBuffer();
 
@@ -174,7 +202,9 @@ namespace OpenFifa.Gameplay
 
             Emit("Roofs", ShadowCastingMode.Off, true, (_roof, _structure));
             Emit("Stadium Misc", ShadowCastingMode.Off, true, (_misc, _structure));
-            Emit("LED Boards", ShadowCastingMode.Off, false, (_ledBuf, _led));
+            var ledParts = new (StadiumMeshBuffer, Material)[_led.Length];
+            for (int g = 0; g < _led.Length; g++) ledParts[g] = (_ledBufs[g], _led[g]);
+            Emit("LED Boards", ShadowCastingMode.Off, false, ledParts);
             Emit("Lamps", ShadowCastingMode.Off, false, (_lamps, _lamp));
             Emit("Light Halos", ShadowCastingMode.Off, false, (_halos, _halo));
         }
@@ -250,21 +280,64 @@ namespace OpenFifa.Gameplay
             }
         }
 
-        /// <summary>Crowd card: a near-vertical quad standing on a tread, leaning back slightly, facing the pitch.</summary>
-        private void Card(StadiumMeshBuffer b, StandSide s, float d, float h, float a0, float a1, int band, float uOffset)
+        private static StadiumMeshBuffer[] NewCrowdBuffers()
         {
-            float tile = StadiumTextures.CrowdTileMetres;
-            float v0 = band / (float)StadiumCrowd.BandCount, v1 = (band + 1) / (float)StadiumCrowd.BandCount;
-            // Along runs the other way on two of the stands; mirror u so silhouettes are never flipped.
-            float u0 = a0 / tile + uOffset, u1 = a1 / tile + uOffset;
-            var n = (-Out(s) * 0.55f + Vector3.up * 0.85f).normalized;
-            float hh = StadiumTextures.CrowdCardHeight;
-            var p0 = W(s, d, a0, h);
-            var p1 = W(s, d, a1, h);
-            var p2 = W(s, d + 0.12f, a1, h + hh);
-            var p3 = W(s, d + 0.12f, a0, h + hh);
-            // Viewed from the pitch, +along runs right-to-left for the (outward, up, along) frame: swap so u increases to the right.
-            b.Quad(p0, p1, p2, p3, n, new Vector2(-u0, v0), new Vector2(-u1, v0), new Vector2(-u1, v1), new Vector2(-u0, v1));
+            var b = new StadiumMeshBuffer[CrowdVariation.PhaseGroups];
+            for (int i = 0; i < b.Length; i++) b[i] = new StadiumMeshBuffer();
+            return b;
+        }
+
+        /// <summary>
+        /// A row of crowd cards along the tread from <paramref name="left"/> to <paramref name="right"/> (as seen from the
+        /// pitch), cut into hashed segments (<see cref="CrowdVariation.SegmentAt"/>). Each card stands on the tread and
+        /// leans back 0.12 m along <paramref name="outward"/>.
+        /// </summary>
+        private static void CardLine(StadiumMeshBuffer[] groups, Vector3 left, Vector3 right, Vector3 outward, int band, uint rowKey)
+        {
+            Vector3 span = right - left;
+            float len = span.magnitude;
+            if (len < 0.2f) return;
+            Vector3 dir = span / len;
+            float sw = StadiumTextures.SeatWidth;
+            float pos = 0f;
+            for (int i = 0; pos < len - 0.05f && i < 4096; i++)
+            {
+                var seg = CrowdVariation.SegmentAt(rowKey, i);
+                float l = Mathf.Min(seg.Seats * sw, len - pos);
+                Vector3 b0 = left + dir * pos, b1 = left + dir * (pos + l);
+                Vector3 up = outward * 0.12f + Vector3.up * (StadiumTextures.CrowdCardHeight * seg.HeightScale);
+                CrowdVariation.RowV(band, seg.Variant, out float v0, out float v1);
+                float u0 = seg.StartSeat / (float)CrowdVariation.SeatsPerStrip;
+                float u1 = u0 + l / (sw * CrowdVariation.SeatsPerStrip);
+                // Normal tilted sideways a little per segment: the sun and ambient light vary block to block.
+                var n = (-outward * 0.55f + Vector3.up * 0.85f + dir * (0.22f * seg.Shade)).normalized;
+                groups[seg.Group].Quad(b0, b1, b1 + up, b0 + up, n,
+                    new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1));
+                pos += l;
+            }
+        }
+
+        /// <summary>
+        /// LED strip along a board or fascia from along-position <paramref name="aLeft"/> to <paramref name="aRight"/>
+        /// (left as seen from the pitch), cut into segments of 2-4 ads that each start on a hashed ad and belong to a
+        /// hashed scroll phase group. Maps the ad row of the texture (v 0.5..1).
+        /// </summary>
+        private void LedLine(System.Func<float, Vector3> bottom, System.Func<float, Vector3> top, float aLeft, float aRight,
+            Vector3 normal, int board)
+        {
+            float len = Mathf.Abs(aRight - aLeft), sign = Mathf.Sign(aRight - aLeft);
+            float pos = 0f;
+            for (int i = 0; pos < len - 0.05f && i < 1024; i++)
+            {
+                var seg = LedBoardSchedule.SegmentAt(_seed, board, i);
+                float l = Mathf.Min(seg.Ads * LedBoardSchedule.AdMetres, len - pos);
+                float a0 = aLeft + sign * pos, a1 = aLeft + sign * (pos + l);
+                float u0 = seg.StartAd / (float)LedBoardSchedule.AdCount;
+                float u1 = u0 + l / (LedBoardSchedule.AdMetres * LedBoardSchedule.AdCount);
+                _ledBufs[seg.Group].Quad(bottom(a0), bottom(a1), top(a1), top(a0), normal,
+                    new Vector2(u0, 0.5f), new Vector2(u1, 0.5f), new Vector2(u1, 1f), new Vector2(u0, 1f));
+                pos += l;
+            }
         }
 
         /// <summary>Splits [a0, a1] around aisle centres (and returns the solid pieces).</summary>
@@ -283,10 +356,7 @@ namespace OpenFifa.Gameplay
             return list;
         }
 
-        private float RowU(StandSide s, int tier, int row) =>
-            StadiumCrowd.Unit(StadiumCrowd.Hash((uint)((int)s * 7919 + tier * 613 + row * 37) ^ _seed));
-
-        private void Rows(StadiumMeshBuffer st, StadiumMeshBuffer ca, StadiumMeshBuffer cb, StandSide s, StadiumTier t, int tier,
+        private void Rows(StadiumMeshBuffer st, StadiumMeshBuffer[] crowd, StandSide s, StadiumTier t, int tier,
             float a0, float a1, List<float> aisles, bool firstRiser)
         {
             var conc = C(StadiumCell.Concrete);
@@ -301,9 +371,12 @@ namespace OpenFifa.Gameplay
                     FaceD(st, s, t.RowFront(i), a0, a1, hPrev, h, true, conc);
                 }
                 int band = StadiumCrowd.BandFor(s, i + tier * 31);
-                var cards = ((i + tier) & 1) == 0 ? ca : cb;
+                float d = t.RowFront(i) + 0.28f;
+                int piece = 0;
+                // Viewed from the pitch, +along runs right-to-left in the (outward, up, along) frame: start at p1.
                 foreach (var (p0, p1) in Pieces(a0, a1, aisles))
-                    Card(cards, s, t.RowFront(i) + 0.28f, h, p0, p1, band, RowU(s, tier, i));
+                    CardLine(crowd, W(s, d, p1, h), W(s, d, p0, h), Out(s), band,
+                        CrowdVariation.RowKey(_seed, (int)s, tier, i * 64 + piece++));
             }
         }
 
@@ -323,8 +396,7 @@ namespace OpenFifa.Gameplay
             var p = Layout.Profile(s);
             float E = Layout.HalfExtent(s);
             var st = new StadiumMeshBuffer();
-            var ca = new StadiumMeshBuffer();
-            var cb = new StadiumMeshBuffer();
+            var crowd = NewCrowdBuffers();
             var aisles = Layout.AisleCentres(s);
             var wall = C(StadiumCell.Wall);
             var dark = C(StadiumCell.ConcreteDark);
@@ -342,7 +414,7 @@ namespace OpenFifa.Gameplay
             foreach (var (a0, a1) in segs)
             {
                 Box(st, s, p.MinDepth, p.Lower.FrontDepth, a0, a1, 0f, p.Lower.FirstTreadHeight, fascia, back: false, ends: false);
-                Rows(st, ca, cb, s, p.Lower, 0, a0, a1, aisles, false);
+                Rows(st, crowd, s, p.Lower, 0, a0, a1, aisles, false);
                 // Concourse front wall behind the lower tier, under the upper-tier overhang.
                 FaceD(st, s, p.Lower.BackDepth, a0, a1, p.Lower.TopHeight, p.SoffitHeight(p.Lower.BackDepth), true, dark);
                 TierCap(st, s, p.Lower, a0, false, d => 0f);
@@ -365,19 +437,11 @@ namespace OpenFifa.Gameplay
             float soffitF = p.SoffitHeight(uf), parTop = p.UpperParapetTop;
             float ledBottom = parTop - 0.9f;
             FaceD(st, s, pf, -E, E, soffitF, ledBottom, true, fascia);
-            FaceD(_ledBuf, s, pf - 0.01f, -E, E, ledBottom, parTop, true, Vector2.zero);
-            {
-                // LED ribbon UVs along the fascia.
-                int b = _ledBuf.Uvs.Count - 4;
-                float tile = StadiumTextures.LedTileMetres;
-                _ledBuf.Uvs[b] = new Vector2(E / tile, 0f);
-                _ledBuf.Uvs[b + 1] = new Vector2(-E / tile, 0f);
-                _ledBuf.Uvs[b + 2] = new Vector2(-E / tile, 1f);
-                _ledBuf.Uvs[b + 3] = new Vector2(E / tile, 1f);
-            }
+            // LED ribbon along the upper-tier fascia (left as seen from the pitch is +along).
+            LedLine(a => W(s, pf - 0.01f, a, ledBottom), a => W(s, pf - 0.01f, a, parTop), E, -E, -Out(s), 4 + (int)s);
             FaceH(st, s, parTop, pf, uf, -E, E, true, wall);
             FaceD(st, s, uf, -E, E, u.FirstTreadHeight, parTop, false, wall);
-            Rows(st, ca, cb, s, u, 1, -E, E, aisles, false);
+            Rows(st, crowd, s, u, 1, -E, E, aisles, false);
             // Soffit (underside), slightly lit from the pitch side so it is not a black slab.
             var soffitN = (Vector3.down * 0.7f - Out(s) * 0.7f).normalized;
             st.Quad(W(s, pf, -E, soffitF), W(s, u.BackDepth, -E, p.SoffitHeight(u.BackDepth)),
@@ -407,18 +471,33 @@ namespace OpenFifa.Gameplay
 
             BuildRoof(s, p, E);
 
-            var mesh = StadiumMeshBuffer.Combine("Stand " + s, st, ca, cb);
+            EmitCrowded("Stand " + s, st, crowd);
+        }
+
+        /// <summary>One shadow-casting mesh: the structure submesh plus one crowd submesh per bob phase group.</summary>
+        private void EmitCrowded(string name, StadiumMeshBuffer st, StadiumMeshBuffer[] crowd)
+        {
+            var parts = new StadiumMeshBuffer[1 + crowd.Length];
+            var mats = new Material[1 + crowd.Length];
+            parts[0] = st;
+            mats[0] = _structure;
+            for (int g = 0; g < crowd.Length; g++)
+            {
+                parts[1 + g] = crowd[g];
+                mats[1 + g] = _crowd[g];
+            }
+            var mesh = StadiumMeshBuffer.Combine(name, parts);
             _meshes.Add(mesh);
-            var go = new GameObject("Stand " + s);
+            var go = new GameObject(name);
             go.transform.SetParent(transform, false);
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var r = go.AddComponent<MeshRenderer>();
-            r.sharedMaterials = new[] { _structure, _crowdA, _crowdB };
+            r.sharedMaterials = mats;
             r.shadowCastingMode = ShadowCastingMode.On;
             r.lightProbeUsage = LightProbeUsage.Off;
             r.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            TriangleCount += st.TriangleCount + ca.TriangleCount + cb.TriangleCount;
-            DrawCalls += 3;
+            foreach (var b in parts) TriangleCount += b.TriangleCount;
+            DrawCalls += parts.Length;
         }
 
         private void BuildRoof(StandSide s, StandProfile p, float E)
@@ -488,12 +567,10 @@ namespace OpenFifa.Gameplay
         private void BuildCorners()
         {
             var st = new StadiumMeshBuffer();
-            var ca = new StadiumMeshBuffer();
-            var cb = new StadiumMeshBuffer();
+            var crowd = NewCrowdBuffers();
             var t = Layout.SideStand.Lower;
             float setback = Layout.Spec.SideSetback;
             int segs = Mathf.Max(2, Layout.Spec.CornerSegments);
-            float tile = StadiumTextures.CrowdTileMetres;
             for (int sx = -1; sx <= 1; sx += 2)
             for (int sz = -1; sz <= 1; sz += 2)
             {
@@ -515,14 +592,9 @@ namespace OpenFifa.Gameplay
                             st.Quad(P(r0, th0, t.TreadHeight(i - 1)), P(r0, th1, t.TreadHeight(i - 1)), P(r0, th1, h), P(r0, th0, h), -Dir(tm), C(StadiumCell.Concrete));
                         float rc = r0 + 0.28f;
                         if (rc < 0.6f) continue;
-                        float arc = rc * (th1 - th0);
-                        float u0 = rc * th0 / tile + RowU(nearestEnd, 2 + corner, i), u1 = u0 + arc / tile;
                         int band = StadiumCrowd.BandFor(k < segs / 2 ? StandSide.Near : nearestEnd, i);
-                        float v0 = band / (float)StadiumCrowd.BandCount, v1 = (band + 1) / (float)StadiumCrowd.BandCount;
-                        float hh = StadiumTextures.CrowdCardHeight;
-                        var n = (-Dir(tm) * 0.55f + Vector3.up * 0.85f).normalized;
-                        ((i & 1) == 0 ? ca : cb).Quad(P(rc, th0, h), P(rc, th1, h), P(rc + 0.12f, th1, h + hh), P(rc + 0.12f, th0, h + hh), n,
-                            new Vector2(u0, v0), new Vector2(u1, v0), new Vector2(u1, v1), new Vector2(u0, v1));
+                        CardLine(crowd, P(rc, th0, h), P(rc, th1, h), Dir(tm), band,
+                            CrowdVariation.RowKey(_seed, 8 + corner, k, i));
                     }
                     // Back wall of the corner fill: outer face and a parapet above the top row.
                     float rb = t.BackDepth - setback, top = t.TopHeight + 1.1f;
@@ -531,18 +603,7 @@ namespace OpenFifa.Gameplay
                     st.Quad(P(rb, th0, top), P(rb + 0.3f, th0, top), P(rb + 0.3f, th1, top), P(rb, th1, top), Vector3.up, C(StadiumCell.Wall));
                 }
             }
-            var mesh = StadiumMeshBuffer.Combine("Corner Fills", st, ca, cb);
-            _meshes.Add(mesh);
-            var go = new GameObject("Corner Fills");
-            go.transform.SetParent(transform, false);
-            go.AddComponent<MeshFilter>().sharedMesh = mesh;
-            var rr = go.AddComponent<MeshRenderer>();
-            rr.sharedMaterials = new[] { _structure, _crowdA, _crowdB };
-            rr.shadowCastingMode = ShadowCastingMode.On;
-            rr.lightProbeUsage = LightProbeUsage.Off;
-            rr.reflectionProbeUsage = ReflectionProbeUsage.Off;
-            TriangleCount += st.TriangleCount + ca.TriangleCount + cb.TriangleCount;
-            DrawCalls += 3;
+            EmitCrowded("Corner Fills", st, crowd);
         }
 
         // ------------------------------------------------------------------ boards, dugouts, tunnel, pylons, apron
@@ -551,13 +612,11 @@ namespace OpenFifa.Gameplay
         {
             var sp = Layout.Spec;
             float d = sp.BoardSetback, h = sp.BoardHeight, lean = h * Mathf.Tan(8f * Mathf.Deg2Rad), th = sp.BoardThickness;
-            float tile = StadiumTextures.LedTileMetres;
             for (int si = 0; si < 4; si++)
             {
                 var s = (StandSide)si;
                 float e = (StadiumLayout.IsEnd(s) ? Layout.Pitch.HalfWidth : Layout.Pitch.HalfLength) + sp.BoardSetback;
-                _ledBuf.Quad(W(s, d, -e, 0f), W(s, d, e, 0f), W(s, d + lean, e, h), W(s, d + lean, -e, h), -Out(s) + Vector3.up * 0.14f,
-                    new Vector2(e / tile, 0f), new Vector2(-e / tile, 0f), new Vector2(-e / tile, 1f), new Vector2(e / tile, 1f));
+                LedLine(a => W(s, d, a, 0f), a => W(s, d + lean, a, h), e, -e, -Out(s) + Vector3.up * 0.14f, si);
                 var bk = C(StadiumCell.BoardBack);
                 _misc.Quad(W(s, d + th, -e, 0f), W(s, d + th, e, 0f), W(s, d + th, e, h), W(s, d + th, -e, h), Out(s), bk);
                 _misc.Quad(W(s, d + lean, -e, h), W(s, d + th, -e, h), W(s, d + th, e, h), W(s, d + lean, e, h), Vector3.up, bk);
